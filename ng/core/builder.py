@@ -107,7 +107,7 @@ def _audio_line(entry):
     described = (widgets.get("description") or "").strip()
     line = "- @%s - audio, %s; contains %s%s" % (name, how, ", ".join(content) or "sound", ": " + described if described else "")
     words = card_words([entry])   # the card's own words (BUG-094): the plan paces its shots and writes its lines by them
-    return line + ("; its words, to be used as they are ([mm:ss] = when each line is heard; write the words without it): %s" % " / ".join('"%s"' % word for word in words) if words else "")
+    return line + ("; its words, to be used as they are ([mm:ss] = when each line is heard in the video; write the words without it): %s" % " / ".join('"%s"' % word for word in words) if words else "")
 
 
 def _rule_line(entry):

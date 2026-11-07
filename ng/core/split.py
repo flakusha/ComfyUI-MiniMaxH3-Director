@@ -84,7 +84,7 @@ def split_prompt(idea, seconds, meanings, parts=(), sung=()):
     if any(entry.get("lyrics") for entry in meanings):
         rules.append("The lyrics an audio card carries are that sound's exact words: use them as they are, sung or "
                      "spoken by their speaker where the card is heard. A line's [mm:ss] stamp says when it is heard "
-                     "in the song file, to pace the beats and lines by; write the words without the stamp.")
+                     "in the video the card plays, its own trim already subtracted, to pace the beats and lines by; write the words without the stamp.")
     if sung:
         rules.append("These sung lines are already placed at their times, so do NOT put them into lines; let the action follow them: %s."
                      % "; ".join('%s-%s s "%s"' % (_seconds(a), _seconds(b), words) for a, b, _, words in sung))

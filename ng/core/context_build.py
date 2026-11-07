@@ -22,18 +22,24 @@ def widget_text(widgets, key):
 
 
 def widget_lyrics(widgets):
-    """An audio card's own words, one line each with its [mm:ss] stamp; [] without lyrics.
+    """An audio card's own words, one line each with its [mm:ss] stamp shifted into the card's window; [] without lyrics.
 
-    The card keeps its words in context_options as LRC text; these are what the AI helpers (split into shots,
-    Make H3 prompt) plan the shots from, next to the description - the one audio field beyond it that says WHAT
-    the sound says (BUG-094) and WHEN (BUG-095: 094 first carried the words but plain_lines dropped their
-    stamps, the timing the planner paces its beats by). lyrics.story_lines keeps its own timed path."""
+    The card keeps its words in context_options as LRC text in file seconds; these are what the AI helpers (split into
+    shots, Make H3 prompt) plan the shots from, next to the description - the one audio field beyond it that says WHAT
+    the sound says (BUG-094) and WHEN (BUG-095: 094 first carried the words but plain_lines dropped their stamps, the
+    timing the planner paces its beats by). The stamps are shifted by the card's Trim start here (lyrics.story_stamps):
+    the planner paces the video, not the file it was cut from. The stored LRC stays file-time, and lyrics.story_lines
+    keeps its own timed compiler path."""
     try:
         options = json.loads(widgets.get("context_options") or "{}")
     except ValueError:
         return []
     text = options.get("lyrics") if isinstance(options, dict) else None
-    return lyrics.stamped_lines(text) if isinstance(text, str) else []
+    if not isinstance(text, str):
+        return []
+    start = options.get("start_s", 0.0) if isinstance(options, dict) else 0.0
+    end = options.get("end_s", 0.0) if isinstance(options, dict) else 0.0
+    return lyrics.story_stamps(lyrics.stamped_lines(text), float(start or 0.0), float(end or 0.0))
 
 
 def card_words(entries, played=False):

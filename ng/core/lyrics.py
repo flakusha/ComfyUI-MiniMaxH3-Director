@@ -90,6 +90,37 @@ def stamped_lines(text):
             if line and not LANGUAGE_RE.match(line)]
 
 
+def story_stamps(lines, start_s, end_s=0.0):
+    """The stamped lines as the card's own window plays them: every [mm:ss] loses `start_s`, so the planning prompts
+    see seconds in the video, not in the file (BUG-095 with BUG-057's lesson). The stored LRC stays file-time; the
+    compiler path keeps story_lines; both mean the same window (audio_timing.source_window).
+
+    A stamp before the window clamps at 0 (the BUG-057 rule); a line whose every stamp fell at or before it is
+    dropped - it was sung entirely inside the trimmed part. With `end_s` the same cut applies at the window's end:
+    a line that starts at or after it is dropped. Multi-stamp lines shift each stamp, pause stamps shift too,
+    and lines without a stamp pass through unchanged (they carry no time to shift)."""
+    out = []
+    for line in lines:
+        times, words = [], line
+        while True:
+            found = STAMP_RE.match(words)
+            if not found:
+                break
+            times.append(int(found.group(1)) * 60 + float(found.group(2).replace(":", ".")))
+            words = words[found.end():]
+        words = words.strip()
+        if not times:
+            out.append(line)
+            continue
+        shifted = [round(time - start_s, 2) for time in times]
+        if max(shifted) < 0:
+            continue                # sung entirely inside the trimmed part; a stamp at the window start clamps at 0 (BUG-057)
+        if end_s > 0 and min(times) >= end_s - start_s:
+            continue
+        out.append("".join(stamp(time) for time in shifted) + (" " + words if words else ""))
+    return out
+
+
 def _tokens(text):
     return re.findall(r"\w+", text.lower())
 

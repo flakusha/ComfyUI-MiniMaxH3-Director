@@ -34,13 +34,22 @@ DRAFT_SHOTS = json.dumps({"schema_version": 1, "format": "h3-director-shots", "s
     {"id": "shot1", "start": 0, "end": 10, "text": "A singer.", "media": [], "spoken": [], "locked_fields": []}]})
 
 
-def audio_card(usage, lyrics_text):
+def audio_card(usage, lyrics_text, start_s=0.0, end_s=0.0):
     options = {"schema_version": 1}
     if lyrics_text is not None:
         options["lyrics"] = lyrics_text
+    if start_s:
+        options["start_s"] = start_s
+    if end_s:
+        options["end_s"] = end_s
     return {"media": "audio", "widgets": {"audio": "song.mp3", "name": "Song", "usage": usage,
                                           "context_id": "audio_song",
                                           "context_options": json.dumps(options)}}
+
+SHIFTED_TIMED = "[la:English]\n[00:12.00] late bells over the water\n[00:16.00] I wait in the hall"
+SHIFTED = ["[00:02.00] late bells over the water", "[00:06.00] I wait in the hall"]
+CLAMPED_TIMED = "[la:English]\n[00:10.00] under the window\n[00:14.00] I wait in the hall"
+CLAMPED = ["[00:00.00] under the window", "[00:04.00] I wait in the hall"]
 
 
 class StampsVerbatim(unittest.TestCase):
@@ -67,6 +76,46 @@ class StampsVerbatim(unittest.TestCase):
 
     def test_bug_095_meanings_carry_the_stamped_lines(self):
         self.assertEqual(auto_direct._meanings([audio_card("voice", TIMED)])[0]["lyrics"], STAMPED)
+
+
+class ShiftedIntoTheWindow(unittest.TestCase):
+    """The card's own Trim window shifts the stamps the prompts see (BUG-095's timing, BUG-057's rule):
+    the planner paces the video the card plays, not the file it was cut from. Storage stays file-time."""
+    def test_bug_095_the_split_prompt_carries_shifted_stamps(self):
+        prompt = auto_direct.direction_prompt(IDEA, SECONDS, [audio_card("voice", SHIFTED_TIMED, start_s=10.0)])
+        for line in SHIFTED:
+            self.assertIn(line, prompt)
+        for line in ("[00:12.00]", "[00:16.00]"):
+            self.assertNotIn(line, prompt)
+
+    def test_bug_095_the_builder_prompt_carries_shifted_stamps(self):
+        prompt = builder.plan_prompt(QUICK, "A singer.", SECONDS, [audio_card("voice", SHIFTED_TIMED, start_s=10.0)])
+        for line in SHIFTED:
+            self.assertIn('"%s"' % line, prompt)
+
+    def test_bug_095_meanings_carry_the_shifted_lines(self):
+        self.assertEqual(auto_direct._meanings([audio_card("voice", SHIFTED_TIMED, start_s=10.0)])[0]["lyrics"], SHIFTED)
+
+    def test_bug_057_a_stamp_before_the_trim_clamps_at_zero_in_the_prompt(self):
+        """A line sung inside the trimmed part is not placed at a negative second: it clamps at 0
+        (the BUG-057 rule, now at prompt level); the untimed hall line behind it shifts intact."""
+        meanings = auto_direct._meanings([audio_card("voice", CLAMPED_TIMED, start_s=10.0)])
+        self.assertEqual(meanings[0]["lyrics"], CLAMPED)
+
+    def test_bug_095_the_trim_end_drops_lines_past_the_window(self):
+        """With an End, a line that starts at or after the window's end is not in the video at all."""
+        meanings = auto_direct._meanings([audio_card("voice", SHIFTED_TIMED, start_s=10.0, end_s=14.0)])
+        self.assertEqual(meanings[0]["lyrics"], ["[00:02.00] late bells over the water"])
+
+    def test_bug_095_no_trim_leaves_the_stamps_byte_identical(self):
+        """A card without a trim (and one with start_s=0) prompt byte for byte as before the shift existed."""
+        for made in (auto_direct.direction_prompt,
+                     lambda idea, s, c: builder.plan_prompt(QUICK, idea, s, c)):
+            self.assertEqual(made(IDEA, SECONDS, [audio_card("voice", TIMED)]),
+                             made(IDEA, SECONDS, [audio_card("voice", TIMED, start_s=0.0)]))
+        self.assertEqual(auto_direct._meanings([audio_card("voice", TIMED)]),
+                         auto_direct._meanings([audio_card("voice", TIMED, start_s=0.0)]))
+        self.assertEqual(lyrics.story_stamps(lyrics.stamped_lines(TIMED), 0.0, 0.0), STAMPED)
 
 
 class Untouched(unittest.TestCase):

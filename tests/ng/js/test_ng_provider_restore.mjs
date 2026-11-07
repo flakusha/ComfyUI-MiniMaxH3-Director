@@ -25,6 +25,13 @@ assert.equal(overrides.temperature,.7);
 const six=providerRestoreValues({widgets_values:["custom","http://localhost:1234","old-model","ENV_KEY",true,false]},defaults);
 assert.equal(six.source,"api");assert.equal(six.base_url,"http://localhost:1234");assert.equal(six.model,"old-model");
 assert.equal(six.temperature,.3);
+// The two legacy readers are mutually exclusive by construction: a source-first array never
+// reaches the six-field reader and vice versa, so the merge order in providerRestoreValues
+// can never cement a shifted value from the wrong layout.
+import {restoredProviderValues} from "../../../js/ng/ng_read.js";
+const sourceFirst=["clip","ollama","","","",true,false,120,512,0,"private-model.safetensors","stable_diffusion"];
+assert.equal(restoredProviderValues(sourceFirst),null,"source-first arrays are not six-field workflows");
+assert.equal(restoredProviderValues(["custom","http://localhost:1234","old-model","ENV_KEY",true,false]).source,"api");
 const early=providerRestoreValues({widgets_values:old.slice(0,10).concat("")},defaults);
 assert.equal(early.source,"clip");assert.equal(early.temperature,.3);
 assert.equal(providerRestoreValues({widgets_values:old.slice(0,10).concat([.8,.95,20,0,0,0,1,false,"server","","stable_diffusion",""])},defaults),null,

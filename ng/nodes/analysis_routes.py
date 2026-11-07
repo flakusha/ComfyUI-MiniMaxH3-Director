@@ -33,10 +33,30 @@ def _failure(error):
 WRITING_TOKENS = 2048
 
 
+def _writing_tokens(value):
+    """max_tokens as an int when it is one: a whole-number float or numeric string from an older
+    panel still counts, anything else stays unset so the floor below can raise it."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        try:
+            number = float(value)
+        except ValueError:
+            return None
+        return int(number) if number.is_integer() else None
+    return None
+
+
 def _writing(payload):
     provider = payload.get("provider") if isinstance(payload, dict) else None
-    if isinstance(provider, dict) and isinstance(provider.get("max_tokens"), int) and provider["max_tokens"] < WRITING_TOKENS:
-        payload["provider"] = {**provider, "max_tokens": WRITING_TOKENS}
+    if isinstance(provider, dict):
+        tokens = _writing_tokens(provider.get("max_tokens"))
+        if tokens is not None and tokens < WRITING_TOKENS:
+            payload["provider"] = {**provider, "max_tokens": WRITING_TOKENS}
     return payload
 
 

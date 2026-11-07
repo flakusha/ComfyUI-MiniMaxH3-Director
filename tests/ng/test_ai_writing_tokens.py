@@ -30,6 +30,22 @@ class WritingTokens(unittest.TestCase):
         self.assertEqual(routes._writing({"idea": "x"}), {"idea": "x"})
         self.assertEqual(routes._writing(None), None)
 
+    def test_a_whole_number_float_or_numeric_string_counts_as_a_number(self):
+        # Older panels saved the slider as 512.0 or "512": both still read as below the floor.
+        for value in (512.0, "512"):
+            with self.subTest(value=value):
+                payload = routes._writing({"provider": {"max_tokens": value}})
+                self.assertEqual(payload["provider"]["max_tokens"], routes.WRITING_TOKENS)
+        for value in (4096.0, "4096"):
+            with self.subTest(value=value):
+                payload = routes._writing({"provider": {"max_tokens": value}})
+                self.assertEqual(payload["provider"]["max_tokens"], value)
+        # Non-numeric or fractional values stay untouched: the backend names them, not the floor.
+        for value in ("many", 512.5, None, True):
+            with self.subTest(value=value):
+                payload = routes._writing({"provider": {"max_tokens": value}})
+                self.assertEqual(payload["provider"]["max_tokens"], value)
+
 
 if __name__ == "__main__":
     unittest.main()

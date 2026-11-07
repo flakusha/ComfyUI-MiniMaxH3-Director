@@ -122,6 +122,7 @@ function node(comfyClass, widgets = {}, inputs = [], graph = null) {
   loader.widgets=node("NGAIProvider",{source:"clip",local_model:"disk.safetensors",local_type:"stable_diffusion"}).widgets;
   assert.equal(connectedProvider(context).model,"disk.safetensors");
   assert.equal(connectedProvider(context).source,"clip");
+  assert.equal(connectedProvider(context).schema_version,3,"both provider branches carry the version marker");
   // A connected encoder still wins over a leftover model name, so the two cannot disagree. The
   // encoder was renamed above on purpose, which also shows the name is read from the connection
   // and not from the widget that is still holding the old encoder.

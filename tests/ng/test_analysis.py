@@ -222,6 +222,20 @@ class SchemaMigration(unittest.TestCase):
         self.assertEqual((config.model_text, config.model_caption, config.model_audio), ("", "", ""))
         self.assertEqual(core.ProviderConfig.from_dict(config.to_dict()), config)
 
+    def test_filled_purpose_models_survive_a_round_trip_and_resolve(self):
+        """A v3 payload with filled overrides must come back identical and resolve per purpose;
+        a typo'd model_Text must still be refused, not silently dropped."""
+        config = core.ProviderConfig.from_dict({"schema_version": 3, "provider": "ollama", "model": "base-model",
+                                                 "model_text": "writer", "model_caption": "seer", "model_audio": "hearer"})
+        again = core.ProviderConfig.from_dict(config.to_dict())
+        self.assertEqual(again, config)
+        self.assertEqual((again.model_text, again.model_caption, again.model_audio), ("writer", "seer", "hearer"))
+        for purpose, expect in (("text", "writer"), ("caption", "seer"), ("audio", "hearer"), ("", "base-model")):
+            with self.subTest(purpose=purpose):
+                self.assertEqual(analysis.endpoint(config, purpose)[2], expect)
+        with self.assertRaises(ValueError):
+            core.ProviderConfig.from_dict({**config.to_dict(), "model_Text": "writer"})
+
     def test_an_old_workflow_gets_no_chosen_purpose_model(self):
         """The v1 upgrade keeps working through the ladder: defaults, and no invented override."""
         config = core.ProviderConfig.from_dict(self.old(model_text="should-be-dropped"))

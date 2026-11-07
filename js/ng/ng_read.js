@@ -78,7 +78,7 @@ export function connectedProvider(node) {
       const encoder=upstreamNode(direct.graph,direct.inputs?.find((input)=>input.name==="clip"));
       if(!encoder&&!config.local_model)return null;
       const model=encoder?(widgetValues(encoder).clip_name||"Connected CLIP"):config.local_model;
-      return {source:"clip",loader_node_id:String(direct.id),model,local_type:config.local_type,
+      return {source:"clip",schema_version:3,loader_node_id:String(direct.id),model,local_type:config.local_type,
         vision:config.vision,audio:config.audio,max_tokens:config.max_tokens,timeout_seconds:config.timeout_seconds};
     }
     const provider = { schema_version: 3 };

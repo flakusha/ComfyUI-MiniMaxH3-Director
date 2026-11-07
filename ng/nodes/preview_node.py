@@ -61,6 +61,7 @@ class NGH3Preview(io.ComfyNode):
     def execute(cls, model, vae=None, **values):
         resolved = _resolve_vae(vae)
         if resolved is None:
+            log.info("[H3 Director] No H3 TAEHV preview VAE found in vae_approx (taeh3*); the render continues without live preview.")
             return io.NodeOutput(model)
         return execute_preview(cls, model, resolved, **values)
 

@@ -30,6 +30,23 @@ function node(comfyClass, widgets = {}, inputs = [], graph = null) {
   assert.equal(connectedProvider(studio), null, "unplugged AI reads as off, not as a stale provider");
 }
 
+// --- card AI: a card wired straight into the Studio shares the Studio's own provider ---------------
+{
+  const { contextProvider } = await load("ng_read.js");
+  const provider = node("NGAIProvider", { provider: "custom", base_url: "http://localhost:1234", model: "local",
+    vision: true, audio: false, api_key_env: "", timeout_seconds: 45, max_tokens: 1024, keep_alive: 60 });
+  const studio = node("NGDirectorStudio", { idea: "Alice walks." }, [{ name: "ai_provider", link: 4 }]);
+  const card = node("NGContextImage", { name: "Alice" });
+  card.outputs = [{ links: [6] }];
+  const graph = { links: { 4: { origin_id: 3 }, 6: { origin_id: 7, target_id: 8 } },
+    getNodeById: (id) => ({ 3: provider, 8: studio }[id]) };
+  studio.graph = graph; provider.graph = graph; card.graph = graph;
+  card.id = 7;
+  assert.equal(contextProvider(card).model, "local", "a Studio-wired card shares the Studio provider");
+  studio.inputs[0].link = null;
+  assert.equal(contextProvider(card), null, "unplugging the Studio provider darkens its cards too");
+}
+
 // --- control indicator: own model_patch socket on the Studio, Connector socket on the Director --------
 {
   const patch = node("ModelPatchLoader", {});

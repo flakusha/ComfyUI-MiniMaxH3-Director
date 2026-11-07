@@ -109,7 +109,8 @@ export function contextProvider(node) {
   const providers=[];
   for(const id of node.outputs?.[0]?.links||[]) {
     const link=node.graph?.links?.[id], target=link&&node.graph.getNodeById(link.target_id);
-    if(target?.comfyClass==="NGContextConnector") {
+    // Cards behind a Connector share its provider; cards wired straight into the Studio lab node share its socket.
+    if(target?.comfyClass==="NGContextConnector"||target?.comfyClass==="NGDirectorStudio") {
       const provider=connectedProvider(target);if(provider)providers.push(provider);
     }
   }

@@ -17,6 +17,7 @@ import re
 
 import torch
 
+import comfy.model_management
 from comfy_api.latest import io
 
 from . import minimax_media as media
@@ -571,8 +572,10 @@ class MiniMaxH3EnhancePrompt(io.ComfyNode):
             prompt = (idea or "").strip()
         finally:
             # Backstop for keep_alive, and it also runs when the call blew up half way —
-            # that is exactly when a model is left sitting in VRAM.
-            if unload_after:
+            # that is exactly when a model is left sitting in VRAM. On a cancel the flag
+            # read here is the executor's, read-only, and the interrupt should not wait
+            # on an unload round-trip; the next run's pre-unload evicts the model instead.
+            if unload_after and not comfy.model_management.processing_interrupted():
                 await media.unload_model(provider, url, model_name, api_key)
 
         log.info("[MiniMaxEnhance] %d chars:\n%s", len(prompt), prompt)

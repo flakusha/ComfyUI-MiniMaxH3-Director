@@ -96,7 +96,13 @@ class NGH3Director(io.ComfyNode):
         # start/end/duration sockets.
         project_seconds = float(values["project_seconds"])
         if values.get("duration_seconds") is not None:
-            external_seconds = float(values["duration_seconds"])
+            try:
+                external_seconds = float(values["duration_seconds"])
+            except ValueError:
+                raise ValueError("H3 Director: the connected 'duration_seconds' is %r. It is a length in "
+                                 "seconds, so it must be a number — a value that was never set arrives "
+                                 "here as 0, which means use the Length widget."
+                                 % values["duration_seconds"])
             if external_seconds < 0:
                 raise ValueError("H3 Director: the connected 'duration_seconds' is %.3gs. It is a length in "
                                  "seconds and cannot be negative. Check the node feeding it — a value that "

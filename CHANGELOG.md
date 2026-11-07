@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Cancel answers immediately from the Enhance node, and a non-numeric wired length is named** (2026-11-06).
+  The Enhance node's `finally` asked the provider to unload the model even when a Cancel had already raised
+  InterruptProcessingException, so the interrupt waited on that HTTP round-trip before ComfyUI could start the
+  next job; the unload is now skipped while the interrupt flag is up (the model is evicted by the next run's
+  pre-unload), and success/error paths still unload as before. Separately, a hand-built API graph feeding a
+  non-numeric value into the H3 Director's `duration_seconds` socket died with a bare `ValueError`; it now
+  raises the same named message the negative-value case uses, saying which socket carried what.
 - **The Director's length can be wired in, and the real length comes out** (2026-11-06). The H3 Director's Length
   was a widget only: no node could feed a desired duration in, and nothing reported the length the plan actually
   delivers - the video snaps to H3's 17k+5 frame grid, so it can differ from the request by a fraction of a second.

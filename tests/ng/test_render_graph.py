@@ -92,6 +92,21 @@ class RenderGraph(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Connect an H3 model"):
             self.render.execute(**values)
 
+    def test_pictures_sequence_collects_stills_with_resume_and_no_video_extras(self):
+        still_sequence = module("ng.adapters.render_graph").still_sequence
+        inputs = dict(chunks=["plan", 0], clip=["clip", 0], vae=["v", 0], audio_vae=["a", 0], model_fl2va=["fl2va", 0])
+        settings = dict(seed=1, steps=20, sampler_name="res_multistep", scheduler="simple", shift_video=12.0, shift_audio=3.0)
+        graph = still_sequence(inputs, settings)[0]
+        kinds = [node["class_type"] for node in graph.values()]
+        self.assertIn("NGStillLatent", kinds)
+        self.assertIn("NGStillCollect", kinds)
+        self.assertIn("NGResumeChunk", kinds)
+        self.assertNotIn("NGCollect", kinds)
+        self.assertNotIn("NGControlChunk", kinds, "stills carry no control wrap")
+        self.assertNotIn("SpectrumApplyMiniMaxH3", kinds, "stills carry no spectrum wrap")
+        video = next(node for node in graph.values() if node["class_type"] == "CreateVideo")
+        self.assertEqual(video["inputs"]["fps"], 1.0, "one second per picture, so Save Video keeps working")
+
     def test_studio_wires_contexts_into_the_same_planner_as_preview(self):
         values = self.values()
         del values["chunks"]

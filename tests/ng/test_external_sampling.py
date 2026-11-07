@@ -93,6 +93,23 @@ class ExternalSampling(unittest.TestCase):
                 self.assertTrue(torch.equal(actual, reference))
         self.assertNotIn("NGPrepareChunk", self.nodes)
 
+    def test_output_honors_spectrum_like_render_sequence(self):
+        result = self.director().args[0]
+        out = self.nodes["NGDirectorOutput"].execute(result)
+        self.assertNotIn("SpectrumApplyMiniMaxH3", {n["class_type"] for n in out.expand.values()})
+        from dataclasses import replace
+        spectrum = replace(result, settings=replace(result.settings, spectrum=True))
+        out = self.nodes["NGDirectorOutput"].execute(spectrum)
+        nodes = {n["class_type"]: (key, n["inputs"]) for key, n in out.expand.items()}
+        self.assertIn("SpectrumApplyMiniMaxH3", nodes)
+        spectrum_id, _ = nodes["SpectrumApplyMiniMaxH3"]
+        self.assertEqual(nodes["BasicScheduler"][1]["model"], [spectrum_id, 0], "sigmas on the forecasted model")
+        self.assertEqual(out.args[0], [spectrum_id, 0], "the Output model carries the forecast")
+        turbo = replace(result, settings=replace(result.settings, spectrum=True, turbo=True))
+        out = self.nodes["NGDirectorOutput"].execute(turbo)
+        self.assertNotIn("SpectrumApplyMiniMaxH3", {n["class_type"] for n in out.expand.values()},
+                         "no forecast with Turbo: a few-step LoRA leaves no steps to forecast")
+
     def test_output_uses_each_loop_job_instead_of_the_manual_index(self):
         result = self.result()
         for job in self.jobs(result):

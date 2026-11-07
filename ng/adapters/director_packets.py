@@ -8,7 +8,7 @@ from .ai_provider import NativeAIProvider
 from ..core.project import ChunkJob, jobs
 from ..core.turbo_profiles import part_settings
 from ..core import control_timing
-from .render_graph import render_sequence, still_sequence, turbo_models
+from .render_graph import SPECTRUM, render_sequence, still_sequence, turbo_models
 
 
 @dataclass(frozen=True)
@@ -82,13 +82,18 @@ def prepare_output(result, chunk_index, previous=None, loop_chunk=None, apply_si
                               apply_sigma_shift=apply_sigma_shift, ref_image_size=result.settings.ref_image_size,
                               resize_method=result.settings.resize_method)
     negative = graph.node("ConditioningZeroOut", "negative", conditioning=conditioning.out(1))
+    model = conditioning.out(0)
+    if result.settings.spectrum and not result.settings.turbo:
+        # the same forecast wrap H3 Render Sequence applies inside its loop (adapters/render_graph.py): a custom-loop
+        # user enabling Spectrum gets it on the Output model too, not a silent no-op
+        model = graph.node("SpectrumApplyMiniMaxH3", "spectrum", model=model, **SPECTRUM).out(0)
     context = result.project.context
     chunk_seed = (int(result.settings.seed if seed is None else seed) + job.index) % (2**64)
     # a known turbo LoRA on this part's model brings its own steps, sampler and scheduler (core/turbo_profiles.py)
     settings = part_settings(job.compiled.mode, result.settings.values())
     sampler = graph.node("KSamplerSelect", "sampler", sampler_name=settings["sampler_name"])
-    sigmas = graph.node("BasicScheduler", "sigmas", model=conditioning.out(0), scheduler=settings["scheduler"], steps=settings["steps"], denoise=1.0)
-    outputs = (conditioning.out(0), conditioning.out(1), negative.out(0), conditioning.out(2),
+    sigmas = graph.node("BasicScheduler", "sigmas", model=model, scheduler=settings["scheduler"], steps=settings["steps"], denoise=1.0)
+    outputs = (model, conditioning.out(1), negative.out(0), conditioning.out(2),
                24.0, context.width, context.height, conditioning.out(3), result, chunk_seed,
                settings["steps"], 1.0, settings["sampler_name"], settings["scheduler"], sampler.out(0), sigmas.out(0),
                result.inputs.preview_vae)

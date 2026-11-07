@@ -8,7 +8,6 @@ import { CARD_MODELS, modelState } from "./ng_models.js";
 import { mediaURL, imageBlock, videoBlock, videoSoundBox, audioBlock, listenBox, wirePlayback, moveHeads } from "./h3c_media.js";
 import { textBody } from "./h3c_text.js";
 import { lyricsBox, stampLine } from "./h3c_lyrics.js";
-import { transcribeBox } from "./h3c_transcribe.js";
 import { values, applyValues, newContextId, ownIdentity, analysisFingerprint, request, followNodeWidth } from "./ng_widgets.js";
 import { contextOptions, setOptions, selectedRoles } from "./ng_context_controls.js";
 import { hideNative } from "./ng_editor_fields.js";
@@ -68,7 +67,7 @@ function layout(S, actions) {
   if (S.media === "video") parts.push(videoBlock(S, actions), two(contentBox(S, actions), usageBox(S, actions)), controlBox(S, actions), suggestionBox(S, actions),
     S.usage === "control" ? null : two(videoSoundBox(S, actions), ownerBox(S, actions, "E.g. a walk cycle for a figure.")), descriptionBox(S, actions));
   if (S.media === "audio") parts.push(audioBlock(S, actions), two(contentBox(S, actions), usageBox(S, actions)), suggestionBox(S, actions),
-    two(speakerBox(S, actions), listenBox(S, actions)), transcribeBox(S, actions), lyricsBox(S, actions), descriptionBox(S, actions));
+    two(speakerBox(S, actions), listenBox(S, actions)), lyricsBox(S, actions), descriptionBox(S, actions));
   if (S.media === "text") parts.push(...textBody(S, actions));
   parts.push(presetRow(S, actions), statusLine(S));
   return parts.filter(Boolean);
@@ -379,12 +378,16 @@ function attach(node, media) {
       } catch (error) { say(error.message === "AI action cancelled." ? "AI cancelled, nothing changed." : `Transcribe failed: ${error.message}`, error.message !== "AI action cancelled."); }
       finally { S.busy = ""; controller = null; render(); }
     },
-    acceptTranscript() {
+    acceptTranscript(keep = false) {
       const text = String(S.els.transcript?.value ?? S.transcript ?? "").replace(/\r\n?/g, "\n").trim();
       S.transcript = null;
       if (!text) { say("The transcript is empty; the lyrics were left alone.", true); return; }
-      setOptions(node, { lyrics: text });
-      say("Lyrics set from the transcript, without times. ⟳ Time with Whisper adds when each line is sung.");
+      // "Keep both" appends the hearing below the user's own lines (times kept); the plain
+      // accept still replaces, exactly as before. Either way Whisper adds the times afterwards.
+      const base = keep ? String(S.els.lyrics?.value ?? contextOptions(node).lyrics ?? "").replace(/\r\n?/g, "\n").trim() : "";
+      setOptions(node, { lyrics: base ? `${base}\n${text}` : text });
+      say(keep ? "Transcript appended below your lyrics, without times. ⟳ Time with Whisper adds when each line is sung."
+                : "Lyrics set from the transcript, without times. ⟳ Time with Whisper adds when each line is sung.");
       render();
     },
     discardTranscript() { S.transcript = null; render(); },

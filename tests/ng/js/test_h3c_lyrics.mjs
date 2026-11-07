@@ -21,7 +21,7 @@ function recorder() {
 }
 const state = (extra = {}) => ({ media: "audio", values: { audio: "song.mp3" }, opts: { lyrics: "" }, usage: "lock", busy: "", els: {}, ...extra });
 
-// Whisper and Stamp are buttons on the card; the hint says when lines reach the prompt.
+// Whisper, Stamp and Transcribe are buttons on the one Lyrics subtab; the hint says when lines reach the prompt.
 {
   const { actions, calls } = recorder();
   const view = lyricsBox(state({ opts: { lyrics: "[00:01.00] My master\n[00:04.00] I still wait\nThe halls" } }), actions);
@@ -29,12 +29,32 @@ const state = (extra = {}) => ({ media: "audio", values: { audio: "song.mp3" }, 
   assert.deepEqual(calls.at(-1), ["timeLyrics"]);
   view.button("Stamp line").onclick();
   assert.deepEqual(calls.at(-1), ["stampLyric"]);
+  view.button("✦ Transcribe with AI").onclick();
+  assert.deepEqual(calls.at(-1), ["transcribe"]);
   assert.ok(view.innerText.includes("2 of 3 line(s) timed"), view.innerText);
   assert.ok(lyricsBox(state({ opts: { lyrics: "[00:01.00] a\n[00:03.00]\n[00:05.00] b\n[00:07.00]" } }), actions).innerText.includes("2 of 2 line(s)"),
     "a pause stamp is not a line");
   assert.ok(lyricsBox(state({ usage: "music_style", opts: { lyrics: "[00:01.00] x" } }), actions).innerText.includes("Lock or Copy clip on a Studio audio lane"));
   assert.equal(lyricsBox(state({ busy: "lyrics" }), actions).button("Listening …").disabled, true);
   assert.equal(lyricsBox(state({ values: { audio: "" } }), actions).button("Stamp line").disabled, true);
+}
+
+// One Lyrics subtab: the transcript review lives on the same text, with Keep both / Use as lyrics / Discard.
+{
+  const { actions, calls } = recorder();
+  const idle = lyricsBox(state({ opts: { lyrics: "My master" } }), actions);
+  assert.ok(idle.innerText.includes("keeping your 1 lyric line(s)"), idle.innerText);
+  const review = lyricsBox(state({ opts: { lyrics: "My master" }, transcript: "I still wait" }), actions);
+  assert.ok(review.innerText.includes("replace the 1 lyric line(s)"), review.innerText);
+  review.button("Keep both").onclick();
+  assert.deepEqual(calls.at(-1), ["acceptTranscript", true]);
+  review.button("Use as lyrics").onclick();
+  assert.deepEqual(calls.at(-1), ["acceptTranscript"]);
+  review.button("Discard").onclick();
+  assert.deepEqual(calls.at(-1), ["discardTranscript"]);
+  const busy = lyricsBox(state({ busy: "transcribe" }), actions);
+  busy.button("Cancel").onclick();
+  assert.deepEqual(calls.at(-1), ["cancel"]);
 }
 
 console.log("h3c lyrics ok");

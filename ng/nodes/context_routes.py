@@ -187,12 +187,18 @@ async def model_choices(request):
 
 @PromptServer.instance.routes.post("/ng/lyrics")
 async def time_lyrics(request):
-    """Time a song card's lyrics with Whisper. While a render runs it stays off the GPU (CPU is slower, not in the way)."""
+    """Time a song card's lyrics with Whisper. While a render runs it stays off the GPU (CPU is slower, not in the way).
+
+    `audio` may carry the card's linked AUDIO payload (waveform/sample_rate) instead of a file name when its
+    sound arrives through audio_in: the card's file widget then holds the mirror (or nothing, for a decoded
+    sound), so the payload is what Whisper hears. A file source keeps the old path byte-identical."""
     try:
         data = await request.json()
         busy = PromptServer.instance.prompt_queue.get_tasks_remaining() > 0
         device = "cpu" if busy else comfy.model_management.get_torch_device()
-        result = await asyncio.to_thread(lyrics_timing.time_lyrics, data["source"], data.get("lyrics", ""), device,
+        linked = data.get("audio")
+        source = linked if isinstance(linked, dict) else data["source"]
+        result = await asyncio.to_thread(lyrics_timing.time_lyrics, source, data.get("lyrics", ""), device,
                                          data.get("model", ""))
         comfy.model_management.soft_empty_cache()
         return web.json_response({"ok": True, "device": str(device), **result})

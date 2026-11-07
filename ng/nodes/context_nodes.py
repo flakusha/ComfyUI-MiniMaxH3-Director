@@ -96,14 +96,9 @@ def _validate_linked_file(linked, widget_value, media):
 
 def _linked_length(audio_in):
     """Exact seconds of a connected AUDIO payload; the batch dim is ignored and no file is decoded."""
-    try:
-        rate = float(audio_in["sample_rate"])
-        frames = audio_in["waveform"].shape[-1]
-    except (KeyError, TypeError, AttributeError, IndexError, ZeroDivisionError):
-        raise ValueError("The connected audio has no readable sound - reconnect its source, or pick a file on the card.") from None
-    if rate <= 0:
-        raise ValueError("The connected audio has no readable sound - reconnect its source, or pick a file on the card.")
-    return float(frames) / rate
+    from ..adapters.linked_audio import read_waveform
+    wave, rate = read_waveform(audio_in)
+    return float(wave.shape[-1]) / rate
 
 
 def _linked_float(value):

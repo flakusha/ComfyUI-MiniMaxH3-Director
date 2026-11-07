@@ -83,3 +83,48 @@ class Routes(unittest.IsolatedAsyncioTestCase):
             response = await self.context.time_lyrics(request)
         self.assertEqual(response.status, 400)
         self.assertFalse(json.loads(response.text)["ok"])
+
+    async def test_lyrics_route_forwards_a_linked_payload_instead_of_the_widget_file(self):
+        # A card whose sound arrives through audio_in carries the mirror (or nothing, for a decoded
+        # sound) in its file widget: the route hands Whisper the linked AUDIO payload itself.
+        # The tensors cross the test boundary only; the browser never sends waveform bytes (it sends
+        # the mirrored file name, which the route resolves exactly as before).
+        import torch
+        audio_in = {"waveform": torch.zeros(1, 1, 16000), "sample_rate": 16000}
+        seen = {}
+
+        def fake_time(source, text, device, chosen=""):
+            seen["source"] = source
+            return {"lrc": "[00:00.00] la", "language": "English", "lines": 1, "heard_words": 0}
+
+        payload = {"source": "", "lyrics": "la", "model": "", "audio": audio_in}
+        request = types.SimpleNamespace(json=AsyncMock(return_value=payload))
+        queue = patch.object(self.context.PromptServer.instance, "prompt_queue",
+                             types.SimpleNamespace(get_tasks_remaining=lambda: 1), create=True)
+        with queue, patch.object(self.context.lyrics_timing, "time_lyrics", side_effect=fake_time), \
+                patch.object(self.context.comfy.model_management, "soft_empty_cache"):
+            response = await self.context.time_lyrics(request)
+        body = json.loads(response.text)
+        self.assertEqual(response.status, 200)
+        self.assertTrue(body["ok"])
+        self.assertIs(seen["source"], audio_in)
+        self.assertEqual(body["lines"], 1)
+
+    async def test_lyrics_route_keeps_the_file_path_byte_identical(self):
+        # Unlinked cards send a file name and no payload: the route passes the name through untouched.
+        seen = {}
+
+        def fake_time(source, text, device, chosen=""):
+            seen["source"] = source
+            return {"lrc": "[00:00.00] la", "language": "English", "lines": 1, "heard_words": 0}
+
+        payload = {"source": "song.wav", "lyrics": "la", "model": ""}
+        request = types.SimpleNamespace(json=AsyncMock(return_value=payload))
+        queue = patch.object(self.context.PromptServer.instance, "prompt_queue",
+                             types.SimpleNamespace(get_tasks_remaining=lambda: 1), create=True)
+        with queue, patch.object(self.context.lyrics_timing, "time_lyrics", side_effect=fake_time), \
+                patch.object(self.context.comfy.model_management, "soft_empty_cache"):
+            response = await self.context.time_lyrics(request)
+        self.assertEqual(response.status, 200)
+        self.assertTrue(json.loads(response.text)["ok"])
+        self.assertEqual(seen["source"], "song.wav")

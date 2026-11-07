@@ -322,6 +322,7 @@ function attach(node, media) {
     },
     setModel(purpose, file) { node.properties.ng_models = { ...node.properties.ng_models, [purpose]: file || undefined }; node.graph?.change?.(); render(); },
     // Lyrics: Whisper times the lines that are there (or writes down what it hears); the words stay the user's.
+    // A linked card sends its mirrored file; the route falls back to it, so a linked song times like a chosen file.
     async timeLyrics() {
       if (S.busy) return;
       S.busy = "lyrics"; say("");

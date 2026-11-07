@@ -41,15 +41,18 @@ export function lyricsBox(S, actions) {
   const note = !text.trim() ? "Optional. Only for a song or speech whose words should be sung or spoken in the video."
     : !sung ? "Sung where this song plays exactly: Lock or Copy here, or a Lock or Copy clip on a Studio audio lane."
     : `${timed} of ${lines} line(s) timed; each render part gets the lines sung in it.`;
+  // The file widget gate covers both sources: unlinked it holds the chosen file, linked the mirror of the
+  // origin's file (ng_external.js) - so the buttons stay lit exactly when Whisper has something to hear.
+  const heard = S.values.audio || "";
   const transcript = transcriptRow(S, actions);
   return h("div", { class: "h3c-box" },
     h("div", { class: "h3c-cap" }, "Lyrics", h("span", { class: "h3c-grow" }),
-      h("button", { class: "h3c-btn ai", disabled: !S.values.audio || Boolean(S.busy),
+      h("button", { class: "h3c-btn ai", disabled: !heard || Boolean(S.busy),
         title: "Let the connected AI provider write down the words of this sound (plain text, no times). Your lyrics stay until you accept.",
         onclick: () => actions.transcribe() }, S.busy === "transcribe" ? "Transcribing …" : "✦ Transcribe with AI"),
-      h("button", { class: "h3c-btn", disabled: !S.values.audio || Boolean(S.busy), title: "Time each line with the local Whisper model; without lines it writes down what it hears",
+      h("button", { class: "h3c-btn", disabled: !heard || Boolean(S.busy), title: "Time each line with the local Whisper model; without lines it writes down what it hears",
         onclick: () => actions.timeLyrics() }, S.busy === "lyrics" ? "Listening …" : "⟳ Time with Whisper"),
-      h("button", { class: "h3c-btn", disabled: !S.values.audio || Boolean(S.busy), title: "Play the song and press at the start of the selected line",
+      h("button", { class: "h3c-btn", disabled: !heard || Boolean(S.busy), title: "Play the song and press at the start of the selected line",
         onclick: () => actions.stampLyric() }, "Stamp line")),
     editor, transcript, h("span", { class: "h3c-hint" }, note));
 }

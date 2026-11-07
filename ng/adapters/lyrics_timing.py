@@ -131,16 +131,33 @@ def _samples(path):
     return wave.reshape(-1).numpy().astype(np.float32)
 
 
+def _linked_samples(audio_in):
+    """The linked AUDIO payload as Whisper reads it: 16 kHz mono float, resampled in memory, no file decoded."""
+    import comfy.audio
+    import torch
+
+    from .linked_audio import read_waveform
+    wave, rate = read_waveform(audio_in)
+    mono = wave.reshape(wave.shape[-2], -1).to(torch.float32).mean(dim=0, keepdim=True)
+    if rate != 16000:
+        mono = comfy.audio.resample(mono, rate, 16000)
+    return mono.reshape(-1).numpy().astype(np.float32)
+
+
 def time_lyrics(source, text, device, chosen=""):
     """LRC text for the song: the user's own lines with recognised times, or what Whisper heard when no lines are given.
 
-    `device` is the caller's choice: the GPU only while nothing renders. `chosen`: the card's Whisper file, if any."""
+    `device` is the caller's choice: the GPU only while nothing renders. `chosen`: the card's Whisper file, if any.
+    `source` is the card's file, or the linked AUDIO payload itself (dict with waveform/sample_rate) when the
+    card's sound arrives through audio_in - Whisper is the clock either way."""
     if whisper is None:
         raise ValueError("Timing lyrics needs the openai-whisper package in ComfyUI's Python.")
-    path = require_path(source)
+    if isinstance(source, dict):
+        samples = _linked_samples(source)
+    else:
+        samples = _samples(require_path(source))
     known = lyrics.plain_lines(text)
     language, _ = lyrics.parse(text)
-    samples = _samples(path)
     model = _load_model(model_file(chosen), device=device)
     try:
         result = model.transcribe(samples, word_timestamps=True, fp16=str(device) != "cpu",

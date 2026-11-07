@@ -175,3 +175,38 @@ test("A linked text_in is the note: shown read-only, the card's own text untouch
     assert.equal(editor().value, "card note");
   });
 });
+
+test("A linked video locks the mask box: picking a mask would silently unmirror it", async (t) => {
+  const { maskBox } = await import("../../../js/ng/h3c_mask.js");
+  const calls = [];
+  const actions = new Proxy({}, { get: (_t, name) => (...args) => { calls.push([name, ...args]); } });
+  const base = { opts: { control_mask: "", control_result: "", mask_shape: "box", mask_prompt: "person", mask_grow: 16 },
+    values: { video: "clip.mp4" }, files: ["mask.mp4"], busy: "", els: { mask: document.createElement("video") }, api };
+  await t.test("unlinked, the mask controls stay editable", async () => {
+    const view = maskBox({ ...base, external: { linked: false } }, actions);
+    assert.equal(view.find((node) => node.attributes?.["aria-label"] === "Mask video")[0].disabled, false);
+  });
+  await t.test("linked, choose/shape/prompt/grow/upload/generate all lock", async () => {
+    const view = maskBox({ ...base, external: { linked: true, label: "Load Video" } }, actions);
+    assert.equal(view.find((node) => node.attributes?.["aria-label"] === "Mask video")[0].disabled, true);
+    assert.equal(view.find((node) => node.attributes?.["aria-label"] === "Mask shape")[0].disabled, true);
+    assert.equal(view.find((node) => node.attributes?.["aria-label"] === "Mask object")[0].disabled, true);
+    assert.equal(view.find((node) => node.attributes?.["aria-label"] === "Mask grow")[0].disabled, true);
+    assert.equal(view.find((node) => node.attributes?.["aria-label"] === "Upload mask video")[0].disabled, true);
+    const generate = view.find((node) => node.tagName === "BUTTON" && node.innerText.startsWith("Generate mask"))[0];
+    assert.equal(generate.disabled, true);
+  });
+});
+
+test("A trim-era save repairs non-JSON role/options fields on configure", async (t) => {
+  await t.test("mid-length values holding filenames reset by name, valid JSON survives", async () => {
+    const card = makeCard({ ...AUDIO_WIDGETS, content_roles: "voice.wav", usage_roles: "[\"voice\"]",
+      context_options: "song.mp3", subject_ids: "" });
+    extension.nodeCreated(card.card);
+    card.card.onConfigure({ widgets_values: Array(12).fill("junk") });
+    const byName = Object.fromEntries(card.card.widgets.map((widget) => [widget.name, widget.value]));
+    assert.equal(byName.content_roles, "", "a filename in a JSON field resets");
+    assert.equal(byName.context_options, "", "a filename in the options field resets");
+    assert.equal(byName.usage_roles, "[\"voice\"]", "valid JSON is left alone");
+  });
+});

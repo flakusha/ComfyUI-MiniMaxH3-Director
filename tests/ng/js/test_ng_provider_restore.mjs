@@ -18,6 +18,10 @@ assert.equal(current0.temperature,.3);
 const named={source:"clip",provider:"ollama",temperature:.7,top_k:15};
 const current=providerRestoreValues({widgets_values:old,widgets_values_named:named},defaults);
 assert.equal(current.temperature,.7);assert.equal(current.top_k,15);assert.equal(current.source,"clip");
+// Appended override widgets survive a named-restore round-trip: the Audio model override is pinned, not dropped.
+const overrides=providerRestoreValues({widgets_values:old,widgets_values_named:{...named,model_audio:"hearing-model"}},defaults);
+assert.equal(overrides.model_audio,"hearing-model");
+assert.equal(overrides.temperature,.7);
 const six=providerRestoreValues({widgets_values:["custom","http://localhost:1234","old-model","ENV_KEY",true,false]},defaults);
 assert.equal(six.source,"api");assert.equal(six.base_url,"http://localhost:1234");assert.equal(six.model,"old-model");
 assert.equal(six.temperature,.3);

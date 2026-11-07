@@ -1,11 +1,13 @@
 // Tests for the NG frontend modules that have logic: reading widgets and wires, and rendering a plan.
-// Run: node tests/ng/js/test_ng_js.mjs   (also called by tests/ng/run_tests.py)
+// Run: node tests/ng/js/test_ng_js.mjs   (also run by tests/ng/test_js.py, which executes every tests/ng/js/*.mjs suite)
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
+import fs from "node:fs";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..", "..", "..", "js", "ng");
 const load = (name) => import(pathToFileURL(path.join(root, name)).href);
+const source = (name) => fs.readFileSync(path.join(root, name), "utf8");
 
 class FakeElement {
   constructor(tag) { this.tag = tag; this.children = []; this.className = ""; this.textContent = ""; this.style = {setProperty: () => {}}; this.title = ""; this.dataset = {}; this.attributes = {}; }
@@ -63,6 +65,17 @@ assert.equal(restoredProviderValues(["api","custom","http://localhost:1234","new
   const provider=connectedProvider(solo);
   assert.equal(provider.schema_version,3,"overrides must travel on the current version, or the backend drops the Audio model");
   assert.equal(provider.model_audio,"hearing-model");
+}
+
+// Every widget the panel draws a control() for stays hidden natively: the tiles are the editors,
+// the native rows must not double them (model_text/model_caption/model_audio caught this).
+{
+  const panel = source("ng_ai_panel.js");
+  const hidden = panel.match(/hideNative\(node, \[([\s\S]*?)\]\);/)[1];
+  for (const match of panel.matchAll(/control\(node, "([^"]+)"/g))
+    assert.ok(hidden.includes(`"${match[1]}"`), `${match[1]} has a panel control but no hideNative entry`);
+  for (const name of ["model_text", "model_caption", "model_audio"])
+    assert.ok(hidden.includes(`"${name}"`), `${name} override stays hidden natively`);
 }
 
 {

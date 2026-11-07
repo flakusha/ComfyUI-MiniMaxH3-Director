@@ -126,10 +126,11 @@ export function audioBlock(S, actions) {
     onpointerdown: locked ? null : rangeDrag(S, actions, total, (r) => { drawWave(canvas, envelope, r); sel.style.left = `${r[0] / total * 100}%`; sel.style.width = `${(r[1] - r[0]) / total * 100}%`; }, audio) },
     canvas, sel, total ? playhead(S, total, audio) : null);
   const info = envelope ? `${clock(total)} · ${(envelope.sample_rate / 1000).toFixed(1)} kHz · ${envelope.channels === 2 ? "stereo" : `${envelope.channels} ch`}` : S.waveError || "Reading the waveform …";
+  const infoClass = envelope || !S.waveError ? "h3c-lbl" : "h3c-hint h3c-warn";
   return h("div", { class: "h3c-box" },
     h("div", { class: "h3c-row" }, h("button", { class: "h3c-btn", style: { width: "32px", padding: 0, borderRadius: "50%" }, "aria-label": audio.paused ? "Play selection" : "Pause",
       onclick: () => (audio.paused ? audio.play().catch(() => {}) : audio.pause()) }, audio.paused ? "▶" : "❚❚"),
-    h("span", { class: "h3c-lbl" }, info), h("span", { class: "h3c-grow" }),
+    h("span", { class: infoClass }, info), h("span", { class: "h3c-grow" }),
     total ? h("span", { class: "h3c-lbl" }, `Selected: ${clock(range[0])} – ${clock(range[1])} (${(range[1] - range[0]).toFixed(1)} s)`) : null),
     wave, h("span", { class: "h3c-hint" }, locked ? "The range comes from connected Trim start/end inputs; the card mirrors them read-only."
       : "On an audio lane the Studio places this part and can start later in the file."));

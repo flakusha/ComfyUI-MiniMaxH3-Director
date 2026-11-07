@@ -468,7 +468,7 @@ export function buildPanel(node, root, header, widget) {
   hideNative(node, ["source", "provider", "base_url", "model", "api_key_env", "vision", "audio",
                      "timeout_seconds", "max_tokens", "keep_alive", "temperature", "top_p", "top_k",
                      "min_p", "frequency_penalty", "presence_penalty", "seed", "fixed_seed",
-                     "local_model", "local_type"]);
+                     "local_model", "local_type", "model_text", "model_caption", "model_audio"]);
 
   // Below this width the three source tiles and the provider / model pair no longer fit: at 210 the Model field was cut
   // off with a scrollbar under it (GUI test 2026-10-19). The Context cards and the Director snap back to theirs the same way.

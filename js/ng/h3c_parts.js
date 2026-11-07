@@ -49,7 +49,7 @@ export function modelsBox(S, actions) {
 }
 
 // Analyze and, while it runs, Cancel. On media cards it sits on "What is in it"; the Text card has it on "Use as".
-const analyzeTools = (S, actions) => [h("button", { class: "h3c-btn ai", disabled: !S.ai || Boolean(S.busy), title: S.ai ? "Ask the AI what this is; nothing changes until you accept."
+const analyzeTools = (S, actions) => [h("button", { class: "h3c-btn ai", disabled: !S.ai || Boolean(S.busy), title: S.ai ? "Ask the AI what this is; nothing changes until you accept. Audio cards hear the 15 s preview; ✦ Transcribe hears the card's range."
   : "Connect an H3 AI Loader to this card or to the Context Connector.", onclick: actions.analyze }, S.busy === "analyze" ? "Analyzing …" : "✦ Analyze"),
   S.busy === "analyze" ? h("button", { class: "h3c-btn", onclick: actions.cancel }, "Cancel") : null];
 

@@ -15,7 +15,8 @@ export function textBody(S, actions) {
     disabled: linked, title: linked ? "Linked; the origin node owns this text." : undefined,
     oninput: linked ? null : (event) => actions.setNote(event.target.value) });
   S.els.editor = editor;
-  const template = h("select", { class: "h3c-in", style: { flex: "1 1 auto" }, "aria-label": "Template" },
+  const template = h("select", { class: "h3c-in", style: { flex: "1 1 auto" }, "aria-label": "Template",
+    disabled: linked, title: linked ? "Linked; the origin node owns this text." : undefined },
     Object.keys(TEMPLATES).map((name) => h("option", { value: name }, name)));
   return [
     h("div", { class: "h3c-grid", style: { gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr)" } },

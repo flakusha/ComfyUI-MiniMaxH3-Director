@@ -7,7 +7,7 @@ import { topRow, contentBox, usageBox, keepBox, ownerBox, descriptionBox, sugges
 import { CARD_MODELS, modelState } from "./ng_models.js";
 import { mediaURL, imageBlock, videoBlock, videoSoundBox, audioBlock, listenBox, wirePlayback, moveHeads } from "./h3c_media.js";
 import { textBody } from "./h3c_text.js";
-import { lyricsBox, stampLine } from "./h3c_lyrics.js";
+import { lyricsBox, stampLine, deviceNote } from "./h3c_lyrics.js";
 import { values, applyValues, newContextId, ownIdentity, analysisFingerprint, request, followNodeWidth } from "./ng_widgets.js";
 import { contextOptions, setOptions, selectedRoles } from "./ng_context_controls.js";
 import { hideNative } from "./ng_editor_fields.js";
@@ -173,6 +173,8 @@ function attach(node, media) {
     if (media === "audio") {
       const linked = (name) => (node.inputs || []).some((entry) => entry.widget?.name === name && entry.link != null);
       S.trimLinked = { start: linked("trim_start"), end: linked("trim_end") };
+      // DECISION (2026-11-07): the native trim widgets stay visible when linked (inspectable values);
+      // the card's lock hint carries the range display, so both show and neither edits past the link.
       // the range the card plays: a linked Trim value wins over the stored one (0 = unset), matching the node's execute
       S.trim = { start: Number(S.values.trim_start) > 0 ? Number(S.values.trim_start) : (S.opts.start_s || 0),
         end: Number(S.values.trim_end) > 0 ? Number(S.values.trim_end) : (S.opts.end_s || 0) };
@@ -249,7 +251,10 @@ function attach(node, media) {
       if (externalLinked()) return say("The picture is linked; the origin card owns it.", true);
       openPictureEditor(node, api, (text, warn) => { if (text) say(text, warn); else render(); });
     },
-    setMask(file) { setOptions(node, { control_mask: file, control_result: values(node).video }); },
+    setMask(file) {
+      if (externalLinked()) return say("The video is linked; the origin card owns it.", true);
+      setOptions(node, { control_mask: file, control_result: values(node).video });
+    },
     async uploadMask(file) {
       if (S.busy) return;
       if (externalLinked()) return say("The video is linked; the origin card owns it.", true);
@@ -349,7 +354,7 @@ function attach(node, media) {
         const data = await request(api, "/ng/lyrics", { source: values(node).audio, lyrics: S.els.lyrics?.value ?? contextOptions(node).lyrics ?? "",
           model: node.properties.ng_models?.whisper || "" });
         setOptions(node, { lyrics: data.lrc });
-        say(`Timed ${data.lines} line(s) (${data.language}, ${data.device.startsWith("cpu") ? "CPU while a render runs" : "GPU"}). Check them while the song plays.`);
+        say(`Timed ${data.lines} line(s) (${data.language}, ${deviceNote(data.device)}). Check them while the song plays.`);
       } catch (error) { say(`Lyrics: ${error.message}`, true); }
       finally { S.busy = ""; render(); }
     },
@@ -468,9 +473,16 @@ function attach(node, media) {
     repairNullableText(node);
     restoreAssetWidget(node);
     // Old workflows end after ID/colour; browser upload widgets must not fill newly added JSON fields.
+    // Name-based repair: any of the JSON fields holding a non-empty non-JSON value was filled by a
+    // browser upload widget from a trim-era save, so it resets regardless of the saved length.
     const saved = args[0]?.widgets_values;
     if (Array.isArray(saved) && saved.length <= (media === "audio" ? 9 : 8))
       for (const widget of node.widgets || []) if (["content_roles", "usage_roles", "context_options"].includes(widget.name)) widget.value = "";
+    for (const widget of node.widgets || []) {
+      if (!["content_roles", "usage_roles", "context_options", "subject_ids"].includes(widget.name)) continue;
+      if (!widget.value) continue;
+      try { JSON.parse(widget.value); } catch { widget.value = ""; }
+    }
     if (identity() && !identity().value) identity().value = newContextId();
     assignColor(); delete node.properties.ng_context_expanded;
     queueMicrotask(() => { if (!removed) keepOwnIdentity(); });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { installDom } from "./fake_dom.mjs";
 
 installDom();
-const { stamp, stampLine, timedCount, lyricsBox } = await import("../../../js/ng/h3c_lyrics.js");
+const { stamp, stampLine, timedCount, lyricsBox, deviceNote } = await import("../../../js/ng/h3c_lyrics.js");
 
 // Stamp replaces an earlier time on the line at the caret and moves on to the next line.
 {
@@ -38,6 +38,23 @@ const state = (extra = {}) => ({ media: "audio", values: { audio: "song.mp3" }, 
   assert.equal(lyricsBox(state({ busy: "lyrics" }), actions).button("Listening …").disabled, true);
   assert.equal(lyricsBox(state({ values: { audio: "" } }), actions).button("Stamp line").disabled, true);
 }
+
+// One action at a time: a busy box disables Transcribe, Whisper and Stamp together (a second
+// request would orphan the first and Cancel would no longer cancel it).
+{
+  const { actions } = recorder();
+  for (const busy of ["transcribe", "lyrics", "analyze"]) {
+    const view = lyricsBox(state({ busy }), actions);
+    assert.equal(view.button(busy === "transcribe" ? "Transcribing …" : "✦ Transcribe with AI").disabled, true, `transcribe during ${busy}`);
+    assert.equal(view.button(busy === "lyrics" ? "Listening …" : "⟳ Time with Whisper").disabled, true, `whisper during ${busy}`);
+    assert.equal(view.button("Stamp line").disabled, true, `stamp during ${busy}`);
+  }
+}
+
+// A device-less answer still reads: older backends and non-200 paths carry no device.
+assert.equal(deviceNote(undefined), "CPU while a render runs");
+assert.equal(deviceNote("cpu"), "CPU while a render runs");
+assert.equal(deviceNote("cuda:0"), "GPU");
 
 // One Lyrics subtab: the transcript review lives on the same text, with Keep both / Use as lyrics / Discard.
 {

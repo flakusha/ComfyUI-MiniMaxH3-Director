@@ -49,12 +49,22 @@ For **Lock Audio**, Output binds the selected source to its current model throug
 Every native stage restores only the locked audio positions before sampling; free audio and video retain the preceding
 stage's values. This prevents a partial schedule's remaining noise from becoming the next stage's locked source.
 Use Output's model for the Guider/KSampler in every stage. No extra lock/noise/guider node is required.
-The source is loaded and encoded by the native audio VAE per stage, with no retained tensor cache. This adds work
-to locked-audio stages; it does not change steps, sampler, noise, CFG, sigma shifts or collection.
+The locked clips are encoded once by the audio VAE where the part is built, and every stage restores from that
+encode through the `OUTER_SAMPLE` hook; no per-stage decode runs while the diffusion model is sampling.
+This does not change steps, sampler, noise, CFG, sigma shifts or collection. At collection, a locked join is
+butted sample-exact while every other pinned join crossfades over 10 ms; see "Continuity and collection" below.
 
 This is a continuation of one schedule, with no upscale operation. A learned H3 upscale workflow can require the first stage's
 `denoised_output`, its own re-noising and updated H3 reference conditioning. That is a separate integration; a generic image
-latent resize does not establish H3 video/audio compatibility.
+latent resize does not establish H3 video/audio compatibility. Likewise the custom loop has no Spectrum forecast:
+enable Spectrum on the Director and H3 Director Output applies the same forecast wrap as H3 Render Sequence.
+
+## Collect Video details
+
+NG Collect Video outputs `(video, warnings)`: unlike NG Collect there is no `fps` output, the file is fixed at 24 fps.
+It writes `ng_collect_<id>.mp4` into ComfyUI's temp folder, which ComfyUI wipes at start: consume it with SaveVideo
+in the same run. Connect a chunk list socket (`loop_chunk`), not the whole chunks list, to Output inside the loop:
+a multi-job list renders chunk 0 every iteration and fails only later at Collect validation.
 
 ## Continuity and collection
 
@@ -80,5 +90,7 @@ latent, but an upscale pipeline still needs its own correct H3 conditioning and 
 
 Collect owns copies of decoder outputs across later VAE calls. Audio lengths are computed from absolute story-frame boundaries,
 so per-chunk rounding cannot accumulate samples at the joins. A short decoded audio stream is padded as before.
+Sound at a pinned join crossfades over 10 ms into the next part's own take of the same moment; a join covered by
+a lock span is butted instead, so restored source samples stay exact.
 
 No external sampler settings are reset by the loop. Compatibility with arbitrary third-party samplers and upscalers is not implied.

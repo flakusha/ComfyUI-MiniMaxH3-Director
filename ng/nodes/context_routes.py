@@ -39,6 +39,8 @@ async def list_models(request):
     """
     try:
         data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Send a JSON object with the provider fields.")
         provider = data.get("provider", "")
         root = key_root(request)
         key = keys.resolve(root, provider, _fallback_key(data))
@@ -75,6 +77,8 @@ async def write_keys(request):
     """Store or clear one key. An empty key removes it, which is how a user forgets one."""
     try:
         data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Send a JSON object with the provider, key and key_env fields.")
         stored = await asyncio.to_thread(keys.write, key_root(request), data.get("provider", ""),
                                         data.get("key", ""), data.get("key_env", ""))
         return web.json_response({"ok": True, "stored": stored, "keys": keys.describe(key_root(request))})
@@ -165,7 +169,9 @@ async def media_waveform(request):
     try:
         data = await asyncio.to_thread(waveform.envelope, request.query["source"])
         return web.json_response({"ok": True, **data})
-    except (OSError, ValueError, KeyError) as error:
+    except Exception as error:
+        # A preview convenience: any decoder failure (FFmpegError from the decode loop included)
+        # must reach the card as JSON, never as a 500 page the card's request() cannot parse.
         return web.json_response({"ok": False, "error": str(error)}, status=400)
 
 
@@ -190,5 +196,7 @@ async def time_lyrics(request):
                                          data.get("model", ""))
         comfy.model_management.soft_empty_cache()
         return web.json_response({"ok": True, "device": str(device), **result})
-    except (OSError, ValueError, KeyError, TypeError) as error:
+    except Exception as error:
+        # A timing convenience: corrupt-model RuntimeErrors from whisper.load_model, MemoryErrors
+        # and raw av faults must reach the card as JSON, never as a 500 page it cannot parse.
         return web.json_response({"ok": False, "error": str(error)}, status=400)

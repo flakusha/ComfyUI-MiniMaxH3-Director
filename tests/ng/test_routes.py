@@ -29,6 +29,15 @@ class Routes(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(response.status, 400)
                     self.assertFalse(json.loads(response.text)["ok"])
 
+    async def test_a_non_dict_body_is_refused_as_json_on_key_and_model_routes(self):
+        # A JSON array body has no .get: without the guard the AttributeError escapes as a 500.
+        for route in (self.context.list_models, self.context.write_keys):
+            request = types.SimpleNamespace(json=AsyncMock(return_value=[]))
+            with self.subTest(route=route.__name__):
+                response = await route(request)
+                self.assertEqual(response.status, 400)
+                self.assertFalse(json.loads(response.text)["ok"])
+
     async def test_analyze_all_route_reports_a_bad_request_as_json(self):
         # The batch route has to answer with the same ok/error shape, otherwise the panel shows a raw exception.
         for payload in (None, [], {"contexts": [], "provider": {"provider": "magic"}}):
@@ -61,3 +70,16 @@ class Routes(unittest.IsolatedAsyncioTestCase):
             response = await self.context.media_preview(types.SimpleNamespace(query={"media": "image", "source": source}))
             self.assertEqual(response.status, 400)
             self.assertFalse(json.loads(response.text)["ok"])
+
+    async def test_decoder_and_timing_faults_are_answered_as_json(self):
+        # A corrupt-model RuntimeError (whisper.load_model unpickling) or a raw av fault in the
+        # waveform decode loop must not escape as a 500 page the card cannot parse.
+        with patch.object(self.context.waveform, "envelope", side_effect=RuntimeError("broken stream")):
+            response = await self.context.media_waveform(types.SimpleNamespace(query={"source": "song.wav"}))
+        self.assertEqual(response.status, 400)
+        self.assertFalse(json.loads(response.text)["ok"])
+        with patch.object(self.context.lyrics_timing, "time_lyrics", side_effect=RuntimeError("corrupt weights")):
+            request = types.SimpleNamespace(json=AsyncMock(return_value={"source": "song.wav", "lyrics": ""}))
+            response = await self.context.time_lyrics(request)
+        self.assertEqual(response.status, 400)
+        self.assertFalse(json.loads(response.text)["ok"])

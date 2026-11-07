@@ -76,7 +76,7 @@ def request_prompt(action, payload, config):
                          "Audio on only for a model that accepts audio, or write the description yourself.")
     prompt = analysis_prompt(media, widgets.get("content", ""), payload.get("offer"))
     if media == "text":
-        prompt += "\n\nContext text:\n" + widgets.get("text", "")
+        prompt += "\n\nContext text:\n" + (widgets.get("text") or "")
     return prompt, media if media != "text" else None
 
 

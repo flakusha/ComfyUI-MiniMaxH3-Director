@@ -136,6 +136,14 @@ class NativeAI(unittest.TestCase):
         self.assertEqual(packet.clip, ["h3_clip", 0])
         self.assertEqual(provider.clip, ["encoder", 0], "AI and H3 conditioning must remain independent")
 
+    def test_a_missing_note_reaches_the_prompt_as_unset(self):
+        # A None link (what the runtime passes for an unconnected STRING) must read like the
+        # HTTP path's widget_text, not raise TypeError on string concatenation.
+        payload = {"media": "text", "widgets": {"text": None, "content": "rules"}}
+        prompt, media = self.adapter.request_prompt("analyze", payload, self.provider().config)
+        self.assertIsNone(media)
+        self.assertIn("Context text:", prompt)
+
     def test_media_capabilities_and_response_validation_are_enforced(self):
         for media, options in (("image", {"vision": False}), ("audio", {"audio": False})):
             with self.subTest(media=media), self.assertRaisesRegex(ValueError, "is off on the H3 AI Loader"):

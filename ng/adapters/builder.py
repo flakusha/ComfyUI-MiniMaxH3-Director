@@ -44,7 +44,7 @@ async def plan(payload, *, api_key=None):
     prompt = plan_prompt(quick, read_str(director, "idea", "director", ""), seconds, contexts, len(shown), parts, sung)
     key = legacy.resolve_api_key({"api_key_env": config.api_key_env}) if api_key is None else api_key
     try:
-        entry, url, model = endpoint(config)
+        entry, url, model = endpoint(config, "text")
         answer = await legacy.vlm_generate(shown, prompt, config.provider, url, model, api_key=key,
                                            auth=entry.auth, system_prompt=SYSTEM,
                                            **{**wire(config), "max_tokens": plan_tokens(config.max_tokens)})

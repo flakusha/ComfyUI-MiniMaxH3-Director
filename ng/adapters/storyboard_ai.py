@@ -27,7 +27,7 @@ async def texts(payload, *, api_key=None):
         prompt += "\nThe attached pictures show, in order: %s." % ", ".join(shown_names(contexts, len(shown)))
     key = legacy.resolve_api_key({"api_key_env": config.api_key_env}) if api_key is None else api_key
     try:
-        entry, url, model = endpoint(config)
+        entry, url, model = endpoint(config, "text")
         answer = await legacy.vlm_generate(shown, prompt, config.provider, url, model, api_key=key, auth=entry.auth,
                                            system_prompt=SYSTEM, **{**wire(config), "max_tokens": texts_tokens(config.max_tokens)})
         return parse_texts(answer, board, contexts)

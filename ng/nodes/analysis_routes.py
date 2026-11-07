@@ -9,7 +9,7 @@ import comfy.model_management
 
 from ... import minimax_media as legacy
 from ..adapters import keys
-from ..adapters.analysis import analyze
+from ..adapters.analysis import analyze, transcribe
 from ..adapters.analyze_all import analyze_all
 from ..adapters.auto_direct import direct
 from ..adapters.builder import plan
@@ -98,6 +98,20 @@ async def build_plan(request):
         payload = _writing(await request.json())
         return _answer({"suggestion": await legacy.client_interruptible(
             plan(payload, api_key=_api_key(request, payload)), request)})
+    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
+            comfy.model_management.InterruptProcessingException) as error:
+        return _failure(error)
+
+
+@PromptServer.instance.routes.post("/ng/transcribe")
+async def transcribe_audio(request):
+    """The Audio card's AI hearing: plain words, no times - Whisper stays the one clock. A whole song's
+    words need more than the 512-token default (the reason _writing exists), so the writing floor stays.
+    The words only ever reach the card as an offer; accepting them is the card's own button."""
+    try:
+        payload = _writing(await request.json())
+        return _answer(await legacy.client_interruptible(
+            transcribe(payload, api_key=_api_key(request, payload)), request))
     except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
             comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)

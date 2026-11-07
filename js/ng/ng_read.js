@@ -6,7 +6,7 @@ const CONTEXT_PREFIX = "NGContext";
 // The provider fields the panel owns and the request needs. Kept as one list because a field that
 // is missing here is a setting the user can change and the request never sees - the quietest kind
 // of broken. The two native branches below are built separately: they have no provider to talk to.
-const PROVIDER_FIELDS = ["provider", "base_url", "model", "api_key_env", "vision", "audio",
+const PROVIDER_FIELDS = ["provider", "base_url", "model", "model_text", "model_caption", "model_audio", "api_key_env", "vision", "audio",
                          "timeout_seconds", "max_tokens", "keep_alive", "temperature", "top_p",
                          "top_k", "min_p", "frequency_penalty", "presence_penalty",
                          "seed", "fixed_seed"];

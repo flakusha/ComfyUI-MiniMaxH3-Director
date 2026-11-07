@@ -8,6 +8,14 @@ from .context_nodes import CATEGORY
 
 NGAI = io.Custom("NG_AI_PROVIDER")
 
+# One optional model per purpose, resolved by endpoint(config, purpose). Image and video analysis
+# share one field: both ride the same vision transport. An empty field means "use the Model above",
+# so an untouched loader keeps asking for exactly the model it always asked for.
+PURPOSE_MODELS = (
+    ("model_text", "Model for text work (scene split, prompts, part writing). Empty = use the Model above."),
+    ("model_caption", "Model for image and video analysis. Empty = use the Model above."),
+    ("model_audio", "Model for audio analysis on the same server. Empty = use the Model above."))
+
 
 class NGAIProvider(io.ComfyNode):
     @classmethod
@@ -54,6 +62,8 @@ class NGAIProvider(io.ComfyNode):
                                               tooltip=providers.SETTING_HELP["seed"]),
                                  io.Boolean.Input("fixed_seed", default=False,
                                                   tooltip=providers.SETTING_HELP["fixed_seed"]),
+                                 # Optional per-purpose models, one widget each; empty = the Model above.
+                                 *[io.String.Input(name, default="", advanced=True, tooltip=tip) for name, tip in PURPOSE_MODELS],
                                  io.Clip.Input("clip", display_name="CLIP", raw_link=True, lazy=True, optional=True,
                                                tooltip="For CLIP / Encoder: connect a generative text/vision model. H3's conditioning CLIP stays independently connected at the Connector."),
                                  # GGUF encoders are listed by the GGUF pack's "clip_gguf" folder key, not core's

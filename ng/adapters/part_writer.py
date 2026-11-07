@@ -37,7 +37,7 @@ async def write(payload, *, api_key=None):
     facts["shown"] = shown
     key = legacy.resolve_api_key({"api_key_env": config.api_key_env}) if api_key is None else api_key
     try:
-        entry, url, model = endpoint(config)
+        entry, url, model = endpoint(config, "text")
         answer = await legacy.vlm_generate(data, write_prompt(facts), config.provider, url, model, api_key=key, auth=entry.auth,
                                            system_prompt=SYSTEM, **{**wire(config), "max_tokens": write_tokens(config.max_tokens)})
         return finish(answer, facts)

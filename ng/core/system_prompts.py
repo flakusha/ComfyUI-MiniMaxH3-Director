@@ -35,6 +35,11 @@ SYSTEM_PROMPTS = {
         "for in a scene, and - for a voice - roughly which character it fits. Do not invent a name for a "
         "speaker; a name comes from the card. Answer in the language of the card."
     ),
+    "context_audio_transcribe": (
+        "You are writing down the words of one sound for a video director. Transcribe exactly what is "
+        "said or sung, keeping the original wording, and leave out anything that is not words - music, "
+        "noise, applause. Answer in the language that is heard."
+    ),
     "context_text": (
         "You are reading one note for a video director. Summarise what it asks for and what it rules "
         "out. A note may be a constraint rather than a description, so state both what it wants and what "

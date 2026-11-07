@@ -5,6 +5,7 @@ import { control, hideNative, section, actionButton, secretControl } from "./ng_
 import { icon } from "./ng_icons.js";
 import { upstreamNode } from "./ng_read.js";
 import { accepts, fieldHelp, wantsKey, wireName } from "./ng_ai_capabilities.js";
+import { modelOverrides } from "./ng_model_overrides.js";
 
 const { app } = window.comfyAPI.app;
 // The api handle is two destructure levels deep: window.comfyAPI.api.api.fetchApi. Every other module
@@ -139,7 +140,8 @@ export function buildPanel(node, root, header, widget) {
   // the field posts to /ng/keys instead and the secret stays in ComfyUI's user folder.
   const keyTile = secretControl("API key", { icon: "key" });
   const providerNote = element("small", "ng-field-status");
-  identity.append(identityRow, keyTile.label, providerNote);
+  const overrides = modelOverrides(node, modelList.id);
+  identity.append(identityRow, overrides.row, keyTile.label, providerNote);
   body.append(identity);
 
   // "Installed text encoder" and its loader type belong to the CLIP / Encoder card, not to a source
@@ -218,7 +220,7 @@ export function buildPanel(node, root, header, widget) {
   // vision and audio are synced here rather than through the shared list: they belong to the CLIP
   // card alone, and a field that is synced but never appended to a section is one the user cannot
   // find - the silent-disappearance bug this panel has hit before.
-  const fields = [providerField, modelField, timeout, tokens, seed, fixed, urlField,
+  const fields = [providerField, modelField, ...overrides.fields, timeout, tokens, seed, fixed, urlField,
                   keepAlive, keyField, ...samplingFields.map(([, field]) => field), diskField, typeField];
   // The fields the registry can explain. The provider and model tiles get their text separately,
   // because for those the interesting sentence is about the provider rather than about a setting.
@@ -355,7 +357,7 @@ export function buildPanel(node, root, header, widget) {
     diskField.label.hidden=!showEncoder;
     typeField.label.hidden=!showEncoder||!config.local_model;
     identityRow.hidden=native;timeout.label.hidden=false;
-    urlField.label.hidden=keepAlive.label.hidden=native;
+    urlField.label.hidden=keepAlive.label.hidden=native;overrides.row.hidden=native;
     if(!native)applyProviderChoices(current.providers);
     const entry = providerEntry(config.provider);
     // Reuse the registry's own addresses, so the field shows the server that actually answers

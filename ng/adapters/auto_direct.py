@@ -20,7 +20,7 @@ async def direct(payload, *, api_key=None):
     key = legacy.resolve_api_key({"api_key_env": config.api_key_env}) if api_key is None else api_key
     try:
         # The provider registry owns address, model and auth; _PROVIDER_DEFAULTS knows only the local three.
-        entry, url, model = endpoint(config)
+        entry, url, model = endpoint(config, "text")
         answer = await legacy.vlm_generate([], prompt, config.provider, url, model, api_key=key, auth=entry.auth,
                                           **{**wire(config), "max_tokens": direct_tokens(config.max_tokens)})
         return parse_direction(answer, seconds, contexts, current, read_str(payload, "keep", "request", ""), sung)

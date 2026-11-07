@@ -3,13 +3,15 @@ import io
 import json
 import os
 import tempfile
+import types
 import unittest
 import wave
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from _pack import module, comfy_available, stub_prompt_server
 
 core = module("ng.core.analysis")
+analysis = module("ng.adapters.analysis")
 
 
 class ContentRoles(unittest.TestCase):
@@ -114,7 +116,7 @@ class Suggestions(unittest.TestCase):
         # 3 is a version nobody has written yet: a future field must not slip into an old workflow
         # by simply raising the number. 2 is current and therefore accepted, so the guard moves on.
         for change in ({"provider": "magic"}, {"vision": "yes"}, {"audio": 1}, {"fixed_seed": "yes"},
-                       {"api_key": "secret"}, {"schema_version": 3}):
+                       {"api_key": "secret"}, {"schema_version": 4}, {"model_video": "x"}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 core.ProviderConfig.from_dict({**config.to_dict(), **change})
         for address in ("ftp://server", "http://name:key@server", "https://server?api_key=secret", "https://server#key"):
@@ -171,7 +173,7 @@ class SchemaMigration(unittest.TestCase):
 
     def test_an_old_workflow_saves_as_the_current_version(self):
         saved = core.ProviderConfig.from_dict(self.old()).to_dict()
-        self.assertEqual(saved["schema_version"], 2)
+        self.assertEqual(saved["schema_version"], 3)
         # And it survives a second round trip, which is what reopening the saved file does.
         self.assertEqual(core.ProviderConfig.from_dict(saved), core.ProviderConfig.from_dict(self.old()))
 
@@ -208,6 +210,56 @@ class SchemaMigration(unittest.TestCase):
                 options = core.providers.provider_payload(config.provider, config.to_dict())["options"]
                 self.assertEqual(options.get("seed"), expected)
 
+    def test_a_version_2_workflow_reads_with_empty_overrides(self):
+        """Version 2 knew the sampling fields but no purpose models; a v2 payload must open and
+        carry the overrides as empty, which is exactly "use the Model above"."""
+        old = self.old()
+        old["schema_version"] = 2
+        old.update({"temperature": 0.7, "top_k": 9, "fixed_seed": True})
+        config = core.ProviderConfig.from_dict(old)
+        self.assertEqual(config.temperature, 0.7)
+        self.assertFalse(config.fixed_seed is False)
+        self.assertEqual((config.model_text, config.model_caption, config.model_audio), ("", "", ""))
+        self.assertEqual(core.ProviderConfig.from_dict(config.to_dict()), config)
+
+    def test_an_old_workflow_gets_no_chosen_purpose_model(self):
+        """The v1 upgrade keeps working through the ladder: defaults, and no invented override."""
+        config = core.ProviderConfig.from_dict(self.old(model_text="should-be-dropped"))
+        self.assertEqual(config.model_text, "")
+
+
+class PurposeModels(unittest.TestCase):
+    """One model per purpose, resolved at the single choke point. Empty everywhere is the old
+    behaviour byte for byte, which is what every workflow saved before version 3 relies on."""
+
+    def config(self, **over):
+        data = {"provider": "ollama", "model": "base-model"}
+        data.update(over)
+        return core.ProviderConfig(**data)
+
+    def endpoint(self, config, purpose=""):
+        return analysis.endpoint(config, purpose)
+
+    def test_a_filled_purpose_model_wins(self):
+        self.assertEqual(self.endpoint(self.config(model_text="writer"), "text")[2], "writer")
+        self.assertEqual(self.endpoint(self.config(model_caption="seer"), "caption")[2], "seer")
+        self.assertEqual(self.endpoint(self.config(model_audio="listener"), "audio")[2], "listener")
+
+    def test_an_empty_purpose_model_falls_to_the_model_above(self):
+        self.assertEqual(self.endpoint(self.config(), "text")[2], "base-model")
+
+    def test_an_unknown_purpose_falls_to_the_model_above(self):
+        # The getattr guard: a purpose nobody defined must not raise, just fall through.
+        self.assertEqual(self.endpoint(self.config(), "smell")[2], "base-model")
+
+    def test_no_purpose_is_the_old_behaviour_byte_for_byte(self):
+        for config in (self.config(), self.config(model_text="writer"),
+                       self.config(model="", model_text="writer")):
+            with self.subTest(model=config.model):
+                self.assertEqual(self.endpoint(config), self.endpoint(config, ""))
+            if config.model:
+                self.assertEqual(self.endpoint(config)[2], "base-model")
+
 
 class ThroughTheNode(unittest.IsolatedAsyncioTestCase):
     """The path a real request takes: node input -> config -> payload. provider_from_values used
@@ -237,6 +289,15 @@ class ThroughTheNode(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(config.top_k, 7)
         self.assertEqual(config.seed, 99)
         self.assertTrue(config.fixed_seed)
+
+    def test_the_purpose_models_survive_the_node(self):
+        """The three loader widgets forward under their own names, so a per-purpose model chosen on
+        the node is the one the request asks for."""
+        adapter = module("ng.adapters.ai_provider")
+        config = adapter.provider_from_values(
+            "local", None, self.values(model_text="writer", model_caption="seer", model_audio="listener"))
+        self.assertEqual((config.model_text, config.model_caption, config.model_audio),
+                         ("writer", "seer", "listener"))
 
     def test_the_nodes_own_values_reach_the_request_body(self):
         adapter = module("ng.adapters.ai_provider")
@@ -612,3 +673,123 @@ class ProviderTransport(unittest.IsolatedAsyncioTestCase):
         self.answer = "malformed"
         with self.assertRaises(ValueError):
             await adapter.direct(payload)
+
+    # Decision 3 (2026-11-07): the provider's audio model as a second hearing beside Whisper, which
+    # stays the only clock. Plain words only; Whisper adds the times afterwards.
+
+    def transcribe_payload(self, **provider_extra):
+        config = {"provider": "custom", "base_url": self.url + "/v1", "model": "mock", "audio": True, **provider_extra}
+        return {"provider": core.ProviderConfig(**config).to_dict(), "widgets": {"audio": "sound.wav", "content": "style"}}
+
+    def sent_wav_seconds(self):
+        wav = self.requests[-1][2]["messages"][1]["content"][1]["input_audio"]["data"]
+        with wave.open(io.BytesIO(base64.b64decode(wav))) as stream:
+            return stream.getnframes() / stream.getframerate()
+
+    async def test_transcribe_sends_its_own_role_and_plain_lines_come_back(self):
+        prompts = module("ng.core.system_prompts")
+        self.answer = "```\nFirst line\n\nSecond line\n```"
+        data = await self.adapter.transcribe(self.transcribe_payload())
+        body = self.requests[-1][2]
+        self.assertEqual(body["messages"][0]["content"], prompts.for_node("context", "audio_transcribe"))
+        self.assertNotIn(prompts.SCHEMA_FRAMING, body["messages"][0]["content"],
+                         "the schema rule demands JSON; a transcript is plain words")
+        self.assertIn("one line per", body["messages"][1]["content"][0]["text"])
+        self.assertEqual(data, {"text": "First line\nSecond line"})
+
+    async def test_transcribe_sends_the_whole_file_when_no_range_is_set(self):
+        self.answer = "one line"
+        await self.adapter.transcribe(self.transcribe_payload())
+        self.assertAlmostEqual(self.sent_wav_seconds(), 20.0, places=1,
+                               msg="the 15 s preview cap must not shorten a transcription")
+        self.assertEqual(self.requests[-1][2]["model"], "mock")
+
+    async def test_transcribe_sends_the_card_selected_range(self):
+        self.answer = "one line"
+        data = self.transcribe_payload(); data["start_s"], data["end_s"] = 2.0, 6.0
+        await self.adapter.transcribe(data)
+        self.assertAlmostEqual(self.sent_wav_seconds(), 4.0, places=1)
+
+    async def test_transcribe_uses_the_purpose_model_override(self):
+        self.answer = "words"
+        await self.adapter.transcribe(self.transcribe_payload(model="base-model", model_audio="audio-model"))
+        self.assertEqual(self.requests[-1][2]["model"], "audio-model")
+
+    async def test_transcribe_refuses_providers_that_cannot_read_audio(self):
+        with self.assertRaises(ValueError) as caught:
+            await self.adapter.transcribe(self.transcribe_payload(provider="ollama", base_url=self.url, model="m"))
+        self.assertIn("cannot read audio", str(caught.exception))
+        with self.assertRaises(ValueError) as caught:
+            await self.adapter.transcribe(self.transcribe_payload(audio=False))
+        self.assertIn("Audio is off", str(caught.exception))
+
+    async def test_transcribe_names_the_missing_model(self):
+        with self.assertRaises(ValueError) as caught:
+            await self.adapter.transcribe(self.transcribe_payload(model="", model_audio=""))
+        self.assertIn("audio-capable model", str(caught.exception))
+
+    async def test_transcribe_names_the_missing_file_and_the_inverted_range(self):
+        empty = self.transcribe_payload(); empty["widgets"]["audio"] = ""
+        with self.assertRaises(ValueError) as caught:
+            await self.adapter.transcribe(empty)
+        self.assertIn("Choose an audio file", str(caught.exception))
+        inverted = self.transcribe_payload(); inverted["start_s"], inverted["end_s"] = 6.0, 2.0
+        with self.assertRaises(ValueError) as caught:
+            await self.adapter.transcribe(inverted)
+        self.assertIn("later than source start", str(caught.exception))
+
+
+@unittest.skipUnless(comfy_available(), "ComfyUI is not importable")
+class TranscribeRoute(unittest.IsolatedAsyncioTestCase):
+    """The route is a thin wrapper: the adapter's faults come back as {ok: false, error} at HTTP 400."""
+
+    async def asyncSetUp(self):
+        stub_prompt_server()
+        self.routes = module("ng.nodes.analysis_routes")
+        self.folder = tempfile.TemporaryDirectory()
+        manager = types.SimpleNamespace(get_request_user_filepath=lambda request, path: self.folder.name)
+        self.manager_patch = patch.object(self.routes.PromptServer.instance, "user_manager", manager, create=True)
+        self.manager_patch.start()
+
+    async def asyncTearDown(self):
+        self.manager_patch.stop()
+        self.folder.cleanup()
+
+    async def test_a_refused_provider_comes_back_as_ok_false(self):
+        payload = {"provider": {"schema_version": 2, "provider": "ollama", "base_url": "http://127.0.0.1:1", "model": "m"},
+                   "widgets": {"audio": "sound.wav"}, "start_s": 0, "end_s": 0}
+        request = types.SimpleNamespace(json=AsyncMock(return_value=payload), headers={})
+        response = await self.routes.transcribe_audio(request)
+        body = json.loads(response.text)
+        self.assertEqual(response.status, 400)
+        self.assertFalse(body["ok"])
+        self.assertIn("cannot read audio", body["error"])
+
+
+class TranscriptionWords(unittest.TestCase):
+    """The parse and the prompt: plain words for the Lyrics field, nothing else."""
+
+    def test_the_answer_is_plain_lines_without_fences_or_blanks(self):
+        text = "```\nFirst line\r\n\r\n\nSecond line\n```"
+        self.assertEqual(analysis.transcript_lines(text), "First line\nSecond line")
+
+    def test_an_empty_or_refusing_answer_leaves_no_words(self):
+        self.assertEqual(analysis.transcript_lines(""), "")
+        self.assertEqual(analysis.transcript_lines("```\n```"), "")
+
+    def test_a_stamp_in_the_answer_is_kept_verbatim_not_parsed(self):
+        """No format support: whatever comes back is words for review, never times to trust."""
+        self.assertEqual(analysis.transcript_lines("[00:12] hello there"), "[00:12] hello there")
+
+    def test_the_prompt_asks_for_lines_and_names_the_card(self):
+        prompt = analysis.transcribe_prompt("a slow choir")
+        self.assertIn("one line per", prompt)
+        self.assertIn("Do not add times", prompt)
+        self.assertIn("a slow choir", prompt)
+        self.assertNotIn("JSON", prompt)
+
+    def test_the_role_comes_from_the_shared_table_without_the_schema_rule(self):
+        prompts = module("ng.core.system_prompts")
+        role = prompts.for_node("context", "audio_transcribe")
+        self.assertTrue(role)
+        self.assertNotIn(prompts.SCHEMA_FRAMING, role)

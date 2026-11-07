@@ -40,7 +40,14 @@ class ProviderConfig:
     presence_penalty: float = 0.0
     seed: int = 0
     fixed_seed: bool = False
-    SCHEMA_VERSION = 2
+    # Version 3 adds one optional model per purpose. `model_caption` covers both image and video
+    # analysis, because both ride the same vision transport; the text roles and audio each get
+    # their own. An empty field means "use the Model above", so every old workflow keeps asking
+    # for exactly the model it asked for before.
+    model_text: str = ""
+    model_caption: str = ""
+    model_audio: str = ""
+    SCHEMA_VERSION = 3
 
     def to_dict(self):
         return {"schema_version": self.SCHEMA_VERSION, "provider": self.provider, "base_url": self.base_url,
@@ -48,24 +55,30 @@ class ProviderConfig:
                 "timeout_seconds": self.timeout_seconds, "max_tokens": self.max_tokens, "keep_alive": self.keep_alive,
                 "temperature": self.temperature, "top_p": self.top_p, "top_k": self.top_k, "min_p": self.min_p,
                 "frequency_penalty": self.frequency_penalty, "presence_penalty": self.presence_penalty,
-                "seed": self.seed, "fixed_seed": self.fixed_seed}
+                "seed": self.seed, "fixed_seed": self.fixed_seed,
+                "model_text": self.model_text, "model_caption": self.model_caption, "model_audio": self.model_audio}
 
     # A version 1 workflow only ever had the nine fields below. Reading one must not fail and must
     # not silently invent a sampling choice: an old config keeps the provider's own defaults,
     # which is what it was already using before these fields existed.
     VERSION_1_FIELDS = ("provider", "base_url", "model", "api_key_env", "vision", "audio",
                         "timeout_seconds", "max_tokens", "keep_alive")
+    # Version 2 added the sampling fields. Keeping one ladder (v2 = v1 + sampling) means a future
+    # version extends it again instead of spelling the same nine fields a third time.
+    VERSION_2_FIELDS = VERSION_1_FIELDS + ("temperature", "top_p", "top_k", "min_p",
+                                           "frequency_penalty", "presence_penalty", "seed", "fixed_seed")
 
     @classmethod
     def from_dict(cls, data, path="provider"):
         fields.need_dict(data, path)
         version = data.get("schema_version")
-        if version == 1:
-            # Take only the fields version 1 knew. Anything else in an old payload is not ours to
+        if version in (1, 2):
+            # Take only the fields that version knew. Anything else in an old payload is not ours to
             # guess at, and dropping it here means a future field cannot be back-filled into an
             # old workflow by accident.
-            data = {name: data[name] for name in cls.VERSION_1_FIELDS if name in data}
-            data["schema_version"] = 2
+            known = cls.VERSION_1_FIELDS if version == 1 else cls.VERSION_2_FIELDS
+            data = {name: data[name] for name in known if name in data}
+            data["schema_version"] = cls.SCHEMA_VERSION
         fields.check_version(data, path, cls.SCHEMA_VERSION)
         for key in ("vision", "audio", "fixed_seed"):
             if not isinstance(data.get(key, getattr(cls(), key)), bool):
@@ -81,6 +94,9 @@ class ProviderConfig:
                     ("temperature", "top_p", "top_k", "min_p", "frequency_penalty", "presence_penalty")}
         return cls(provider=fields.read_choice(data, "provider", path, tuple(providers.PROVIDERS), "ollama"),
                    base_url=address, model=fields.read_str(data, "model", path, ""),
+                   model_text=fields.read_str(data, "model_text", path, ""),
+                   model_caption=fields.read_str(data, "model_caption", path, ""),
+                   model_audio=fields.read_str(data, "model_audio", path, ""),
                    api_key_env=fields.read_str(data, "api_key_env", path, ""), vision=data.get("vision", True),
                    audio=data.get("audio", False), fixed_seed=data.get("fixed_seed", False),
                    timeout_seconds=_whole_number(data, "timeout_seconds", path, 120, 5, 900),

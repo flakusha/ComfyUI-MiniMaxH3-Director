@@ -85,8 +85,13 @@ def has(key):
 
 
 def load(key):
-    data = torch.load(_path(key), map_location="cpu", weights_only=True)
-    return {"samples": NestedTensor((data["video"], data["audio"]))}
+    try:
+        data = torch.load(_path(key), map_location="cpu", weights_only=True)
+        return {"samples": NestedTensor((data["video"], data["audio"]))}
+    except Exception as error:
+        # a crash mid-write leaves garbage bytes (save writes .part first, but disks fill and runs die anywhere):
+        # name the file and the fix instead of torch's UnpicklingError
+        raise ValueError("resume part %s.pt is corrupt (%s); delete output/%s and render again." % (key, error, FOLDER)) from error
 
 
 def save(key, latent):

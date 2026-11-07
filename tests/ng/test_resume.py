@@ -82,6 +82,16 @@ class Disk(unittest.TestCase):
             self.assertFalse(os.path.exists(old), "parts older than %d days are removed" % resume.KEEP_DAYS)
             self.assertFalse([n for n in os.listdir(resume.folder()) if n.endswith(".part")])
 
+    def test_a_corrupt_part_names_its_file_and_the_fix(self):
+        with tempfile.TemporaryDirectory() as root, mock.patch.object(resume.folder_paths, "get_output_directory", return_value=root):
+            os.makedirs(resume.folder(), exist_ok=True)
+            with open(os.path.join(resume.folder(), "k9.pt"), "wb") as file:
+                file.write(b"not a tensor")
+            with self.assertRaises(ValueError) as raised:
+                resume.load("k9")
+            self.assertIn("k9.pt is corrupt", str(raised.exception))
+            self.assertIn("delete output/h3-director-resume", str(raised.exception))
+
     def test_forget_deletes_only_the_parts_of_the_finished_video(self):
         with tempfile.TemporaryDirectory() as root, mock.patch.object(resume.folder_paths, "get_output_directory", return_value=root):
             latent = {"samples": NestedTensor((torch.rand(1, 24, 2, 4, 4), torch.rand(1, 32, 2, 10)))}

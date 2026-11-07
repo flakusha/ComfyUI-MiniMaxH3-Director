@@ -5,6 +5,8 @@ import aiohttp
 from aiohttp import web
 from server import PromptServer
 
+import comfy.model_management
+
 from ... import minimax_media as legacy
 from ..adapters import keys
 from ..adapters.analysis import analyze
@@ -49,7 +51,8 @@ async def analyze_context(request):
     try:
         payload = await request.json()
         return _answer({"suggestion": await analyze(payload, api_key=_api_key(request, payload))})
-    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError) as error:
+    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
+            comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)
 
 
@@ -59,7 +62,8 @@ async def analyze_every_context(request):
         payload = await request.json()
         key = None if isinstance(payload, dict) and payload.get("mode") == "manual" else _api_key(request, payload)
         return _answer(await analyze_all(payload, api_key=key))
-    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError) as error:
+    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
+            comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)
 
 
@@ -68,7 +72,8 @@ async def direct_scenes(request):
     try:
         payload = _writing(await request.json())
         return _answer({"suggestion": await direct(payload, api_key=_api_key(request, payload))})
-    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError) as error:
+    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
+            comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)
 
 
@@ -78,7 +83,8 @@ async def write_part_prompt(request):
     try:
         payload = _writing(await request.json())
         return _answer({"suggestion": await write(payload, api_key=_api_key(request, payload))})
-    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError) as error:
+    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
+            comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)
 
 
@@ -88,7 +94,8 @@ async def build_plan(request):
     try:
         payload = _writing(await request.json())
         return _answer({"suggestion": await plan(payload, api_key=_api_key(request, payload))})
-    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError) as error:
+    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
+            comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)
 
 
@@ -98,5 +105,6 @@ async def storyboard_texts(request):
     try:
         payload = _writing(await request.json())
         return _answer({"suggestion": await texts(payload, api_key=_api_key(request, payload))})
-    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError) as error:
+    except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
+            comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)

@@ -27,6 +27,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
+import comfy.model_management
 import folder_paths
 from aiohttp import web
 from server import PromptServer
@@ -590,6 +591,28 @@ def strip_thinking(text):
     return text
 
 
+async def interruptible(work):
+    """Run one provider request, and tear it down when the queue's Cancel lands.
+
+    Cancel only raises ComfyUI's global interrupt flag: the executor waits a running async
+    node out instead of cancelling it, and the AI routes run outside the queue entirely.
+    The request here polls the flag and dies on InterruptProcessingException — the
+    executor answers that with the ordinary interrupted run, a route with a failed
+    request. The flag is read, never consumed, so a cancel aimed at a prompt running
+    beside this request still reaches the executor.
+    """
+    request = asyncio.ensure_future(work)
+    try:
+        while True:
+            if comfy.model_management.processing_interrupted():
+                raise comfy.model_management.InterruptProcessingException("Cancelled.")
+            done, _ = await asyncio.wait({request}, timeout=0.25)
+            if done:
+                return request.result()
+    finally:
+        request.cancel()
+
+
 async def vlm_generate(images_b64, prompt, provider, base_url, model,
                        system_prompt=None, timeout=120, keep_alive=0, max_tokens=None,
                        api_key=None, auth="bearer", sampling=None):
@@ -611,7 +634,20 @@ async def vlm_generate(images_b64, prompt, provider, base_url, model,
 
     Raises VLMError with a user-facing message; returns the answer with any thinking
     preamble removed.
+
+    Runs under `interruptible`: a Cancel aborts the request instead of leaving the
+    provider generating for nobody.
     """
+    return await interruptible(_vlm_request(
+        images_b64, prompt, provider, base_url, model, system_prompt=system_prompt,
+        timeout=timeout, keep_alive=keep_alive, max_tokens=max_tokens, api_key=api_key,
+        auth=auth, sampling=sampling))
+
+
+async def _vlm_request(images_b64, prompt, provider, base_url, model,
+                       system_prompt=None, timeout=120, keep_alive=0, max_tokens=None,
+                       api_key=None, auth="bearer", sampling=None):
+    """The HTTP round-trip itself; `vlm_generate` runs it under `interruptible`."""
     import aiohttp
 
     if provider in ("lmstudio", "custom") and not model:
@@ -723,7 +759,7 @@ async def analyze_character_endpoint(request):
         try:
             generated_text = await vlm_generate(cleaned, analyze_prompt(kind), provider,
                                                 base_url, model_name, api_key=api_key)
-        except VLMError as e:
+        except (VLMError, comfy.model_management.InterruptProcessingException) as e:
             return web.json_response({"status": "error", "message": str(e)})
 
         description, retained = plan.split_analysis(generated_text)

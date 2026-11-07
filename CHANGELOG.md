@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Cancel now stops the provider request** (2026-11-06). ComfyUI signals a cancelled queue only by raising its
+  global interrupt flag, and nothing read it mid-request: a running Enhance node and the panel's Analyze, Direct,
+  Plan, Write and Storyboard calls kept the provider generating until it answered or timed out — with a local model
+  that meant minutes of work for nobody. Every AI request now watches the flag and drops its connection the moment
+  Cancel lands, and a cancelled panel call answers with "Cancelled." instead of an error.
 - **Whisper files on an extra model path are found, and HuggingFace safetensors checkpoints load** (user report,
   2026-11-05). The Audio card's Models menu read `models/whisper` under ComfyUI's own models dir only, so a whisper
   folder registered through `extra_model_paths.yaml` stayed empty even though ComfyUI itself knew it. The menu now

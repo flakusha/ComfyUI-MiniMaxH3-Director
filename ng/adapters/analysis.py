@@ -51,13 +51,17 @@ async def audio_generate(config, prompt, source, key):
                     {"type": "input_audio", "input_audio": {"data": wav, "format": "wav"}}]}]
     payload = {"model": config.model, "stream": False, "max_tokens": config.max_tokens, "messages": messages}
     timeout = aiohttp.ClientTimeout(total=config.timeout_seconds)
-    async with aiohttp.ClientSession(headers=legacy.registry_auth_headers(entry.auth, key)) as session:
-        async with session.post(legacy.chat_completions_url(url), json=payload, timeout=timeout) as response:
-            if response.status in (401, 403):
-                raise ValueError("The provider refused authentication; set api_key_env to a variable available to ComfyUI.")
-            if response.status != 200:
-                raise ValueError("Audio analysis failed (HTTP %d); check whether the model supports input_audio." % response.status)
-            body = await response.json()
+
+    async def send():
+        async with aiohttp.ClientSession(headers=legacy.registry_auth_headers(entry.auth, key)) as session:
+            async with session.post(legacy.chat_completions_url(url), json=payload, timeout=timeout) as response:
+                if response.status in (401, 403):
+                    raise ValueError("The provider refused authentication; set api_key_env to a variable available to ComfyUI.")
+                if response.status != 200:
+                    raise ValueError("Audio analysis failed (HTTP %d); check whether the model supports input_audio." % response.status)
+                return await response.json()
+
+    body = await legacy.interruptible(send())
     try:
         return legacy.strip_thinking(body["choices"][0]["message"]["content"])
     except (KeyError, IndexError, TypeError):

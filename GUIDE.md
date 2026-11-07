@@ -146,7 +146,8 @@ Depth Anything 3 is optional and needs the **ComfyUI-DepthAnythingV3** nodes, wh
 | Whisper | [small.pt](https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt) | `models/whisper` | 0.5 GB |
 
 Whisper needs the `openai-whisper` package in ComfyUI's Python. Larger models (`medium.pt`, `large-v3.pt`) hear sung words
-better.
+better. HuggingFace safetensors checkpoints (from `openai/whisper-*`) load as well, whatever the file is called; the
+folder may sit anywhere ComfyUI knows it, for example through `extra_model_paths.yaml`.
 
 ### Example files
 

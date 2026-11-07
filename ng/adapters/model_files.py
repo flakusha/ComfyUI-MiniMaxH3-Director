@@ -14,11 +14,12 @@ with open(PATH, encoding="utf-8") as file:
 
 
 def names(purpose):
-    """The files of the purpose's folder. Whisper's, MoGe's and Depth Anything 3's folders are not always among ComfyUI's
-    model folders (asking for one that is not raised and the Models menu stayed empty, GUI test 2026-10-19): then the
-    folder under models/ is read."""
+    """The files of the purpose's folder. When ComfyUI knows the folder - its own under models/, or one registered
+    through extra_model_paths.yaml - its list is used, so files on a registered extra path show up too. Whisper's,
+    MoGe's and Depth Anything 3's folders are not always registered (asking folder_paths for one that is not raised
+    and the Models menu stayed empty, GUI test 2026-10-19): then the folder under models/ is read."""
     folder = MODELS[purpose]["folder"]
-    if MODELS[purpose]["list"] is not None and folder in folder_paths.folder_names_and_paths:
+    if folder in folder_paths.folder_names_and_paths:
         return folder_paths.get_filename_list(folder)
     root = os.path.join(folder_paths.models_dir, folder)
     return sorted(name for name in os.listdir(root) if os.path.isfile(os.path.join(root, name))) if os.path.isdir(root) else []

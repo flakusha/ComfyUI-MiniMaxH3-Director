@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **Whisper files on an extra model path are found, and HuggingFace safetensors checkpoints load** (user report,
+  2026-11-05). The Audio card's Models menu read `models/whisper` under ComfyUI's own models dir only, so a whisper
+  folder registered through `extra_model_paths.yaml` stayed empty even though ComfyUI itself knew it. The menu now
+  follows `folder_paths` whenever the folder is registered and resolves the chosen file where it really lies. Loading
+  went through `whisper.load_model`, which torch-loads a pickle: a safetensors checkpoint - what a HuggingFace
+  `openai/whisper-*` download is, and what the report's `small.pt` symlink pointed at - failed. Safetensors files are
+  now recognized by their content, whatever the name says, built with dimensions read off the tensor shapes and
+  HuggingFace key names renamed to openai-whisper ones; anything that does not fit is refused with a sentence naming
+  the file, not a silently wrong model. Verified end to end on CPU with a real whisper-large-v3 safetensors
+  (correct dimensions, a transcription runs).
+
 ## 1.0.1 (2026-11-03)
 
 - **Example files are copied when you open an example, not on start** (#35). Opening an example workflow copies the

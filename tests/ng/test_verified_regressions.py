@@ -12,6 +12,9 @@ from regressions.bug_033_auto_direct_provider import AutoDirectCloudProvider
 from regressions.bug_036_text_card_no_text import TextCardNoTextWarning
 from regressions.bug_037_picture_cap_silent import PictureCapReported
 from regressions.bug_038_models_anthropic_headers import ModelsAuthHeadersTest
+# BUG-090 (user report, 2026-11-05): the Whisper menu ignored a whisper folder registered through extra_model_paths.yaml
+# and only torch pickles loaded; fixed with folder_paths discovery and a safetensors loader in ng/adapters/lyrics_timing.py.
+from regressions.bug_090_whisper_models_not_listed import WhisperRegisteredFolderAndSafetensors
 
 NODE = shutil.which("node")
 VERIFIED_JS = ("timeline_boundaries.test.mjs", "ai_snapshot.test.mjs", "studio_actions.test.mjs", "review_state_pending.test.mjs",

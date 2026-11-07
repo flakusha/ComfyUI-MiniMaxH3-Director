@@ -186,7 +186,7 @@ Nur Felder, die **alle** Provider sinnvoll verstehen:
 
 | Feld | Typ | Bereich | Standard |
 | --- | --- | --- | --- |
-| `max_tokens` | int | 64 – 128000 | 512 |
+| `max_tokens` | int | 64 – 65536 | 512 |
 | `seed` | int | 0 – 2^32 | 0 |
 | `fixed_seed` | bool | — | false |
 

@@ -32,7 +32,7 @@ class NGAIProvider(io.ComfyNode):
                                  io.Boolean.Input("audio", default=False, tooltip="Declare input_audio support; not supported by this Ollama transport. For a local audio-capable server (llama.cpp + mmproj), choose Custom URL and switch Audio on."),
                                  io.Int.Input("timeout_seconds", default=120, min=5, max=900, advanced=True,
                                               tooltip="How long one analysis request may take before it is given up."),
-                                 io.Int.Input("max_tokens", default=512, min=64, max=128000, advanced=True,
+                                 io.Int.Input("max_tokens", default=512, min=64, max=65536, advanced=True,
                                               tooltip="Upper bound for the answer length. A short description needs few tokens. Thinking tokens count toward this budget, so reasoning models may need much more."),
                                  io.Int.Input("keep_alive", default=0, min=0, max=3600, advanced=True,
                                               tooltip="Seconds the provider keeps the model loaded. 0 releases it after every request."),

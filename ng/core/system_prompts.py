@@ -106,8 +106,15 @@ SYSTEM_PROMPTS = {
 # The rule that keeps a prompt from becoming a schema instruction. A node may override its own text
 # freely because the framing below is appended afterwards and cannot be overwritten by it.
 SCHEMA_FRAMING = (
-    "Follow the requested JSON schema exactly. Return a complete, nonempty JSON object, without a "
-    "preface, without markdown and without a code fence."
+    "Output only a valid JSON object matching the provided schema exactly. The first character "
+    "must be `{` and the last `}`. No text, markdown, fences, or formatting before, after, or "
+    "around the JSON. Use the exact schema key names; do not rename, translate, or add keys "
+    "— anything outside the schema is ignored. All required fields must be present with "
+    "valid, non-null values. Match the schema's types: numbers as numbers, never as strings. "
+    "Leave out optional fields that do not apply; write `\"N/A\"` only where the request "
+    "explicitly allows it. Follow the schema's array requirements; never pad an array with "
+    "placeholder entries. Ensure valid JSON: double quotes, no trailing commas, no comments, "
+    "proper escaping, and no code fence."
 )
 
 

@@ -14,8 +14,8 @@ from .context_build import card_id, card_words, widget_text
 from .directions import DIRECTIONS, LANGUAGES, SPEECH, check_adults, direction, shot_count
 from .split import BEAT_RULE, CAMERA_RULE, _seconds, parse_split, shots_example
 
-SYSTEM = ("You are the director of a short video for MiniMax H3, a model that makes video with sound from one detailed prompt. "
-          "You plan the video from the user's pictures, direction and request, concretely and visually, and answer with JSON only.")
+SYSTEM = ("You are the director of a short video for MiniMax H3, which produces video with sound from a single detailed "
+          "prompt. Plan the video concretely, visually, and aurally from the user's reference pictures, direction, and request. Respond with a single JSON object following the provided schema.")
 PLAN_TOKENS = 3072
 # Content of a picture that is a place or a thing rather than a figure: bound to the shots that show it, so a render part
 # without that place does not get it as a reference. A figure stays in every part (a shot that only says "she" still needs it).

@@ -24,9 +24,10 @@ BEAT_RE = re.compile(r"\d+(?:[.,]\d+)?\s*s?\s*[–-]\s*\d+(?:[.,]\d+)?\s*s\s*:")
 NESTED_RE = re.compile(r"\b(?:%s)\s*:" % "|".join(SECTIONS))
 WRITE_TOKENS = 2048
 MIN_WORDS = 40
-SYSTEM = ("You write the description of one render part of a MiniMax H3 video. You keep the planner's structure, cut times, "
-          "labels and spoken or sung lines exactly, and make the description concrete, visual and detailed. You answer with the "
-          "labelled fields asked for, and nothing else.")
+SYSTEM = ("Write the description of one render part of a MiniMax H3 video. Preserve the "
+          "planner's structure, cut times, and labels. Keep every spoken or sung line verbatim. "
+          "Make the description concrete, vivid, and detailed. Return only the labelled fields "
+          "required; nothing else.")
 
 
 def prompt_key(prompt):

@@ -591,7 +591,7 @@ def strip_thinking(text):
     return text
 
 
-async def interruptible(work):
+async def interruptible(work, aborted=None):
     """Run one provider request, and tear it down when the queue's Cancel lands.
 
     Cancel only raises ComfyUI's global interrupt flag: the executor waits a running async
@@ -599,18 +599,47 @@ async def interruptible(work):
     The request here polls the flag and dies on InterruptProcessingException — the
     executor answers that with the ordinary interrupted run, a route with a failed
     request. The flag is read, never consumed, so a cancel aimed at a prompt running
-    beside this request still reaches the executor.
+    beside this request still reaches the executor. `aborted` is an extra probe polled
+    alongside the flag; the routes pass one that watches for a departed browser.
     """
     request = asyncio.ensure_future(work)
     try:
         while True:
-            if comfy.model_management.processing_interrupted():
+            if comfy.model_management.processing_interrupted() or (aborted is not None and aborted()):
                 raise comfy.model_management.InterruptProcessingException("Cancelled.")
             done, _ = await asyncio.wait({request}, timeout=0.25)
             if done:
                 return request.result()
     finally:
         request.cancel()
+
+
+def route_gone(request):
+    """Whether the browser has walked away from this route's request.
+
+    The Studio's Cancel aborts its fetch, and aiohttp answers the closing connection —
+    but it never cancels the handler itself (handler_cancellation is off). The trace it
+    leaves is awkward: on connection_lost the handler force-closes and its transport is
+    set to None (web_protocol.RequestHandler.force_close), so a live request always has a
+    transport, and a departed one reports either a closing transport or none at all.
+    Offline request stubs carry neither and are never treated as gone.
+    """
+    transport = getattr(request, "transport", None)
+    if transport is not None:
+        return transport.is_closing()
+    return getattr(request, "protocol", None) is not None
+
+
+async def client_interruptible(work, request):
+    """A route's provider request, torn down when its client leaves.
+
+    A panel route runs outside the queue, so no Cancel ever sets ComfyUI's interrupt flag
+    for it: `interruptible`'s poll alone cannot see the user cancelling, and the request
+    kept the provider generating for nobody until it answered or timed out. This watches
+    the request's transport as well, so a dropped connection lands in the same
+    InterruptProcessingException the routes already answer with "Cancelled.".
+    """
+    return await interruptible(work, aborted=lambda: route_gone(request))
 
 
 async def vlm_generate(images_b64, prompt, provider, base_url, model,
@@ -757,8 +786,9 @@ async def analyze_character_endpoint(request):
                  "'%s'%s)...", char_index + 1, kind, provider, base_url, model_name,
                  ", authenticated" if api_key else "")
         try:
-            generated_text = await vlm_generate(cleaned, analyze_prompt(kind), provider,
-                                                base_url, model_name, api_key=api_key)
+            generated_text = await client_interruptible(
+                vlm_generate(cleaned, analyze_prompt(kind), provider,
+                             base_url, model_name, api_key=api_key), request)
         except (VLMError, comfy.model_management.InterruptProcessingException) as e:
             return web.json_response({"status": "error", "message": str(e)})
 

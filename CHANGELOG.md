@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Cancel now stops a panel AI request even though it runs outside the queue** (2026-11-06, user report). 0007 watched
+  ComfyUI's interrupt flag, but that flag is only ever raised for a queued prompt: the Studio's Analyze, Direct, Plan,
+  Write and Storyboard buttons with a real provider (e.g. llama-swap) run in plain HTTP routes, so clicking Cancel
+  aborted only the browser's fetch and the provider kept generating for nobody until it answered or timed out. aiohttp
+  never cancels a handler whose client has left — it tears the connection down around it (the handler's transport goes
+  closing, then None) — and the routes now watch exactly that alongside the flag (`client_interruptible`), so a departed
+  browser lands in the same InterruptProcessingException the routes already answer with "Cancelled.".
 - **Cancel answers immediately from the Enhance node, and a non-numeric wired length is named** (2026-11-06).
   The Enhance node's `finally` asked the provider to unload the model even when a Cancel had already raised
   InterruptProcessingException, so the interrupt waited on that HTTP round-trip before ComfyUI could start the

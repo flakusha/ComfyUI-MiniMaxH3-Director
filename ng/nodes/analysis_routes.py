@@ -50,7 +50,8 @@ def _api_key(request, payload):
 async def analyze_context(request):
     try:
         payload = await request.json()
-        return _answer({"suggestion": await analyze(payload, api_key=_api_key(request, payload))})
+        return _answer({"suggestion": await legacy.client_interruptible(
+            analyze(payload, api_key=_api_key(request, payload)), request)})
     except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
             comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)
@@ -61,7 +62,7 @@ async def analyze_every_context(request):
     try:
         payload = await request.json()
         key = None if isinstance(payload, dict) and payload.get("mode") == "manual" else _api_key(request, payload)
-        return _answer(await analyze_all(payload, api_key=key))
+        return _answer(await legacy.client_interruptible(analyze_all(payload, api_key=key), request))
     except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
             comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)
@@ -71,7 +72,8 @@ async def analyze_every_context(request):
 async def direct_scenes(request):
     try:
         payload = _writing(await request.json())
-        return _answer({"suggestion": await direct(payload, api_key=_api_key(request, payload))})
+        return _answer({"suggestion": await legacy.client_interruptible(
+            direct(payload, api_key=_api_key(request, payload)), request)})
     except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
             comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)
@@ -82,7 +84,8 @@ async def write_part_prompt(request):
     """Prompts per render part: the AI writes one part's prompt out from the compiled one; it is checked before it is shown."""
     try:
         payload = _writing(await request.json())
-        return _answer({"suggestion": await write(payload, api_key=_api_key(request, payload))})
+        return _answer({"suggestion": await legacy.client_interruptible(
+            write(payload, api_key=_api_key(request, payload)), request)})
     except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
             comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)
@@ -93,7 +96,8 @@ async def build_plan(request):
     """Make H3 prompt, first step: the whole video planned from the direction, the pictures and the optional request."""
     try:
         payload = _writing(await request.json())
-        return _answer({"suggestion": await plan(payload, api_key=_api_key(request, payload))})
+        return _answer({"suggestion": await legacy.client_interruptible(
+            plan(payload, api_key=_api_key(request, payload)), request)})
     except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
             comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)
@@ -104,7 +108,8 @@ async def storyboard_texts(request):
     """The H3 Storyboard's AI: titles, captions and shot texts of every panel from what should happen."""
     try:
         payload = _writing(await request.json())
-        return _answer({"suggestion": await texts(payload, api_key=_api_key(request, payload))})
+        return _answer({"suggestion": await legacy.client_interruptible(
+            texts(payload, api_key=_api_key(request, payload)), request)})
     except (ValueError, KeyError, TypeError, OSError, aiohttp.ClientError, asyncio.TimeoutError,
             comfy.model_management.InterruptProcessingException) as error:
         return _failure(error)

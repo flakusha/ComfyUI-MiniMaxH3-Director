@@ -7,7 +7,7 @@ import folder_paths
 from comfy_api.latest import io
 
 from ...minimax_preview import execute_preview, preview_schema
-from ...minimax_preview_runtime import require_taehv
+from ...minimax_preview_runtime import FlatTAEH3, require_taehv
 from .context_nodes import CATEGORY
 
 log = logging.getLogger(__name__)
@@ -23,8 +23,18 @@ def _load_default_taeh3():
     if not path:
         return None
     sd, metadata = comfy.utils.load_torch_file(path, return_metadata=True)
-    vae = comfy.sd.VAE(sd=sd, metadata=metadata)
-    vae.throw_exception_if_invalid()
+    if "decoder.22.bias" in sd:
+        vae = comfy.sd.VAE(sd=sd, metadata=metadata)
+        vae.throw_exception_if_invalid()
+    else:
+        # The recommended tiny taeh3 (e.g. Kijai's 2D TAE) is a flat decoder-only checkpoint that
+        # comfy.sd.VAE cannot build; load it with the package's own decoder, and render without
+        # a live preview rather than fail when the file is not one after all.
+        try:
+            vae = FlatTAEH3(sd)
+        except (ValueError, RuntimeError) as error:
+            log.warning("[H3 Director] taeh3 in vae_approx is unusable (%s); the render continues without live preview.", error)
+            return None
     _DEFAULT_TAEH3 = vae
     return vae
 

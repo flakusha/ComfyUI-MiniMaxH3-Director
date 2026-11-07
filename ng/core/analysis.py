@@ -84,7 +84,7 @@ class ProviderConfig:
                    api_key_env=fields.read_str(data, "api_key_env", path, ""), vision=data.get("vision", True),
                    audio=data.get("audio", False), fixed_seed=data.get("fixed_seed", False),
                    timeout_seconds=_whole_number(data, "timeout_seconds", path, 120, 5, 900),
-                   max_tokens=_whole_number(data, "max_tokens", path, 512, 64, 8192),
+                   max_tokens=_whole_number(data, "max_tokens", path, 512, 64, 128000),
                    keep_alive=_whole_number(data, "keep_alive", path, 0, 0, 3600),
                    seed=_whole_number(data, "seed", path, 0, 0, 2 ** 32 - 1), **sampling)
 

@@ -8,6 +8,11 @@ from .render_node import model_inputs, sampling_inputs, render_outputs, split_re
 
 
 class NGDirectorStudio(io.ComfyNode):
+    # NOTE (review F3, needs a product decision): this lab node lags NGH3Director's schema (duration_seconds, style,
+    # prompt_override, turbo, resize_method, ref_image_size, resume, control_strength, models, output, spectrum, plus
+    # model_patch/preview_vae inputs), so the shared Studio panel's turbo/steps writes skip it silently, its AI provider
+    # and control-connected indicators stay off, and its Graphs lack the product node's extras. Either bring it to
+    # schema parity or declare it deprecated (hide from the node list, keep loading) and scope the panel to NGH3Director.
     @classmethod
     def define_schema(cls):
         planning = NGDirector.define_schema().inputs[:-1]

@@ -117,7 +117,7 @@ class NGCollect(io.ComfyNode):
         frames, sound, issues = collect.collect_chunks(
             latents, project.plan, lambda video: _decode_video(vae[0], video), lambda audio: decode_audio(audio_vae[0], {"samples": audio}),
             restore_audio=lambda index, wave, rate: audio_locks.restore_waveform(chunks[index], wave, rate),
-            restore_picture=_picture_restorer(chunks, smooth_source_join))
+            restore_picture=_picture_restorer(chunks, smooth_source_join), lock_spans=collect.lock_spans_of(chunks))
         # A list input: an empty field in a hand-built loop arrives as [""] (2026-10-18: Collect failed with JSONDecodeError).
         if resume_settings and resume_settings[0]:
             resume.forget(chunks, json.loads(resume_settings[0]))
@@ -160,7 +160,8 @@ class NGCollectVideo(io.ComfyNode):
         issues = collect.write_video(path, latents, project.plan, lambda video: _decode_video(vae[0], video),
                                      lambda audio: decode_audio(audio_vae[0], {"samples": audio}),
                                      restore_audio=lambda index, wave, rate: audio_locks.restore_waveform(chunks[index], wave, rate),
-                                     restore_picture=_picture_restorer(chunks, smooth_source_join))
+                                     restore_picture=_picture_restorer(chunks, smooth_source_join),
+                                     lock_spans=collect.lock_spans_of(chunks))
         return io.NodeOutput(InputImpl.VideoFromFile(path), "\n".join(str(i) for i in issues))
 
 

@@ -41,11 +41,12 @@ def video_frame(image):
     return frame
 
 
-def _crossfade(held, wave, whole, head, chunk, rate, last):
+def _crossfade(held, wave, whole, head, chunk, rate, last, fade=True):
     """(wave to write, samples held back for the next part). The earlier part's last JOIN_FADE_S are held back and written
-    with the next part, faded into the next part's head over the same moment; an unpinned part (a cut) just follows them."""
+    with the next part, faded into the next part's head over the same moment; an unpinned part (a cut) just follows them.
+    `fade=False` butts a source-locked join instead of blending it, so locked spans stay sample-exact."""
     if held is not None:
-        if chunk.head_frames and not chunk.continuation_id and head >= held.shape[-1] and whole.shape[1] == held.shape[1]:
+        if fade and chunk.head_frames and not chunk.continuation_id and head >= held.shape[-1] and whole.shape[1] == held.shape[1]:
             ramp = torch.linspace(0.0, 1.0, held.shape[-1], dtype=held.dtype, device=held.device)
             held = held * (1 - ramp) + whole[..., head - held.shape[-1]:head].to(held) * ramp
         wave = torch.cat([held.to(wave), wave], -1)
@@ -53,6 +54,27 @@ def _crossfade(held, wave, whole, head, chunk, rate, last):
         return wave, None
     count = min(int(rate * JOIN_FADE_S), wave.shape[-1])
     return wave[..., :wave.shape[-1] - count], wave[..., wave.shape[-1] - count:]
+
+
+def lock_spans_of(jobs):
+    """Per-chunk [(start_f, end_f)] story-frame spans of locked audio, for `_join_locked`."""
+    return [tuple((ref.start_f, ref.start_f + ref.length_f) for ref in job.compiled.of_kind("lock")) for job in jobs]
+
+
+def _join_locked(lock_spans, chunk, previous):
+    """A lock span reaching the +/-JOIN_FADE_S window around the join keeps it sample-exact (butted, not blended).
+    `lock_spans` holds per-chunk (start_f, end_f) story frames; either side of the join can carry the lock."""
+    if not lock_spans:
+        return False
+    boundary = chunk.story_start_f
+    margin = max(1, round(JOIN_FADE_S * FPS))
+    own = lock_spans[chunk.index] if chunk.index < len(lock_spans) else ()
+    if any(start < boundary + margin and end > boundary - margin for start, end in own):
+        return True
+    if previous is None:
+        return False
+    prev = lock_spans[previous.index] if previous.index < len(lock_spans) else ()
+    return any(start < boundary + margin and end > boundary - margin for start, end in prev)
 
 
 def _pad_to(wave, samples):
@@ -114,7 +136,8 @@ def delivered_pictures(videos, plan, decode_video, *, restore_picture=None):
             yield delivered if chunk.index == final else delivered.clone()
 
 
-def delivered_chunks(chunk_latents, plan, decode_video, decode_audio, issues, *, restore_audio=None, restore_picture=None):
+def delivered_chunks(chunk_latents, plan, decode_video, decode_audio, issues, *, restore_audio=None, restore_picture=None,
+                     lock_spans=None):
     """Each chunk's delivered (frames [n,H,W,3], waveform [1,C,S], sample rate), decoded only when it is asked for."""
     if len(chunk_latents) != len(plan.chunks):
         raise ValueError("the plan has %d chunks but %d were generated" % (len(plan.chunks), len(chunk_latents)))
@@ -136,28 +159,34 @@ def delivered_chunks(chunk_latents, plan, decode_video, decode_audio, issues, *,
         # up to one audio step (25 ms) short is the grid's normal rounding (E11: 266 samples at 32 kHz = 8 ms), not worth a warning
         if padded > rate / float(AUDIO_HZ):
             issues.append(Issue("audio_short", "the decoded sound of chunk %d was %d samples short." % (chunk.index + 1, padded)))
-        # a locked song is put back from its file in every part (restore_audio): it has no join to smooth
-        if restore_audio is None:
-            wave, held = _crossfade(held, wave, whole, head, chunk, rate, chunk.index == plan.chunks[-1].index)
+        # a locked song is put back from its file in every part (restore_audio): locks already cover the join, and a
+        # per-join check keeps only those joins sample-exact while every other join still crossfades
+        previous = plan.chunks[chunk.index - 1] if chunk.index and not chunk.continuation_id else None
+        locked = _join_locked(lock_spans, chunk, previous) if restore_audio is not None and held is not None else False
+        wave, held = _crossfade(held, wave, whole, head, chunk, rate, chunk.index == plan.chunks[-1].index, fade=not locked)
         yield frames, wave, rate
 
 
-def collect_chunks(chunk_latents, plan, decode_video, decode_audio, *, restore_audio=None, restore_picture=None):
+def collect_chunks(chunk_latents, plan, decode_video, decode_audio, *, restore_audio=None, restore_picture=None,
+                 lock_spans=None):
     """chunk_latents: list of AV latents in chunk order. plan: SequencePlan. Returns (frames [N,H,W,3], audio dict, issues)."""
     pictures, waves, issues, rate = [], [], [], None
     for frames, wave, rate in delivered_chunks(chunk_latents, plan, decode_video, decode_audio, issues,
-                                              restore_audio=restore_audio, restore_picture=restore_picture):
+                                              restore_audio=restore_audio, restore_picture=restore_picture,
+                                              lock_spans=lock_spans):
         pictures.append(frames)
         waves.append(wave)
     return torch.cat(pictures, 0), {"waveform": torch.cat(waves, -1), "sample_rate": rate}, tuple(issues)
 
 
-def write_video(path, chunk_latents, plan, decode_video, decode_audio, crf=17, *, restore_audio=None, restore_picture=None):
+def write_video(path, chunk_latents, plan, decode_video, decode_audio, crf=17, *, restore_audio=None, restore_picture=None,
+              lock_spans=None):
     """The same join written chunk by chunk into an MP4 (H.264, AAC): only one chunk is ever decoded at a time."""
     issues, video_stream, audio_stream, sample = [], None, None, 0
     with av.open(path, mode="w", format="mp4") as output:
         for frames, wave, rate in delivered_chunks(chunk_latents, plan, decode_video, decode_audio, issues,
-                                                  restore_audio=restore_audio, restore_picture=restore_picture):
+                                                  restore_audio=restore_audio, restore_picture=restore_picture,
+                                                  lock_spans=lock_spans):
             layout = "stereo" if wave.shape[1] == 2 else "mono"
             if video_stream is None:
                 video_stream = output.add_stream("libx264", rate=Fraction(FPS, 1))

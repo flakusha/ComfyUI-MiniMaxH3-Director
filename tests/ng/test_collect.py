@@ -181,6 +181,9 @@ class Collect(unittest.TestCase):
 @unittest.skipUnless(HAVE_COMFY, "ComfyUI is not importable")
 class JoinSound(unittest.TestCase):
     def test_a_pinned_join_fades_into_the_next_parts_own_take_and_keeps_the_length(self):
+        self.assert_join_click_bound(None, None)
+
+    def assert_join_click_bound(self, restore_audio, lock_spans):
         # part 0 hums at phase 0; part 1 (pinned, 22 frames) at another phase: butted together the wave jumps at the join
         parts = (chunks.Chunk(0, 0, 107, 0), chunks.Chunk(1, 107, 102, 22))
         plan = chunks.SequencePlan(209, chunks.ContinuityPlan(), parts)
@@ -191,13 +194,42 @@ class JoinSound(unittest.TestCase):
             t = torch.arange(start, start + round(parts[marker].sampled_frames / 24.0 * RATE)) / float(RATE)
             wave = torch.sin(2 * 3.14159 * 220 * t + (0 if marker == 0 else 2.0))
             return {"waveform": wave.view(1, 1, -1).expand(1, 2, -1).clone(), "sample_rate": RATE}
-        _, sound, _ = collect.collect_chunks(returned, plan, decode_video, decode)
+        _, sound, _ = collect.collect_chunks(returned, plan, decode_video, decode,
+                                              restore_audio=restore_audio, lock_spans=lock_spans)
         wave = sound["waveform"][0, 0]
         self.assertEqual(wave.shape[-1], round(209 / 24.0 * RATE))
         join = round(107 / 24.0 * RATE)
         steps = (wave[1:] - wave[:-1]).abs()
         normal = steps[:join - 2000].max()
         self.assertLess(steps[join - 400:join + 400].max(), normal * 1.2, "no click at the join")
+
+    def test_the_production_path_crossfades_every_unlocked_join(self):
+        # production always passes restore_audio (NGCollect/NGCollectVideo): an identity restore must keep the fade
+        self.assert_join_click_bound(lambda index, wave, rate: wave, [(), ()])
+
+    def test_a_lock_covered_join_stays_sample_exact(self):
+        parts = (chunks.Chunk(0, 0, 107, 0), chunks.Chunk(1, 107, 102, 22))
+        plan = chunks.SequencePlan(209, chunks.ContinuityPlan(), parts)
+        returned = [fake_latent(part.sampled_frames, n) for n, part in enumerate(parts)]
+        boundary = round(107 / 24.0 * RATE)
+        flat = lambda audio: {"waveform": torch.full((1, 2, round(parts[int(audio.flatten()[0].item())].sampled_frames / 24.0 * RATE)), 0.5), "sample_rate": RATE}
+        restore = lambda index, wave, rate: wave
+        _, sound, _ = collect.collect_chunks(returned, plan, decode_video, flat, restore_audio=restore,
+                                            lock_spans=[((0, 200),), ((100, 114),)])
+        self.assertTrue(torch.equal(sound["waveform"], torch.full_like(sound["waveform"], 0.5)), "locked join: butted, not blended")
+        # a lock that ends a second before the join fades as usual: reuse the phased hum so the blend is visible
+        def decode(audio):
+            marker = int(audio.flatten()[0].item())
+            start = 0 if marker == 0 else round((107 - 22) / 24.0 * RATE)
+            t = torch.arange(start, start + round(parts[marker].sampled_frames / 24.0 * RATE)) / float(RATE)
+            wave = torch.sin(2 * 3.14159 * 220 * t + (0 if marker == 0 else 2.0))
+            return {"waveform": wave.view(1, 1, -1).expand(1, 2, -1).clone(), "sample_rate": RATE}
+        _, sound, _ = collect.collect_chunks(returned, plan, decode_video, decode, restore_audio=restore,
+                                            lock_spans=[((0, 83),), ((131, 209),)])
+        wave = sound["waveform"][0, 0]
+        steps = (wave[1:] - wave[:-1]).abs()
+        normal = steps[:boundary - 2000].max()
+        self.assertLess(steps[boundary - 400:boundary + 400].max(), normal * 1.2, "unlocked join still fades")
 
 
 if __name__ == "__main__":

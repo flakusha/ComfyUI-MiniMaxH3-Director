@@ -43,15 +43,22 @@ const state = (extra = {}) => ({ media: "audio", values: { audio: "song.mp3" }, 
   assert.equal(lyricsBox(state({ values: { audio: "" } }), actions).button("Stamp line").disabled, true);
 }
 
-// The button gate reads the file widget either way: unlinked it holds the chosen file, linked the mirror
-// of the origin's file (ng_external.js) - so a linked song keeps Whisper lit, and a link with no file
-// behind it (a decoded sound) leaves the buttons dark until the origin carries a file.
+// The button gate reads the file widget for Transcribe and Stamp; Whisper alone stays lit for a linked
+// sound with no file behind it (a decoded sound): the mirror holds the origin's file when there is one
+// (ng_external.js), and one run materializes the rest (input/h3-external/) - the route names that run.
 {
   const { actions } = recorder();
   assert.equal(lyricsBox(state({ values: { audio: "song.wav" } }), actions).button("⟳ Time with Whisper").disabled, false,
     "the mirrored file keeps Whisper lit");
+  const linked = { linked: true, origin: null, label: "node", file: "" };
+  assert.equal(lyricsBox(state({ values: { audio: "" }, external: linked }), actions).button("⟳ Time with Whisper").disabled, false,
+    "a linked sound keeps Whisper lit until one run saves it");
+  assert.equal(lyricsBox(state({ values: { audio: "" }, external: linked }), actions).button("Stamp line").disabled, true,
+    "Stamp needs the file itself to play");
+  assert.equal(lyricsBox(state({ values: { audio: "" }, external: linked }), actions).button("✦ Transcribe with AI").disabled, true,
+    "Transcribe sends the widget, so it needs the file itself");
   assert.equal(lyricsBox(state({ values: { audio: "" } }), actions).button("⟳ Time with Whisper").disabled, true,
-    "a link with no file behind it leaves Whisper dark");
+    "unlinked with no file leaves Whisper dark");
 }
 
 // One action at a time: a busy box disables Transcribe, Whisper and Stamp together (a second

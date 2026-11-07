@@ -189,17 +189,22 @@ async def model_choices(request):
 async def time_lyrics(request):
     """Time a song card's lyrics with Whisper. While a render runs it stays off the GPU (CPU is slower, not in the way).
 
-    `audio` may carry the card's linked AUDIO payload (waveform/sample_rate) instead of a file name when its
-    sound arrives through audio_in: the card's file widget then holds the mirror (or nothing, for a decoded
-    sound), so the payload is what Whisper hears. A file source keeps the old path byte-identical."""
+    `source` is the card's file widget: the chosen file unlinked, the mirrored origin file linked. A linked
+    sound with no file behind it (decoded audio) materializes to input/h3-external/ when the card runs, so the
+    card sends `linked` and an empty source until then, and hears its file after one run. A file source keeps
+    the old path byte-identical."""
     try:
         data = await request.json()
         busy = PromptServer.instance.prompt_queue.get_tasks_remaining() > 0
         device = "cpu" if busy else comfy.model_management.get_torch_device()
-        linked = data.get("audio")
-        source = linked if isinstance(linked, dict) else data["source"]
-        result = await asyncio.to_thread(lyrics_timing.time_lyrics, source, data.get("lyrics", ""), device,
-                                         data.get("model", ""))
+        try:
+            result = await asyncio.to_thread(lyrics_timing.time_lyrics, data.get("source", ""), data.get("lyrics", ""), device,
+                                             data.get("model", ""))
+        except ValueError as error:
+            if data.get("linked") and not str(data.get("source", "")).strip():
+                raise ValueError("The linked sound has no file yet - run the card once so its sound is "
+                                 "saved, then time the lyrics.") from error
+            raise
         comfy.model_management.soft_empty_cache()
         return web.json_response({"ok": True, "device": str(device), **result})
     except Exception as error:

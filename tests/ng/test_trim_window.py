@@ -170,6 +170,37 @@ class DecodedSlice(unittest.TestCase):
                 samples = timing._samples(make_wav(directory))
             self.assertEqual((samples.dtype, len(samples)), (np.dtype("float32"), 16000 * 2))
 
+    def test_the_whisper_path_decodes_a_card_relative_name(self):
+        # Regression: time_lyrics pre-resolved the name to an absolute path and decoded it again, so every
+        # file failed the decoder's input-folder check and Time with Whisper heard nothing at all.
+        timing = module("ng.adapters.lyrics_timing")
+        import folder_paths
+        with tempfile.TemporaryDirectory() as directory:
+            make_wav(directory, "song.wav")
+            with patch.object(folder_paths, "get_input_directory", return_value=directory):
+                samples = timing._samples("song.wav")
+            self.assertEqual((samples.dtype, len(samples)), (np.dtype("float32"), 16000 * 2))
+
+    def test_time_lyrics_hears_a_card_relative_file(self):
+        # End to end below the model: the card's file name reaches Whisper's samples unchanged.
+        timing = module("ng.adapters.lyrics_timing")
+        import folder_paths
+
+        class FakeModel:
+            def transcribe(self, samples, **kwargs):
+                heard.append(len(samples))
+                return {"language": "en", "segments": []}
+
+        heard = []
+        with tempfile.TemporaryDirectory() as directory:
+            make_wav(directory, "song.wav")
+            with patch.object(folder_paths, "get_input_directory", return_value=directory), \
+                    patch.object(timing, "model_file", return_value="model.pt"), \
+                    patch.object(timing, "_load_model", return_value=FakeModel()):
+                result = timing.time_lyrics("song.wav", "", "cpu", "")
+            self.assertEqual(heard, [16000 * 2])
+            self.assertEqual(result["lines"], 0)
+
 
 class TheAudioCardFoldsTrims(unittest.TestCase):
     @classmethod

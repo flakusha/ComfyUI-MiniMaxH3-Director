@@ -41,16 +41,20 @@ export function lyricsBox(S, actions) {
   const note = !text.trim() ? "Optional. Only for a song or speech whose words should be sung or spoken in the video."
     : !sung ? "Sung where this song plays exactly: Lock or Copy here, or a Lock or Copy clip on a Studio audio lane."
     : `${timed} of ${lines} line(s) timed; each render part gets the lines sung in it.${timed === 0 && lines > 0 ? " Untimed lines are skipped; press \u27F3 Time with Whisper." : ""}`;
-  // The file widget gate covers both sources: unlinked it holds the chosen file, linked the mirror of the
-  // origin's file (ng_external.js) - so the buttons stay lit exactly when Whisper has something to hear.
+  // The file widget gate covers the file sources; Whisper alone stays lit for a linked sound with no file
+  // behind it: unlinked the widget holds the chosen file, linked the mirror of the origin's file
+  // (ng_external.js) or nothing until one run materializes it (input/h3-external/). Transcribe and Stamp
+  // need the file itself - one sends the widget, the other plays it - while Whisper answers a file-less link
+  // with the run to do, so only its button stays lit there.
   const heard = S.values.audio || "";
+  const whisperHeard = heard || (S.external?.linked ? "linked" : "");
   const transcript = transcriptRow(S, actions);
   return h("div", { class: "h3c-box" },
     h("div", { class: "h3c-cap" }, "Lyrics", h("span", { class: "h3c-grow" }),
       h("button", { class: "h3c-btn ai", disabled: !heard || Boolean(S.busy),
         title: "Let the connected AI provider write down the words of this sound (plain text, no times). Your lyrics stay until you accept.",
         onclick: () => actions.transcribe() }, S.busy === "transcribe" ? "Transcribing …" : "✦ Transcribe with AI"),
-      h("button", { class: "h3c-btn", disabled: !heard || Boolean(S.busy), title: "Time each line with the local Whisper model; without lines it writes down what it hears",
+      h("button", { class: "h3c-btn", disabled: !whisperHeard || Boolean(S.busy), title: "Time each line with the local Whisper model; without lines it writes down what it hears",
         onclick: () => actions.timeLyrics() }, S.busy === "lyrics" ? "Listening …" : "⟳ Time with Whisper"),
       h("button", { class: "h3c-btn", disabled: !heard || Boolean(S.busy), title: "Play the song and press at the start of the selected line",
         onclick: () => actions.stampLyric() }, "Stamp line")),

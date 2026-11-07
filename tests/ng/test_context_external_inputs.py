@@ -2,7 +2,9 @@
 
 The frontend mirrors the origin's file into the card's media widget; these tests pin the backend half: the
 ports exist as plain sockets (no widgets_values shift), a linked input with no file behind it is refused by
-validate_inputs and execute alike, the audio length comes from the payload, and a linked text is the note."""
+validate_inputs and execute alike - except audio, whose payload materializes to input/h3-external/ at execute,
+so its pre-flight passes and only an unreadable payload stops the run -, the audio length comes from the
+payload, and a linked text is the note."""
 import asyncio
 import importlib
 import sys
@@ -122,14 +124,17 @@ class ExternalContextInputs(unittest.TestCase):
             self.assertAlmostEqual(item.length_s, 5.0)
             self.assertAlmostEqual(max_duration, 5.0)
 
-    def test_a_link_without_a_file_is_refused_before_and_during_the_run(self):
+    def test_a_file_less_audio_link_passes_pre_flight_and_materializes_on_run(self):
+        # A linked sound with nothing to mirror (decoded audio) materializes to input/h3-external/ at execute,
+        # so pre-flight lets it through; a payload with no readable sound still stops the run naming the card.
         import torch
         payload = {"waveform": torch.zeros(1, 1, 1), "sample_rate": 44100}
         node = self.node("NGContextAudio")
         with self.assertRaisesRegex(ValueError, "no readable sound"):
             node.execute(audio="", name="", description="", content="voice", usage="voice", preserve="high",
                          speaker="", audio_in={})
-        self.assertIn("no file behind it", node.validate_inputs(audio="", audio_in=payload))
+        self.assertTrue(node.validate_inputs(audio="", audio_in=payload), "a readable payload materializes")
+        self.assertTrue(node.validate_inputs(audio="", audio_in={}), "a link reads at run, not at queue time")
         self.assertTrue(node.validate_inputs(audio="voice.wav", audio_in=payload), "a mirrored file passes")
         self.assertTrue(node.validate_inputs(audio="voice.wav", trim_start=1.0, trim_end=2.0, audio_in=payload))
         self.assertTrue(node.validate_inputs(audio="", audio_in=None), "unlinked stays the card's own business")
@@ -226,8 +231,9 @@ class ExternalContextInputs(unittest.TestCase):
                                 node.fingerprint_inputs(video="clip.mp4", context_options=base))
 
     def test_real_validation_resolves_the_link_for_validate_inputs(self):
-        """The full V3 path proves OUR override actually runs there: a resolved payload with no widget file fails,
-        the same machinery passes once the widget names a file, and an unconnected payload stays valid."""
+        """The full V3 path proves OUR override actually runs there: a resolved audio payload with no widget file
+        passes (execute materializes it), a resolved image payload with no widget file still fails, and an
+        unconnected payload stays valid."""
         from types import SimpleNamespace
         execution = importlib.import_module("execution")
         node = self.node("NGContextAudio")
@@ -236,7 +242,7 @@ class ExternalContextInputs(unittest.TestCase):
                 "color": "", "audio_in": ["source", 0]}
         import torch
         payload = {"waveform": torch.zeros(1, 1, 44100), "sample_rate": 44100}
-        for audio_value, resolved, expect in (("voice.wav", None, True), ("", payload, "no file behind it"), ("", None, True)):
+        for audio_value, resolved, expect in (("voice.wav", None, True), ("", payload, True), ("", None, True)):
             cache = SimpleNamespace(get_cache=lambda source, target: SimpleNamespace(outputs=[[resolved]]))
             values, missing, v3 = execution.get_input_data({**base, "audio": audio_value}, node, "card", execution_list=cache)
             self.assertFalse(missing)
@@ -244,10 +250,16 @@ class ExternalContextInputs(unittest.TestCase):
             self.assertIn("audio_in", nested, "the port reaches the validator like any input")
             results = asyncio.run(execution._async_map_node_over_list("audit", "card", node, values,
                                                                      "validate_inputs", v3_data=v3))
-            if expect is True:
-                self.assertEqual(results, [True])
-            else:
-                self.assertIn(expect, str(results[0]), "the override really runs inside the queue's validation")
+            self.assertEqual(results, [True], "a linked sound materializes at execute, so pre-flight passes")
+        picture = self.node("NGContextImage")
+        still = {"image": "", "name": "", "description": "", "content": "character", "usage": "reference",
+                 "preserve": "high", "context_id": "ctx", "color": "", "image_in": ["source", 0]}
+        cache = SimpleNamespace(get_cache=lambda source, target: SimpleNamespace(outputs=[[object()]]))
+        values, missing, v3 = execution.get_input_data(still, picture, "card", execution_list=cache)
+        self.assertFalse(missing)
+        results = asyncio.run(execution._async_map_node_over_list("audit", "card", picture, values,
+                                                                 "validate_inputs", v3_data=v3))
+        self.assertIn("no file behind it", str(results[0]), "the override really runs inside the queue's validation")
 
 
 if __name__ == "__main__":

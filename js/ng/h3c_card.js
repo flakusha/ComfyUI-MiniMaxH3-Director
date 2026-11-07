@@ -130,7 +130,7 @@ function attach(node, media) {
       applyValues(node, { [media]: S.external.file });
       S.values = values(node);
     }
-    if (!S.external.file && !S.busy) { S.status = `Linked ${S.external.label || "node"} carries no file - pick one on it; a run would stop here.`; S.statusWarn = true; }
+    if (!S.external.file && !S.busy) { S.status = `Linked ${S.external.label || "node"} carries no file - ` + (media === "audio" ? "run the card once so Whisper can hear it." : "pick one on it; a run would stop here."); S.statusWarn = true; }
   }
 
   function load() {
@@ -322,13 +322,13 @@ function attach(node, media) {
     },
     setModel(purpose, file) { node.properties.ng_models = { ...node.properties.ng_models, [purpose]: file || undefined }; node.graph?.change?.(); render(); },
     // Lyrics: Whisper times the lines that are there (or writes down what it hears); the words stay the user's.
-    // A linked card sends its mirrored file; the route falls back to it, so a linked song times like a chosen file.
+    // Linked with no file behind it, the card sends `linked`: one run saves the sound, then Whisper hears it.
     async timeLyrics() {
       if (S.busy) return;
       S.busy = "lyrics"; say("");
       try {
         const data = await request(api, "/ng/lyrics", { source: values(node).audio, lyrics: S.els.lyrics?.value ?? contextOptions(node).lyrics ?? "",
-          model: node.properties.ng_models?.whisper || "" });
+          model: node.properties.ng_models?.whisper || "", linked: externalLinked() });
         setOptions(node, { lyrics: data.lrc });
         say(`Timed ${data.lines} line(s) (${data.language}, ${deviceNote(data.device)}). Check them while the song plays.`);
       } catch (error) { say(`Lyrics: ${error.message}`, true); }

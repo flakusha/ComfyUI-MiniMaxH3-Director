@@ -95,8 +95,12 @@ def _linked_file(widget_value, media, linked=None):
 
 
 def _validate_linked_file(linked, widget_value, media):
-    """Queue pre-flight: the same rule as execute, returned as the validation message before a run starts."""
-    return True if linked is None or str(widget_value or "").strip() else _no_file_error(media)
+    """Queue pre-flight: the same rule as execute, returned as the validation message before a run starts.
+    A linked audio passes with no mirror file: execute materializes its payload to input/h3-external/,
+    and a payload with no readable sound still stops the run naming the card."""
+    if linked is None or str(widget_value or "").strip() or media == "audio":
+        return True
+    return _no_file_error(media)
 
 
 def _linked_length(audio_in):

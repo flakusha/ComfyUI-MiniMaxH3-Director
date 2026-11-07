@@ -84,20 +84,17 @@ class Routes(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 400)
         self.assertFalse(json.loads(response.text)["ok"])
 
-    async def test_lyrics_route_forwards_a_linked_payload_instead_of_the_widget_file(self):
-        # A card whose sound arrives through audio_in carries the mirror (or nothing, for a decoded
-        # sound) in its file widget: the route hands Whisper the linked AUDIO payload itself.
-        # The tensors cross the test boundary only; the browser never sends waveform bytes (it sends
-        # the mirrored file name, which the route resolves exactly as before).
-        import torch
-        audio_in = {"waveform": torch.zeros(1, 1, 16000), "sample_rate": 16000}
+    async def test_lyrics_route_times_the_mirrored_file_a_linked_card_sends(self):
+        # The browser sends JSON only (ng_widgets.js request(): JSON.stringify), so a linked card sends its
+        # mirrored file widget as `source` - never the AUDIO payload (a tensor is not JSON-serializable,
+        # and the stateless route has no node id to resolve a link with). The route forwards the name untouched.
         seen = {}
 
         def fake_time(source, text, device, chosen=""):
             seen["source"] = source
             return {"lrc": "[00:00.00] la", "language": "English", "lines": 1, "heard_words": 0}
 
-        payload = {"source": "", "lyrics": "la", "model": "", "audio": audio_in}
+        payload = json.loads(json.dumps({"source": "song.wav", "lyrics": "la", "model": "", "linked": True}))
         request = types.SimpleNamespace(json=AsyncMock(return_value=payload))
         queue = patch.object(self.context.PromptServer.instance, "prompt_queue",
                              types.SimpleNamespace(get_tasks_remaining=lambda: 1), create=True)
@@ -107,8 +104,29 @@ class Routes(unittest.IsolatedAsyncioTestCase):
         body = json.loads(response.text)
         self.assertEqual(response.status, 200)
         self.assertTrue(body["ok"])
-        self.assertIs(seen["source"], audio_in)
+        self.assertEqual(seen["source"], "song.wav")
         self.assertEqual(body["lines"], 1)
+
+    async def test_lyrics_route_names_the_run_a_file_less_linked_sound_needs(self):
+        # A linked sound with nothing to mirror (decoded audio) sends an empty source with `linked`: until one
+        # run materializes it to input/h3-external/ the route answers with the run to do, not the decode error.
+        # An unlinked card with no file keeps the decode error itself.
+        def fake_time(source, text, device, chosen=""):
+            if not str(source or "").strip():
+                raise ValueError("Choose a source containing audio.")
+            return {"lrc": "[00:00.00] la", "language": "English", "lines": 1, "heard_words": 0}
+
+        queue = patch.object(self.context.PromptServer.instance, "prompt_queue",
+                             types.SimpleNamespace(get_tasks_remaining=lambda: 1), create=True)
+        with queue, patch.object(self.context.lyrics_timing, "time_lyrics", side_effect=fake_time):
+            linked = json.loads(json.dumps({"source": "", "lyrics": "la", "model": "", "linked": True}))
+            response = await self.context.time_lyrics(types.SimpleNamespace(json=AsyncMock(return_value=linked)))
+            self.assertEqual(response.status, 400)
+            self.assertIn("run the card once", json.loads(response.text)["error"])
+            plain = json.loads(json.dumps({"source": "", "lyrics": "la", "model": ""}))
+            response = await self.context.time_lyrics(types.SimpleNamespace(json=AsyncMock(return_value=plain)))
+            self.assertEqual(response.status, 400)
+            self.assertIn("containing audio", json.loads(response.text)["error"])
 
     async def test_lyrics_route_keeps_the_file_path_byte_identical(self):
         # Unlinked cards send a file name and no payload: the route passes the name through untouched.

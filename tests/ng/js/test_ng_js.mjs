@@ -55,6 +55,16 @@ assert.deepEqual(restoredProviderValues(["custom","http://localhost:1234","old-m
     timeout_seconds:120,max_tokens:512,keep_alive:0},"The original six provider widgets must survive the added Source field");
 assert.equal(restoredProviderValues(["api","custom","http://localhost:1234","new-model","",true,false,120,512,0]),null);
 
+// The panel request stamps schema_version 3: the backend migration (v1/v2 ladder) drops unknown
+// fields on old versions, so the per-purpose overrides (Audio model) survive only on v3.
+{
+  const http=node("NGAIProvider",{source:"local",provider:"custom",base_url:"http://127.0.0.1:8080/v1",model:"text-model",model_text:"",model_caption:"",model_audio:"hearing-model",audio:true});
+  const solo={comfyClass:"NGContextAudio",inputs:[{name:"ai_provider",link:9}]};http.id=8;solo.graph={links:{9:{origin_id:8}},getNodeById:()=>http};
+  const provider=connectedProvider(solo);
+  assert.equal(provider.schema_version,3,"overrides must travel on the current version, or the backend drops the Audio model");
+  assert.equal(provider.model_audio,"hearing-model");
+}
+
 {
   const inputs=[{name:"clip",link:7},{name:"context_image.image_0",link:1},{name:"context_image.image_1",link:null},
     {name:"context_image.image_2",link:null},{name:"context_video.video_0",link:null},

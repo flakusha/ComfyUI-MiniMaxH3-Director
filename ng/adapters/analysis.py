@@ -45,6 +45,25 @@ def endpoint(config, purpose=""):
     return entry, url, model
 
 
+def audio_error(status, model, body_text=""):
+    """What a failed audio request tells the card, naming the likely cause, not the status.
+
+    llama.cpp answers 500 "audio input is not supported" when the addressed model has no
+    audio projector (mmproj) attached - either the wrong model got the sound (empty Audio
+    model override, so the text/vision model was asked) or the audio model itself runs
+    without its mmproj. The server's own body is quoted (cut short) so a different fault
+    stays recognisable instead of being relabelled."""
+    body = str(body_text or "").strip()
+    if status == 500 and "audio" in body.lower():
+        return ("The server refused the audio (HTTP 500, model '%s'): it reports no audio input. "
+                "Check the H3 AI Loader's Audio model override - empty means the Model above got the sound "
+                "and a text/vision model cannot hear it - and that the audio model loads with its mmproj "
+                "(llama-swap entry needs the projector file / --mmproj flag); server said: %s"
+                % (model, body[:200]))
+    return ("Audio analysis failed (HTTP %d, model '%s'); check whether the model supports input_audio."
+            % (status, model))
+
+
 async def audio_generate(config, prompt, source, key, wav=None, system=None):
     if config.provider == "ollama":
         raise ValueError("This Ollama transport has no audio input; choose an input_audio-compatible provider or describe the sound manually.")
@@ -71,7 +90,8 @@ async def audio_generate(config, prompt, source, key, wav=None, system=None):
                 if response.status in (401, 403):
                     raise ValueError("The provider refused authentication; set api_key_env to a variable available to ComfyUI.")
                 if response.status != 200:
-                    raise ValueError("Audio analysis failed (HTTP %d); check whether the model supports input_audio." % response.status)
+                    body_text = await response.text()
+                    raise ValueError(audio_error(response.status, model, body_text))
                 return await response.json()
 
     body = await legacy.interruptible(send())

@@ -39,9 +39,15 @@ parts. Click the clip to choose how H3 uses it:
 
 1. Audio card: **What is in it: Music**, **Use as: Lock**, **Whose voice**: the singer.
 2. The button with the card's name next to *Duration* (e.g. **= Song**) makes the video as long as the song.
-3. **Lyrics** (optional): one sung line per row. **⟳ Time with Whisper** finds when each line is sung (it needs the Whisper
-   model, chapter 2); **Stamp line** sets the selected line's time by ear while the song plays. Each render part then gets
-   only the lines sung in it, so the lips match.
+3. **Lyrics** (optional): one sung line per row. **✦ Transcribe with AI** drafts the words from the sound (your lines
+   stay until you **Use as lyrics** or **Keep both**); **⟳ Time with Whisper** finds when each line is sung (it needs
+   the Whisper model, chapter 2); **Stamp line** sets the selected line's time by ear while the song plays. Each render
+   part then gets only the lines sung in it, so the lips match.
+
+Transcribing and analyzing sound needs an audio-capable model: set the AI Loader's **Audio model** to one that hears
+(audio input), and make sure that model loads with its audio projector (llama.cpp/mmproj — without it the server
+answers 500 "audio input is not supported"). An empty Audio model sends the sound to the Model above, which fails
+the same way when that model cannot hear.
 
 A locked song stays exact in every render part: when the parts are put together, the original sound is laid back over
 the locked span, so it does not get dull at the joins.

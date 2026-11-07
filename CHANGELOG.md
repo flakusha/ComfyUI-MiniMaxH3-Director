@@ -2,7 +2,15 @@
 
 ## Unreleased
 
-- **H3 Render Sequence can finish every part at 2x with a learned latent upscaler** (opt-in, 2026-11-07). A new advanced
+- **Audio ✦ Analyze and ✦ Transcribe reach the configured Audio model, and a refused sound names the cause** (user report, 2026-11-07).
+  The panel sent `schema_version: 2` after the per-purpose overrides commit, so the backend migration dropped the Audio
+  model override and addressed the audio bytes to the Model above - a text/vision model that answers 500 "audio input
+  is not supported". The panel now stamps version 3, so the configured Audio model receives the sound on both paths.
+  When the server still refuses audio, the card quotes the server and names the two checks (Audio model override empty
+  vs audio model without its mmproj) instead of the raw status. The Audio card's Transcribe and Lyrics boxes are one
+  Lyrics subtab: transcribe drafts on the same text (Use as lyrics / Keep both appends / Discard), then Whisper times it.
+
+- **H3 Render Sequence can finish every part at 2x with a learned latent upscaler** (opt-in, 2026-11-07).  A new advanced
   `upscale_2k` toggle with an optional `upscale_model` socket inserts core's `MiniMaxH3LatentUpscaleWithModel` between
   the sampler and the decode of each part: the picture decodes at twice the canvas, the audio passes through the nested
   latent untouched, and the next part still pins the base-resolution latent — no re-noising and no changed conditioning,

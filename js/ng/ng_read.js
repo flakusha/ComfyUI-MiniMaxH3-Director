@@ -81,7 +81,7 @@ export function connectedProvider(node) {
       return {source:"clip",loader_node_id:String(direct.id),model,local_type:config.local_type,
         vision:config.vision,audio:config.audio,max_tokens:config.max_tokens,timeout_seconds:config.timeout_seconds};
     }
-    const provider = { schema_version: 2 };
+    const provider = { schema_version: 3 };
     for (const key of PROVIDER_FIELDS)
       if (config[key] !== undefined) provider[key] = config[key];
     return provider;

@@ -728,6 +728,41 @@ class ProviderTransport(unittest.IsolatedAsyncioTestCase):
             await self.adapter.transcribe(self.transcribe_payload(model="", model_audio=""))
         self.assertIn("audio-capable model", str(caught.exception))
 
+    async def test_audio_refusal_names_the_override_and_the_mmproj(self):
+        """llama.cpp's 500 'audio input is not supported' must name the Audio model override
+        and the missing mmproj, not the raw status - for ✦ Analyze as well as ✦ Transcribe."""
+        # A second runner plays llama.cpp refusing audio: HTTP 500 with its mmproj hint.
+        from aiohttp import web
+        refusals = []
+        async def refuse_audio(request):
+            refusals.append(await request.json())
+            return web.Response(status=500, text='{"error":{"code":500,"message":"audio input is not supported",'+'"type":"server_error"}}')
+        app = web.Application()
+        app.router.add_post("/refuse/v1/chat/completions", refuse_audio)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        url = "http://127.0.0.1:%d/refuse" % site._server.sockets[0].getsockname()[1]
+        try:
+            config = core.ProviderConfig(**{"provider": "custom", "base_url": url + "/v1",
+                                             "model": "text-model", "model_audio": "hearing-model", "audio": True})
+            with self.assertRaisesRegex(ValueError, "Audio model") as caught:
+                await self.adapter.analyze({"media": "audio",
+                                            "widgets": {"image": "image.png", "audio": "sound.wav",
+                                                        "text": "t", "content": "style"},
+                                            "provider": config.to_dict()})
+            self.assertIn("mmproj", str(caught.exception))
+            self.assertIn("hearing-model", str(caught.exception))
+            self.assertEqual(refusals[-1]["model"], "hearing-model",
+                             "the configured Audio model, not the Model above, receives the audio bytes")
+            payload = self.transcribe_payload(model="text-model", model_audio="hearing-model")
+            payload["provider"] = dict(payload["provider"], base_url=url + "/v1")
+            with self.assertRaisesRegex(ValueError, "mmproj"):
+                await self.adapter.transcribe(payload)
+        finally:
+            await runner.cleanup()
+
     async def test_transcribe_names_the_missing_file_and_the_inverted_range(self):
         empty = self.transcribe_payload(); empty["widgets"]["audio"] = ""
         with self.assertRaises(ValueError) as caught:

@@ -1159,9 +1159,15 @@ parts. Click the clip to choose how H3 uses it:
 
 1. Audio card: **What is in it: Music**, **Use as: Lock**, **Whose voice**: the singer.
 2. The button with the card's name next to *Duration* (e.g. **= Song**) makes the video as long as the song.
-3. **Lyrics** (optional): one sung line per row. **⟳ Time with Whisper** finds when each line is sung (it needs the Whisper
-   model, chapter 2); **Stamp line** sets the selected line's time by ear while the song plays. Each render part then gets
-   only the lines sung in it, so the lips match.
+3. **Lyrics** (optional): one sung line per row. **✦ Transcribe with AI** drafts the words from the sound (your lines
+   stay until you **Use as lyrics** or **Keep both**); **⟳ Time with Whisper** finds when each line is sung (it needs
+   the Whisper model, chapter 2); **Stamp line** sets the selected line's time by ear while the song plays. Each render
+   part then gets only the lines sung in it, so the lips match.
+
+Transcribing and analyzing sound needs an audio-capable model: set the AI Loader's **Audio model** to one that hears
+(audio input), and make sure that model loads with its audio projector (llama.cpp/mmproj — without it the server
+answers 500 "audio input is not supported"). An empty Audio model sends the sound to the Model above, which fails
+the same way when that model cannot hear.
 
 A locked song stays exact in every render part: when the parts are put together, the original sound is laid back over
 the locked span, so it does not get dull at the joins.
@@ -1391,7 +1397,8 @@ H3's own text encoder (`qwen3vl_32b_minimax_h3_*`) cannot write; choose another 
 | Director | **AI: split into shots** | your Prompt cut into shots with camera and spoken lines |
 | A shot | **AI: suggest text** / **AI: improve text** | a new text for this shot |
 | Prompts per render part | **Write with AI** / **Write all parts with AI** | the part's H3 prompt written out in full |
-| A card | **✦ Analyze** | description, content and role of the picture, video or text |
+| A card | **✦ Analyze** | description, content and role of the picture, video, sound or text (sound needs an audio-capable Audio model with its mmproj) |
+| Audio card Lyrics | **✦ Transcribe with AI** | the sound's words as plain lines; **Use as lyrics** replaces, **Keep both** appends, then **⟳ Time with Whisper** times them |
 | Storyboard | **AI: write panel texts** | titles, captions and shot texts of every panel |
 
 Proposals for shots appear dashed on the timeline; **Accept** takes them, **Discard** leaves everything as it was.

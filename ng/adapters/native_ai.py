@@ -90,7 +90,12 @@ def native_request(provider, action, request_json):
     if provider.local_model:
         if conditioning_file(provider.local_model, provider.local_type):
             raise ValueError(CONDITIONING_ONLY)
-        clip = graph.node("CLIPLoader", clip_name=provider.local_model, type=provider.local_type, device="default").out(0)
+        # A .gguf name (listed only by the GGUF pack's clip_gguf key) loads through CLIPLoaderGGUF,
+        # which keeps the weights quantized; safetensors keeps the core loader.
+        if provider.local_model.lower().endswith(".gguf"):
+            clip = graph.node("CLIPLoaderGGUF", clip_name=provider.local_model, type=provider.local_type).out(0)
+        else:
+            clip = graph.node("CLIPLoader", clip_name=provider.local_model, type=provider.local_type, device="default").out(0)
     # A connected clip is only a link here; whether it is the conditioning encoder is known once it is loaded.
     clip = graph.node("NGAICheckEncoder", clip=clip).out(0)
     max_length = (direct_tokens(provider.config.max_tokens) if action == "direct"

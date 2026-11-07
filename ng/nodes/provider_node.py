@@ -56,8 +56,16 @@ class NGAIProvider(io.ComfyNode):
                                                   tooltip=providers.SETTING_HELP["fixed_seed"]),
                                  io.Clip.Input("clip", display_name="CLIP", raw_link=True, lazy=True, optional=True,
                                                tooltip="For CLIP / Encoder: connect a generative text/vision model. H3's conditioning CLIP stays independently connected at the Connector."),
-                                 io.Combo.Input("local_model", options=[""] + folder_paths.get_filename_list("text_encoders"), default="", advanced=True, optional=True,
-                                               tooltip="Use an installed text encoder instead of a connected Load CLIP node. Loaded only during an explicit AI action."),
+                                 # GGUF encoders are listed by the GGUF pack's "clip_gguf" folder key, not core's
+                                 # text_encoders (its extension set excludes .gguf). The key exists only when the
+                                 # pack is installed; names cannot collide with the safetensors list (extensions
+                                 # differ), so no prefix is needed and the name travels as-is to the loader.
+                                 io.Combo.Input("local_model",
+                                                options=[""] + folder_paths.get_filename_list("text_encoders")
+                                                + (folder_paths.get_filename_list("clip_gguf")
+                                                   if "clip_gguf" in folder_paths.folder_names_and_paths else []),
+                                                default="", advanced=True, optional=True,
+                                                tooltip="Use an installed text encoder instead of a connected Load CLIP node. GGUF encoders from the GGUF pack are listed too. Loaded only during an explicit AI action."),
                                  io.Combo.Input("local_type", options=["stable_diffusion", "ltxv", "minimax"], default="stable_diffusion", advanced=True, optional=True,
                                                 tooltip="Which loader ComfyUI needs for your chosen encoder file.")],
                          outputs=[NGAI.Output(display_name="AI provider")])

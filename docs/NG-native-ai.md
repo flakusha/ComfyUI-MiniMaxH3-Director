@@ -5,7 +5,7 @@ Use a generative text/vision encoder for assistance. The H3 conditioning CLIP re
 Open `example_workflows/H3 Director NG - native AI.json` for a minimal Load CLIP → AI Loader → Text Context example. Choose your installed model, then use **✦ Analyze** (on "Use as") on the Text card. This example needs no H3 diffusion model.
 
 1. Add **Load CLIP** and choose an installed generative encoder (`qwen3vl_4b_bf16`, type `stable_diffusion`, is the tested choice).
-2. Connect CLIP to **H3 AI Loader** and select **CLIP / Encoder**. Without Load CLIP, choose the installed encoder on the same card; it is loaded only inside the AI job.
+2. Connect CLIP to **H3 AI Loader** and select **CLIP / Encoder**. Without Load CLIP, choose the installed encoder on the same card; it is loaded only inside the AI job. GGUF encoders (via the ComfyUI-GGUF-Loader pack, e.g. a quantized `qwen3vl_4b`) appear in the same menu and load quantized.
 3. Connect the AI Loader to a Context card, or to the Context Connector for the Studio and every card behind it.
 4. Run the action, read the suggestion, then **Accept** or **Discard**. **Cancel** stops a running action and leaves nothing in the queue.
 

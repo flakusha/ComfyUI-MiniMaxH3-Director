@@ -1,6 +1,7 @@
 """Native AI jobs consume CLIP links without pulling H3 render models into the job."""
 import json
 import unittest
+from unittest import mock
 
 from _pack import comfy_available, load_full_pack, module
 
@@ -59,6 +60,37 @@ class NativeAI(unittest.TestCase):
         # Neither a clip nor a chosen encoder: the card cannot do anything, and must say so.
         with self.assertRaisesRegex(ValueError, "Connect Load CLIP"):
             self.provider(clip=None, source="clip", local_model="")
+
+    def test_a_gguf_encoder_loads_through_the_gguf_loader_and_keeps_its_name(self):
+        """GGUF names come from the GGUF pack's clip_gguf folder key, so they cannot collide with
+        the safetensors list (extensions differ); the name travels to the loader unchanged, and the
+        quantized weights stay quantized through CLIPLoaderGGUF instead of the core CLIPLoader."""
+        provider = self.provider(clip=None, source="clip", local_model="qwen3vl_4b_Q4_K_M.gguf", local_type="stable_diffusion")
+        job = self.nodes["NGAIRequest"].execute(ai_provider=provider, action="analyze", request_json=self.payload())
+        kinds = {value["class_type"]: value["inputs"] for value in job.expand.values()}
+        self.assertEqual(kinds["CLIPLoaderGGUF"]["clip_name"], "qwen3vl_4b_Q4_K_M.gguf")
+        self.assertEqual(kinds["CLIPLoaderGGUF"]["type"], "stable_diffusion")
+        self.assertNotIn("device", kinds["CLIPLoaderGGUF"], "the GGUF loader has no device widget")
+        self.assertNotIn("CLIPLoader", kinds)
+        # The folder key lists .GGUF spellings too (core lowercases extensions when filtering), so the
+        # decision must not be case-sensitive or such a file would run into the core loader.
+        provider = self.provider(clip=None, source="clip", local_model="Qwen3VL_4B.GGUF")
+        job = self.nodes["NGAIRequest"].execute(ai_provider=provider, action="analyze", request_json=self.payload())
+        self.assertIn("CLIPLoaderGGUF", {value["class_type"] for value in job.expand.values()})
+
+    def test_the_model_menu_lists_gguf_files_only_when_the_gguf_pack_is_registered(self):
+        import folder_paths
+        listing = {"text_encoders": ["qwen3vl_4b_bf16.safetensors"], "clip_gguf": ["qwen3vl_4b_Q4_K_M.gguf"]}
+        registered = {"text_encoders": ([], {".safetensors"}), "clip_gguf": ([], {".gguf"})}
+        with mock.patch.dict("folder_paths.folder_names_and_paths", registered), \
+             mock.patch("folder_paths.get_filename_list", side_effect=lambda folder: listing.get(folder, [])):
+            combo = {i.id: i for i in self.nodes["NGAIProvider"].GET_SCHEMA().inputs}["local_model"]
+            self.assertEqual(combo.options, ["", "qwen3vl_4b_bf16.safetensors", "qwen3vl_4b_Q4_K_M.gguf"])
+        with mock.patch.dict("folder_paths.folder_names_and_paths", {"text_encoders": ([], {".safetensors"})}), \
+             mock.patch("folder_paths.get_filename_list", side_effect=lambda folder: listing.get(folder, [])):
+            combo = {i.id: i for i in self.nodes["NGAIProvider"].GET_SCHEMA().inputs}["local_model"]
+            self.assertEqual(combo.options, ["", "qwen3vl_4b_bf16.safetensors"],
+                             "without the GGUF pack the menu stays as it was")
 
     def test_the_h3_conditioning_encoder_is_refused_before_it_runs_into_the_timeout(self):
         """H3's 32B file has 50 of 64 layers and no output head: it ran ten minutes and wrote commas."""

@@ -40,7 +40,7 @@ export function lyricsBox(S, actions) {
   const sung = ["lock", "copy"].includes(S.usage);
   const note = !text.trim() ? "Optional. Only for a song or speech whose words should be sung or spoken in the video."
     : !sung ? "Sung where this song plays exactly: Lock or Copy here, or a Lock or Copy clip on a Studio audio lane."
-    : `${timed} of ${lines} line(s) timed; each render part gets the lines sung in it.`;
+    : `${timed} of ${lines} line(s) timed; each render part gets the lines sung in it.${timed === 0 && lines > 0 ? " Untimed lines are skipped; press \u27F3 Time with Whisper." : ""}`;
   // The file widget gate covers both sources: unlinked it holds the chosen file, linked the mirror of the
   // origin's file (ng_external.js) - so the buttons stay lit exactly when Whisper has something to hear.
   const heard = S.values.audio || "";

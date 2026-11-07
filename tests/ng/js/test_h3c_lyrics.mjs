@@ -34,6 +34,10 @@ const state = (extra = {}) => ({ media: "audio", values: { audio: "song.mp3" }, 
   assert.ok(view.innerText.includes("2 of 3 line(s) timed"), view.innerText);
   assert.ok(lyricsBox(state({ opts: { lyrics: "[00:01.00] a\n[00:03.00]\n[00:05.00] b\n[00:07.00]" } }), actions).innerText.includes("2 of 2 line(s)"),
     "a pause stamp is not a line");
+  assert.ok(lyricsBox(state({ opts: { lyrics: "My master\nI still wait" } }), actions).innerText.includes(
+    "0 of 2 line(s) timed; each render part gets the lines sung in it. Untimed lines are skipped; press \u27F3 Time with Whisper."), "untimed lock lines point at Whisper");
+  assert.ok(!lyricsBox(state({ usage: "music_style", opts: { lyrics: "My master" } }), actions).innerText.includes("untimed lines are skipped"),
+    "no timing nudge off lock/copy");
   assert.ok(lyricsBox(state({ usage: "music_style", opts: { lyrics: "[00:01.00] x" } }), actions).innerText.includes("Lock or Copy clip on a Studio audio lane"));
   assert.equal(lyricsBox(state({ busy: "lyrics" }), actions).button("Listening …").disabled, true);
   assert.equal(lyricsBox(state({ values: { audio: "" } }), actions).button("Stamp line").disabled, true);

@@ -67,11 +67,19 @@ class StoryStamps(unittest.TestCase):
 
 
 class StorageStaysFileTime(unittest.TestCase):
+    def test_multi_stamp_parse_and_prompt_agree_on_the_repeated_line(self):
+        """parse expands each stamp into its own line, so story_stamps sees the same repeated line the prompt serves."""
+        language, lines = lyrics.parse(SONG)
+        bells = sorted(line.start for line in lines if line.text == "late bells")
+        self.assertEqual(bells, [8.0, 12.0])
+        self.assertEqual(lyrics.story_stamps(["[00:08.00][00:12.00] late bells"], 10.0),
+                         ["".join(lyrics.stamp(max(0.0, round(time - 10.0, 2))) for time in bells) + " late bells"])
+
     def test_parse_still_reads_the_stored_lrc_in_file_seconds(self):
         language, lines = lyrics.parse(SONG)
         self.assertEqual(language, "English")
         self.assertEqual([(line.start, line.text) for line in lines],
-                         [(4.0, "gone with the morning"), (8.0, "late bells"), (16.0, "I wait")])
+                         [(4.0, "gone with the morning"), (8.0, "late bells"), (12.0, "late bells"), (16.0, "I wait")])
 
     def test_the_context_options_never_grow_a_shifted_copy(self):
         item_options = context_options.ContextOptions.from_dict(

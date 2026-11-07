@@ -59,6 +59,15 @@ class WidgetLyrics(unittest.TestCase):
         self.assertEqual(context_build.widget_lyrics({}), [])
         self.assertEqual(context_build.widget_lyrics(audio_card("voice", None)["widgets"]), [])
 
+    def test_a_hand_edited_start_is_named_not_raw(self):
+        """A hand-edited start_s ("soon") names the field per the fields.py convention."""
+        issues = module("ng.core.issues")
+        options = json.dumps({"schema_version": 1, "lyrics": TIMED, "start_s": "soon"})
+        widgets = dict(audio_card("voice", TIMED)["widgets"], context_options=options)
+        with self.assertRaises(issues.SchemaError) as caught:
+            context_build.widget_lyrics(widgets)
+        self.assertIn("start_s", str(caught.exception))
+
 
 class Meanings(unittest.TestCase):
     def test_bug_094_an_audio_card_meaning_carries_its_words(self):

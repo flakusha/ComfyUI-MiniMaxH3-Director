@@ -115,8 +115,8 @@ def story_stamps(lines, start_s, end_s=0.0):
         shifted = [round(time - start_s, 2) for time in times]
         if max(shifted) < 0:
             continue                # sung entirely inside the trimmed part; a stamp at the window start clamps at 0 (BUG-057)
-        if end_s > 0 and min(times) >= end_s - start_s:
-            continue
+        if end_s > 0 and min(times) >= end_s:
+            continue                # file seconds against the window end; comparing to the window length drops every stamp past it
         out.append("".join(stamp(time) for time in shifted) + (" " + words if words else ""))
     return out
 

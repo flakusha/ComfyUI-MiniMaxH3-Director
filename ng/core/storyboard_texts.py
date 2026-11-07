@@ -14,8 +14,8 @@ from .shot_share import beat_marks
 from .split import CAMERA_RULE, _seconds
 from .storyboard import panel_times
 
-SYSTEM = ("You write storyboards for MiniMax H3, a model that makes video with sound from detailed shot descriptions. You "
-          "answer with JSON only.")
+SYSTEM = ("Write the panel texts for a storyboard targeting MiniMax H3, which produces "
+          "video with sound from detailed shot descriptions. Return only a JSON object.")
 TOKENS = 3072
 
 

@@ -130,10 +130,14 @@ def transcribe_prompt(content):
     every other purpose framing; `framed`'s schema rule is deliberately left out, because it demands
     JSON and this answer is plain words for the Lyrics field, which no parser reads.
     """
-    ask = ("Write down exactly what is said or sung, in the original words and language, one line per "
-           "spoken or sung line, in the order heard. Do not add times, headings, speaker names or commentary.")
+    ask = ("Transcribe exactly what is spoken or sung, in the original language and wording. "
+           "Put each separate spoken or sung line on its own line, in the order heard. "
+           "Do not add timestamps, headings, speaker names, stage directions, or commentary. "
+           "Do not translate, paraphrase, correct, or summarize.")
     if content:
-        ask += "\nThe card describes the sound as: %s" % content
+        ask += ("\nContext about the sound: %s. "
+                "Use this only to understand the sound; transcribe only what you hear, "
+                "and do not add words from the context that are not heard." % content)
     return ask
 
 

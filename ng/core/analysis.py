@@ -192,15 +192,22 @@ def analysis_prompt(media, content, offer=None):
     told = {"image": "one or two sentences naming what keeps it recognizable: for a figure the face, hair, eyes, build, "
                      "clothing with colours, accessories and props; otherwise the place or the thing",
             "video": "one or two sentences: the movement, where it starts and where it ends"}.get(media, "one concise sentence")
-    return ("Describe %s as a reference for a video director. Focus on %s. Return only JSON with "
-            "description (%s), %susage (exactly one of: %s) "
-            "and why (one short sentence naming the visible reason for that choice). Answer with one object for the whole %s, "
-            "not one per picture. Use the words of the lists exactly. Do not invent facts. Shape: %s"
-            % (scope[media], focus, told, content_part, "; ".join("%s = %s" % (role, USAGE_MEANING[media][role]) for role in roles),
-               {"image": "picture", "video": "clip", "audio": "sound", "text": "text"}[media],
-               # Qwen3-VL 4B left usage out, or wrote the role as a key ({"constraint": "..."}); a shape to copy helps it.
-               '{"description": "<the description>", %s"usage": "<one word from the usage list>", "why": "<one sentence>"}'
-               % ("" if not content_part else '"content": "<one word from the content list>", ')))
+    medium_whole = {"image": "picture", "video": "clip", "audio": "sound", "text": "text"}[media]
+    usages = "; ".join("%s = %s" % (role, USAGE_MEANING[media][role]) for role in roles)
+    # A card that shows no content choice (offer content == [], i.e. the Text card) is shown the
+    # 3-key answer and never asked for a key it cannot hold: Qwen3-VL 4B put the usage there and
+    # the whole answer was refused.
+    content_rule = "" if not content_part else "- content (exactly one of: %s)\n" % ", ".join(kinds)
+    # Qwen3-VL 4B left usage out, or wrote the role as a key ({"constraint": "..."}); a shape to copy helps it.
+    shape = ('{"description": "<the description>", %s"usage": "<one word from the usage list>", "why": "<one sentence>"}'
+             % ("" if not content_part else '"content": "<one word from the content list>", '))
+    return ("Describe %s as a reference for a video director. Focus on %s.\n\n"
+            "Return one valid JSON object for the whole %s, not one object per picture or part.\n"
+            "Use the words of the lists exactly. Do not invent facts.\n\n"
+            "Required fields:\n- description (%s)\n%s- usage (exactly one of: %s)\n"
+            "- why (one short sentence naming the visible reason for the chosen usage).\n\n"
+            "Return only the JSON object. Exact shape:\n%s"
+            % (scope[media], focus, medium_whole, told, content_rule, usages, shape))
 
 
 def parse_suggestion(text, media="text"):

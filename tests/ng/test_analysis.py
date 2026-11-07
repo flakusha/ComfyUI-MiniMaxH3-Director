@@ -76,7 +76,7 @@ class ContentRoles(unittest.TestCase):
         got = core.parse_suggestion(answer, "video")
         self.assertEqual(got.description, "A hand presses down on a ball of dough. The hand shapes the dough.")
         self.assertEqual((got.content, got.usage, got.why), ("motion", "motion", "The hand presses."))
-        self.assertIn("one object for the whole clip", core.analysis_prompt("video", ""))
+        self.assertIn("one valid JSON object for the whole clip", core.analysis_prompt("video", ""))
         with self.assertRaises(ValueError):
             core.parse_suggestion(json.dumps({"stills": [{"content": "motion"}]}), "video")
 
@@ -712,7 +712,7 @@ class ProviderTransport(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["messages"][0]["content"], prompts.for_node("context", "audio_transcribe"))
         self.assertNotIn(prompts.SCHEMA_FRAMING, body["messages"][0]["content"],
                          "the schema rule demands JSON; a transcript is plain words")
-        self.assertIn("one line per", body["messages"][1]["content"][0]["text"])
+        self.assertIn("own line", body["messages"][1]["content"][0]["text"])
         self.assertEqual(data, {"text": "First line\nSecond line"})
 
     async def test_each_medium_sends_its_own_purpose_model(self):
@@ -872,8 +872,8 @@ class TranscriptionWords(unittest.TestCase):
 
     def test_the_prompt_asks_for_lines_and_names_the_card(self):
         prompt = analysis.transcribe_prompt("a slow choir")
-        self.assertIn("one line per", prompt)
-        self.assertIn("Do not add times", prompt)
+        self.assertIn("own line", prompt)
+        self.assertIn("timestamps", prompt)
         self.assertIn("a slow choir", prompt)
         self.assertNotIn("JSON", prompt)
 

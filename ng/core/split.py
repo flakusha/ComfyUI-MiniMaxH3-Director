@@ -81,6 +81,9 @@ def split_prompt(idea, seconds, meanings, parts=(), sung=()):
     if len(parts) > 1:
         rules.append("The video is rendered in separate parts with hard cuts between them: %s. A shot may run across a part boundary; a cut fits best at one."
                      % ", ".join("%s-%s s" % (_seconds(a), _seconds(b)) for a, b in parts))
+    if any(entry.get("lyrics") for entry in meanings):
+        rules.append("The lyrics an audio card carries are that sound's exact words: use them as they are, sung or "
+                     "spoken by their speaker where the card is heard.")
     if sung:
         rules.append("These sung lines are already placed at their times, so do NOT put them into lines; let the action follow them: %s."
                      % "; ".join('%s-%s s "%s"' % (_seconds(a), _seconds(b), words) for a, b, _, words in sung))

@@ -10,7 +10,7 @@ import re
 from . import fields
 from .ai_json import read_object
 from .auto_direct import story
-from .context_build import card_id, widget_text
+from .context_build import card_id, card_words, widget_text
 from .directions import DIRECTIONS, LANGUAGES, SPEECH, check_adults, direction, shot_count
 from .split import BEAT_RULE, CAMERA_RULE, _seconds, parse_split, shots_example
 
@@ -105,7 +105,9 @@ def _audio_line(entry):
            "voice of %s" % widgets.get("speaker") if "voice" in usage and widgets.get("speaker") else
            "a sound reference (%s)" % ", ".join(usage) if usage else "a sound reference")
     described = (widgets.get("description") or "").strip()
-    return "- @%s - audio, %s; contains %s%s" % (name, how, ", ".join(content) or "sound", ": " + described if described else "")
+    line = "- @%s - audio, %s; contains %s%s" % (name, how, ", ".join(content) or "sound", ": " + described if described else "")
+    words = card_words([entry])   # the card's own words (BUG-094): the plan paces its shots and writes its lines by them
+    return line + ("; its words, to be used as they are: %s" % " / ".join('"%s"' % word for word in words) if words else "")
 
 
 def _rule_line(entry):
@@ -134,7 +136,10 @@ def soundtrack(contexts):
                for entry in contexts)
 
 
-def _speech_rule(quick, sung, played, has_request):
+_PACE = "a sung line of 4 to 7 words takes about 3 seconds, so give each shot one line per 3 seconds of its length, and none to a shot shorter than 3 seconds"
+
+
+def _speech_rule(quick, sung, played, has_request, words=(), played_words=()):
     speech, language = quick["speech"], quick["language"]
     given = (" If the request gives words to say (in quotes or after 'says:'), use exactly those words in their own language."
              if has_request else "")
@@ -150,12 +155,17 @@ def _speech_rule(quick, sung, played, has_request):
     if sung:
         return "Speech: the sung lines are already placed at their times (below); lines is []. Show the singer singing them."
     if played:
+        if played_words:
+            # the soundtrack's own words carry no Whisper times: the shots write the lines and pace them (BUG-094)
+            return ("Speech: the singer sings the soundtrack's own words (see Sound) as they are.%s %s. speaker is the exact name of the singer (without @); delivery is sings." % (given, _PACE))
         return ("Speech: the singer sings along to the soundtrack, whose words are not known: write no lines ([]) and show the "
                 "singing performance (mouth, breath, expression) in the action.")
     # A rendered 10 s song (2026-10-06) sang every word, but the 6-word line of a 2 s last shot was cut off at the end.
-    return ("Speech: the character sings.%s Otherwise write short original lyrics in %s: a sung line of 4 to 7 words takes "
-            "about 3 seconds, so give each shot one line per 3 seconds of its length, and none to a shot shorter than 3 "
-            "seconds. speaker is the exact name of the singer (without @); delivery is sings." % (given, language))
+    if words:
+        return ("Speech: the character sings the words carried on an audio card (see Sound) as they are.%s %s. speaker is "
+                "the exact name of the singer (without @); delivery is sings." % (given, _PACE))
+    return ("Speech: the character sings.%s Otherwise write short original lyrics in %s: %s. speaker is the exact name "
+            "of the singer (without @); delivery is sings." % (given, language, _PACE))
 
 
 def _frame_rule(found):
@@ -231,10 +241,10 @@ def _rules(quick, seconds, found, names, played, parts, sung, kinds_of):
     return rules
 
 
-def _shape(quick, sung, played, kinds_of, undescribed=()):
+def _shape(quick, sung, played, kinds_of, undescribed=(), played_words=()):
     """The answer's JSON shape. With speech, the example shot carries a line: an empty list in the example made qwen3.5:9b
     leave a song without lyrics."""
-    speaks = quick["speech"] != "none" and not sung and not (quick["speech"] == "singing" and played)
+    speaks = quick["speech"] != "none" and not sung and not (quick["speech"] == "singing" and played and not played_words)
     line = ('{"speaker":"%s","delivery":"%s","language":"%s","text":"..."}' % (
         "" if quick["speech"] == "voiceover" else next((n for n, (k, _) in kinds_of.items() if k == "figure" and n), "Name"),
         "sings" if quick["speech"] == "singing" else "says", quick["language"])) if speaks else ""
@@ -254,13 +264,14 @@ def plan_prompt(quick, idea, seconds, contexts, shown=0, parts=(), sung=()):
     if not request.strip() and not found:
         raise ValueError("Make H3 prompt needs a picture on a Context card or a few words in the Prompt.")
     played = soundtrack(contexts)
+    words, played_words = card_words(contexts, False), card_words(contexts, True)   # the cards' own words (BUG-094)
     plan = direction(quick["direction"])
     lines = [
         "Plan a %s second video. Answer with JSON only, in this shape:" % _seconds(seconds),
-        _shape(quick, sung, played, kinds_of, undescribed),
+        _shape(quick, sung, played, kinds_of, undescribed, played_words),
         "",
         "Direction: %s. %s" % (plan.label, plan.plan),
-        _speech_rule(quick, sung, played, bool(request.strip())),
+        _speech_rule(quick, sung, played, bool(request.strip()), words, played_words),
         "Request: %s" % (request.strip() or "(none - build the video from the pictures and the direction)"),
     ]
     if found:

@@ -1,8 +1,9 @@
 """Build a ContextItem from what a context node's widgets say. Shared by the nodes and by the preview endpoint, so both name things alike."""
+import json
 import os
 from dataclasses import replace
 
-from . import fields
+from . import fields, lyrics
 from .context import ContextItem
 from .context_options import ContextOptions, roles
 from .issues import SchemaError
@@ -18,6 +19,35 @@ def widget_text(widgets, key):
     if widgets.get(key) is None:
         return ""
     return fields.read_str(widgets, key, "context.widgets", "")
+
+
+def widget_lyrics(widgets):
+    """An audio card's own words, stamps and language tag removed; [] without lyrics.
+
+    The card keeps its words in context_options as LRC text; these are what the AI helpers (split into shots,
+    Make H3 prompt) plan the shots from, next to the description - the one audio field beyond it that says WHAT
+    the sound says (BUG-094: on a card that does not play exactly, the default Voice or a Music style, the timed
+    path in lyrics.story_lines never sees them, and they reached no prompt at all)."""
+    try:
+        options = json.loads(widgets.get("context_options") or "{}")
+    except ValueError:
+        return []
+    text = options.get("lyrics") if isinstance(options, dict) else None
+    return lyrics.plain_lines(text) if isinstance(text, str) else []
+
+
+def card_words(entries, played=False):
+    """The audio entries' own words (BUG-094); `played` narrows them to a Lock or Copy soundtrack."""
+    words = []
+    for entry in entries:
+        widgets = entry["widgets"]
+        try:
+            usage = roles(widgets.get("usage_roles", ""), widgets.get("usage", ""))
+        except ValueError:                      # a malformed role list is the single combo (as _roles falls back)
+            usage = (widgets.get("usage", ""),)
+        if entry.get("media") == "audio" and (not played or {"lock", "copy"} & set(usage)):
+            words.extend(widget_lyrics(widgets))
+    return words
 
 
 def _label(media, widgets, name):

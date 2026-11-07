@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Lyrics reach the planning on every audio card** (user report, 2026-11-06). The Lyrics field fed exactly one
+  consumer, the timed placement for a song played exactly (Use as Lock or Copy, or a Lock/Copy clip on an audio
+  lane); on the default Voice card or a Music style card the words went nowhere - not into the AI's shot planning,
+  not into any render part - so filling the field changed nothing. A card's own words now travel with it wherever
+  the other context does: the shot planner (Auto Direct, Make H3 prompt) is given them next to the description,
+  the Sound line names them, and a soundtrack whose words carry no Whisper times has the plan write its lines
+  instead of calling them unknown. Timed songs are unchanged - the compiler still places those lines per part -
+  and cards without lyrics behave exactly as before.
 - **Cancel now stops the provider request** (2026-11-06). ComfyUI signals a cancelled queue only by raising its
   global interrupt flag, and nothing read it mid-request: a running Enhance node and the panel's Analyze, Direct,
   Plan, Write and Storyboard calls kept the provider generating until it answered or timed out — with a local model

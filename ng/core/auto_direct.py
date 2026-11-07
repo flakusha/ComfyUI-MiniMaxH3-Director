@@ -3,7 +3,7 @@ import json
 
 from .ai_json import read_object
 from .context import DirectorContext
-from .context_build import card_id, widget_text
+from .context_build import card_id, widget_lyrics, widget_text
 from .lyrics import story_lines
 from .preview import plan_preview
 from .shot_draft import current_records, draft_prompt, parse_draft
@@ -33,14 +33,25 @@ def timing_hints(director, contexts, probe=None):
 
 
 def _meanings(contexts):
-    return [{"name": entry["widgets"].get("name", ""), "media": entry["media"],
-             # a control video's source is never described: its figure turned up in the video (T6, 2026-10-16)
-             "description": "" if "control" in _roles(entry["widgets"]) else entry["widgets"].get("description", ""),
-             "usage": entry["widgets"].get("usage", ""),
-             "speaker": entry["widgets"].get("speaker", ""), "context_id": card_id(entry),
-             "subject_ids": entry["widgets"].get("subject_ids", ""),
-             # a Text card's own words (a style or rule note), so the AI writes shots that fit them (2026-10-18)
-             **({"text": widget_text(entry["widgets"], "text").strip()} if entry["media"] == "text" else {})} for entry in contexts]
+    out = []
+    for entry in contexts:
+        meaning = {"name": entry["widgets"].get("name", ""), "media": entry["media"],
+                   # a control video's source is never described: its figure turned up in the video (T6, 2026-10-16)
+                   "description": "" if "control" in _roles(entry["widgets"]) else entry["widgets"].get("description", ""),
+                   "usage": entry["widgets"].get("usage", ""),
+                   "speaker": entry["widgets"].get("speaker", ""), "context_id": card_id(entry),
+                   "subject_ids": entry["widgets"].get("subject_ids", "")}
+        # a Text card's own words (a style or rule note), so the AI writes shots that fit them (2026-10-18)
+        if entry["media"] == "text":
+            meaning["text"] = widget_text(entry["widgets"], "text").strip()
+        # an audio card's own words, the exact lyrics or speech to use (BUG-094: without them a song or speech
+        # card that does not play exactly - the default Voice, a Music style - reached the shots nameless)
+        elif entry["media"] == "audio":
+            words = widget_lyrics(entry["widgets"])
+            if words:
+                meaning["lyrics"] = words
+        out.append(meaning)
+    return out
 
 
 def story(idea, contexts):

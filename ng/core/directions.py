@@ -132,6 +132,41 @@ def check_adults(key, *texts):
                          "Nothing was generated." % words)
 
 
+# Explicit adult content without the Spicy 18+ direction is refused before any AI sees it: picking Spicy is how the
+# user asks for it, so anything explicit under another direction is unasked-for adult content. Plain words only
+# (English and German); states like naked/nude stay out - a nude statue is not a request for porn, undressing is.
+EXPLICIT_RE = re.compile(
+    r"\b(porn|porno|erotic\w*|erotik|intercourse|geschlechtsverkehr|orgasm\w*|orgasmus|masturbat\w*|masturbier\w*|"
+    r"ejaculat\w*|ejakulation|fellatio|cunnilingus|blowjob|handjob|threesome|orgy|orgies|orgie\w*|fetish|fetisch|"
+    r"bdsm|hentai|dildo\w*|vibrator\w*|sextoy|sexspielzeug|bukkake|deepthroat|gangbang|cumshot|ficken|"
+    r"oral.?sex|oralsex|anal.?sex|analsex|undress\w*|auszieh\w*|entkleid\w*|uncloth\w*|disrob\w*)\b", re.I)
+
+
+def explicit_named(*texts):
+    """The explicit adult words in the request or the cards ("" when none)."""
+    found = [match.group(0) for text in texts for match in EXPLICIT_RE.finditer(text or "")]
+    return ", ".join(dict.fromkeys(word.lower() for word in found))
+
+
+def check_explicit(key, *texts):
+    """Without the Spicy 18+ direction an explicit adult request is refused (before the AI is asked, and an explicit
+    answer after it arrives, so no model call is wasted); with Spicy the path stays fully open."""
+    if key == "spicy":
+        return
+    words = explicit_named(*texts)
+    if words:
+        raise ValueError("Without the Spicy 18+ direction no adult content is generated, and the request or a Content "
+                         "card asks for it (%s). Pick Spicy 18+ or reword the request. Nothing was generated." % words)
+
+
+def check_allowed(key, *texts):
+    """The adult-content pair for one direction, prompt side and parse side alike: without the Spicy 18+ direction
+    an explicit adult request is refused before the model is asked (and an explicit answer after it arrives), so no
+    model call is wasted on unasked-for adult content; with Spicy the path stays fully open and only minors refuse."""
+    check_explicit(key, *texts)
+    check_adults(key, *texts)
+
+
 def shot_count(seconds, key):
     """(fewest, most) shots for this length: the direction's pace, at least one shot."""
     shortest, longest = direction(key).pace

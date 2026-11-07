@@ -74,7 +74,7 @@ def direction_prompt(idea, seconds, contexts, current_shots="", timing=((), ()))
     records = current_records(current_shots, seconds)
     idea = story(idea, contexts)
     if not idea.strip() and not records:
-        raise ValueError("Write the Prompt, or a Text card used as Scene, before AI: split into shots.")
+        raise ValueError("Add a Prompt note, a Scene note, or existing shot records before Auto Direct can plan.")
     if records:
         return draft_prompt(idea, seconds, meanings, records)
     return split_prompt(idea, seconds, meanings, *timing)

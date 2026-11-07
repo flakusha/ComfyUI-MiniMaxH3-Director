@@ -37,7 +37,8 @@ def draft_prompt(idea, seconds, meanings, records):
             '{"format":"h3-director-draft","schema_version":1,"patches":[{"shot_id":"existing ID",'
             '"fields":{"text":"action and camera prose","media":[],"spoken":[]}}]}. '
             "The example lists allowed fields; omit every field that does not need changes. "
-            "You may also propose media or spoken fields and project soundscape/music strings. "
+            "You may also propose media or spoken fields and project soundscape/music strings, as top-level "
+            "\"soundscape\"/\"music\" strings alongside patches, never inside a patch's fields. "
             "Every shot keeps its start and end exactly: never propose timing. "
             "text: begin with the framing (e.g. 'A full-body shot of ...'), then who is where, what they do, their expression and "
             "the light, then how the camera moves with amplitude and speed, or 'The camera holds a static shot.' when it does not. "
@@ -45,13 +46,14 @@ def draft_prompt(idea, seconds, meanings, records):
             "e.g. for '0–5s, 5–10s': '0–5s: A full-body shot of ... The camera holds a static shot. 5–10s: A close-up of ... The "
             "camera pushes in with small amplitude at slow speed.'; each beat begins with its framing and says how the camera "
             "moves, in one camera sentence. Each beat is a new moment: never repeat an earlier beat's sentences. "
-            "Include soundscape/music only for a concrete requested change; never copy schema placeholders. "
+            "Include soundscape/music as top-level soundscape/music strings, only for a concrete requested change; never copy schema placeholders. "
             "Use existing Shot IDs; never add, delete or reorder Shots. Respect locked_fields. "
-            "Patch fields may contain only text, media and spoken; never copy id, draft or locked_fields into fields. "
+            "Patch fields may contain only text, media and spoken; never copy id, draft or locked_fields, or any other record key, into fields. "
             "Preserve every existing spoken entry and exact inline dialogue; new dialogue is optional. "
+            "Do not include timestamps, [mm:ss] stamps, or absolute times in the prose. "
             "Media bindings use schema_version 1, context_id and a supported role, not filenames. "
             "Spoken entries use schema_version 1, speaker_id, voice, language, delivery and text. "
-            "%sUse Context IDs for bindings. Do not claim generation or media analysis has occurred. "
+            "%sUse Context IDs for bindings. Do not claim that any generation, rendering, or media analysis has occurred. "
             "Idea: %s\nContexts: %s\nExisting Shots: %s" %
             (mention_rule(meanings), idea, json.dumps(meanings, ensure_ascii=False), json.dumps(shots, ensure_ascii=False)))
 

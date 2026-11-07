@@ -70,17 +70,21 @@ def split_prompt(idea, seconds, meanings, parts=(), sung=()):
         "angle stays inside one shot as camera movement.",
         "lines: each line the Idea gives to be spoken or sung, word for word in its own language, one entry per line, in the shot "
         "where it is heard. speaker is the exact Content name of who says it, or empty for a narrator; delivery is one of %s. "
+        "language is the line's own language (e.g. \"English\"); always emit it. "
         "Invent no words; use [] when nobody speaks." % ", ".join(DELIVERIES),
         "Shots are ordered, do not overlap and together cover 0 to %s s." % _seconds(seconds),
-        "subject_ids bind assets to Subjects identified by context_id; keep those meanings instead of inventing independent "
-        "figures for linked assets.",
-        "soundscape: one or two English sentences of ambient and physical sound, no speech. music: the score only the audience hears "
-        "(instruments, tempo), or N/A.",
-        "Do not claim generation or media analysis has occurred.",
+        "soundscape: one or two English sentences of ambient and physical sound, no speech, no singing. music: the score only the audience hears "
+        "(instruments, tempo, dynamics), or N/A.",
+        "Do not claim that any generation, rendering, or media analysis has occurred.",
     ]
     if len(parts) > 1:
         rules.append("The video is rendered in separate parts with hard cuts between them: %s. A shot may run across a part boundary; a cut fits best at one."
                      % ", ".join("%s-%s s" % (_seconds(a), _seconds(b)) for a, b in parts))
+    # Subject linkage is prose-only (parse_split reads no subject_ids key; subjects.py resolves ownership input-side):
+    # the sentence below fires only when a Context carries subject_ids, else there is nothing to bind.
+    if any(entry.get("subject_ids") for entry in meanings):
+        rules.append("subject_ids bind assets to Subjects identified by context_id; keep those meanings instead of "
+                     "inventing independent figures for linked assets.")
     if any(entry.get("lyrics") for entry in meanings):
         rules.append("The lyrics an audio card carries are that sound's exact words: use them as they are, sung or "
                      "spoken by their speaker where the card is heard. A line's [mm:ss] stamp says when it is heard "

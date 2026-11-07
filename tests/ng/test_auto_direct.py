@@ -131,7 +131,7 @@ class SceneSuggestion(unittest.TestCase):
                                                                               ((0.0, 3.48, "Song", "My master, where did your footsteps fade?"),)))
         self.assertIn("Alice", prompt)
         self.assertNotIn("private/file.png", prompt)
-        self.assertIn("Do not claim generation", prompt)
+        self.assertIn("Do not claim that any generation", prompt)
         self.assertIn("0-8.7 s, 8.7-17.9 s, 17.9-27.1 s", prompt)
         self.assertIn('0-3.5 s "My master, where did your footsteps fade?"', prompt)
         self.assertNotIn("rendered in separate parts", direction.direction_prompt("She walks.", 8, [context]))

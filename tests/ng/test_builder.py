@@ -109,6 +109,25 @@ class Plan(unittest.TestCase):
         with self.assertRaises(ValueError):
             builder.parse_plan(answer(shots), 8, [], {**QUICK, "direction": "spicy"})
 
+    def test_spicy_stays_open_but_explicit_without_spicy_is_refused_before_the_model(self):
+        # Requested path fully open: an explicit adult request under Spicy 18+ reaches the model (no refusal).
+        text = builder.plan_prompt({**QUICK, "direction": "spicy"}, "A woman undresses slowly.", 8, [])
+        self.assertIn("Everyone in the video is an adult", text)
+        # Unasked-for path shortcuts: explicit adult content without Spicy never calls the model.
+        with self.assertRaisesRegex(ValueError, "Spicy 18"):
+            builder.plan_prompt({**QUICK, "direction": "story"}, "A woman undresses slowly.", 8, [])
+        with self.assertRaisesRegex(ValueError, "Spicy 18"):
+            builder.plan_prompt(QUICK, "", 8, [card("Ann", description="She performs an erotic striptease")])
+        # Parse side: an explicit plan under another direction is refused; under spicy it parses.
+        shots = [{"start_s": 0, "end_s": 8, "action": "A woman undresses slowly.", "camera": "The camera holds."}]
+        with self.assertRaisesRegex(ValueError, "Spicy 18"):
+            builder.parse_plan(answer(shots), 8, [], QUICK)
+        result = builder.parse_plan(answer(shots), 8, [], {**QUICK, "direction": "spicy"})
+        self.assertIn("undresses", json.loads(result["shots"])["shots"][0]["text"])
+        # A chaste scene under another direction still passes untouched.
+        calm = [{"start_s": 0, "end_s": 8, "action": "A woman walks home.", "camera": "The camera holds."}]
+        builder.parse_plan(answer(calm), 8, [], QUICK)
+
     def test_speakers_and_descriptions(self):
         lines = [{"speaker": "Magierin", "delivery": "says", "language": "German", "text": "Ich warte."}]
         shots = [{"start_s": 0, "end_s": 8, "action": "A close-up of @Mage.", "camera": "The camera holds.", "lines": lines}]

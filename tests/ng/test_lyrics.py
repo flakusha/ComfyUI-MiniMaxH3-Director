@@ -174,7 +174,7 @@ class Look(unittest.TestCase):
         direct = module("ng.core.auto_direct")
         card = {"media": "text", "widgets": {"name": "Song scene", "text": "She sings the whole verse.", "usage": "scene"}}
         self.assertIn("She sings the whole verse.", direct.direction_prompt("", 27, [card]), "the split reads it with an empty Prompt")
-        with self.assertRaisesRegex(ValueError, "Text card used as Scene"):
+        with self.assertRaisesRegex(ValueError, "Scene note"):
             direct.direction_prompt("", 27, [{**card, "widgets": {**card["widgets"], "usage": "rule"}}])
 
     def test_without_shots_the_prompt_still_carries_the_video(self):

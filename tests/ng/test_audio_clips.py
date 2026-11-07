@@ -182,6 +182,10 @@ class Placement(unittest.TestCase):
         self.assertIn(("soundtrack_short", "Song"), {(i.code, i.ref) for i in result.issues})
         long = song(usage=("lock",), length_s=60)
         self.assertNotIn("soundtrack_short", {i.code for i in plan([], seconds=20, items=(long,)).issues})
+        scoped = plan([clip("a1", "song", 0, 5, "lock")], seconds=20,
+                      items=(song(usage=("lock",), length_s=5),))
+        self.assertNotIn("soundtrack_short", {i.code for i in scoped.issues},
+                         "a lane clip scopes the card: a sting that ends is supposed to end")
         unknown = song(usage=("copy",), length_s=0)
         self.assertNotIn("soundtrack_short", {i.code for i in plan([], seconds=20, items=(unknown,)).issues})
         style = song(usage=("music_style",), length_s=5)

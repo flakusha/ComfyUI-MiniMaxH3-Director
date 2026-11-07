@@ -99,13 +99,16 @@ def outside(spans, taken):
 
 def lock_copy_shortfall(context):
     """A Lock/Copy song whose trimmed window ends before the project does: past its end the parts carry
-    generated sound, so the plan names the card. Unknown file lengths (0) cannot cap anything."""
+    generated sound, so the plan names the card. Unknown file lengths (0) cannot cap anything. Only cards
+    that play across the whole project are named: a lane clip or a Shot binding scopes the card, so a sting
+    that ends is supposed to end."""
     from .frames import frames_to_seconds
     total = seconds_to_frames(context.project_seconds)
+    scoped = set(clip_windows(context, ("lock", "copy"))) | set(shot_windows(context) or ())
     out = []
     for item in context.by_media("audio"):
         roles = set(item.effective_usage)
-        if not roles & {"lock", "copy"} or not item.source:
+        if not roles & {"lock", "copy"} or not item.source or item.id in scoped:
             continue
         _, available = source_window(item)
         if available is None or available >= total:
@@ -114,7 +117,6 @@ def lock_copy_shortfall(context):
                          "sound is generated, not locked or copied." % (item.name, frames_to_seconds(available),
                                                                         context.project_seconds), item.name))
     return out
-
 
 
 def clip_issues(context):

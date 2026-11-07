@@ -71,6 +71,15 @@ class ProductWorkflows(unittest.TestCase):
                 if isinstance(named, dict) and isinstance(values, list) and len(named) == len(values):
                     self.assertEqual(list(named.values()), values, "%s: %s" % (label, node["type"]))
 
+    def test_a_damaged_guide_still_registers_the_node(self):
+        from unittest.mock import patch
+        from _pack import load_full_pack, module
+        guide = module("ng.nodes.guide_node")
+        with patch.object(guide, "GUIDE", "/nonexistent/guide.json"):
+            schema = load_full_pack().NODE_CLASS_MAPPINGS["NGGuide"].define_schema()
+        chapter = next(i for i in schema.inputs if i.id == "chapter")
+        self.assertTrue(chapter.options, "the chapter menu must never be empty")
+
     def test_every_chapter_and_its_pictures_exist(self):
         guide = Path(REPO) / "js" / "guide"
         for chapter in GUIDE["chapters"]:

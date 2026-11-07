@@ -18,7 +18,11 @@ def chapters():
 class NGGuide(io.ComfyNode):
     @classmethod
     def define_schema(cls):
-        ids = chapters()
+        try:
+            ids = chapters()
+        except (OSError, ValueError):
+            # A damaged guide must not break pack registration: the node is documentation only.
+            ids = ["start"]
         return io.Schema(node_id="NGGuide", display_name="H3 Guide", category=CATEGORY,
                          description="The H3 Director's guide with pictures, chapter by chapter. Put it next to a workflow; it does "
                                      "nothing when the workflow runs.",

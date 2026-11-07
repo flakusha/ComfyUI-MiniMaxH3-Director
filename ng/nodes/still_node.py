@@ -54,6 +54,8 @@ class NGStillCollect(io.ComfyNode):
     @classmethod
     def execute(cls, latents, chunks, vae):
         vae = vae[0]
+        if not latents or not chunks:
+            raise ValueError("Pictures: write an idea or a shot; each shot becomes one picture.")
         pictures, saved = [], []
         for latent, job in zip(latents, chunks):
             still, context = _still(job), job.project.context

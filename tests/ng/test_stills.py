@@ -2,7 +2,7 @@
 import json
 import unittest
 
-from _pack import module
+from _pack import comfy_available, load_full_pack, module
 
 ctx, stills, turbo = module("ng.core.context"), module("ng.core.stills"), module("ng.core.turbo_profiles")
 options = module("ng.core.context_options")
@@ -99,6 +99,14 @@ class Turbo(unittest.TestCase):
         self.assertEqual(turbo.part_settings("fl2va", {**base, "output": "video"})["steps"], 20, "no measured video values: the Director's")
         self.assertEqual(turbo.part_settings("ref2va", {**base, "output": "images"})["steps"], 6)
         self.assertEqual(turbo.part_settings("ref2va", base)["steps"], 6)
+
+
+@unittest.skipUnless(comfy_available(), "ComfyUI is not importable")
+class Collect(unittest.TestCase):
+    def test_collecting_no_pictures_names_the_missing_idea(self):
+        collect = load_full_pack().NODE_CLASS_MAPPINGS["NGStillCollect"]
+        with self.assertRaisesRegex(ValueError, "write an idea or a shot"):
+            collect.execute([], [], ["vae"])
 
 
 if __name__ == "__main__":

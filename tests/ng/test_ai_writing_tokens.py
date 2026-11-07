@@ -15,6 +15,14 @@ class WritingTokens(unittest.TestCase):
         self.assertEqual(payload["provider"]["model"], "qwen3.5:9b")
         self.assertEqual(payload["idea"], "x")
 
+    def test_a_provider_config_object_is_raised_to_the_floor(self):
+        """Transcribe passes a ProviderConfig, not a plain dict: a 512-token loader still arrives at 2048."""
+        core = module("ng.adapters.analysis")
+        config = core.ProviderConfig(provider="custom", base_url="http://127.0.0.1:1/v1",
+                                      model="m", max_tokens=512)
+        payload = routes._writing({"provider": config.to_dict(), "widgets": {"audio": "s.wav"}})
+        self.assertEqual(payload["provider"]["max_tokens"], routes.WRITING_TOKENS)
+
     def test_a_higher_setting_stays(self):
         self.assertEqual(routes._writing({"provider": {"max_tokens": 4096}})["provider"]["max_tokens"], 4096)
 

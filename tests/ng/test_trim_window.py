@@ -131,6 +131,11 @@ class DecodedSlice(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "holds no audio"):
                 self.decode(make_wav(directory), 1.5, 1.0)
 
+    def test_a_sub_frame_window_inside_the_file_holds_no_audio(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "holds no audio"):
+                self.decode(make_wav(directory), 1.0, 1.00001)
+
     def test_a_file_without_audio_is_named(self):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, "silent.png")
@@ -220,6 +225,32 @@ class TheAudioCardFoldsTrims(unittest.TestCase):
         plain = self.nodes.NGContextAudio.fingerprint_inputs(audio=self.name)
         self.assertNotEqual(plain, self.nodes.NGContextAudio.fingerprint_inputs(audio=self.name, trim_start=2.0))
         self.assertNotEqual(plain, self.nodes.NGContextAudio.fingerprint_inputs(audio=self.name, trim_end=4.0))
+
+    def test_a_linked_trim_arrives_as_none_and_means_unset(self):
+        plain = self.nodes.NGContextAudio.fingerprint_inputs(audio=self.name)
+        self.assertEqual(plain, self.nodes.NGContextAudio.fingerprint_inputs(audio=self.name, trim_start=None, trim_end=None))
+        item, _, _ = self.run_card(trim_start=None, trim_end=None)
+        self.assertEqual((item.options.start_s, item.options.end_s), (0.0, 0.0))
+
+    def test_a_linked_audio_without_a_sample_rate_names_the_card(self):
+        import torch
+        with self.assertRaisesRegex(ValueError, "no file behind it"):
+            self.nodes.NGContextAudio.execute(
+                audio=self.name, name="Song", description="", content="voice", usage="reference", preserve="high",
+                speaker="", trim_start=0.0, trim_end=0.0, context_id="audio_song",
+                audio_in={"waveform": torch.zeros(1, 1, 8)})
+
+    def test_a_linked_audio_with_a_zero_rate_names_the_card(self):
+        import torch
+        audio_in = {"waveform": torch.zeros(1, 1, 8), "sample_rate": 0}
+        with self.assertRaisesRegex(ValueError, "no file behind it"):
+            self.nodes.NGContextAudio.execute(
+                audio=self.name, name="Song", description="", content="voice", usage="reference", preserve="high",
+                speaker="", trim_start=0.0, trim_end=0.0, context_id="audio_song", audio_in=audio_in)
+
+    def test_pre_flight_rejects_an_inverted_linked_trim(self):
+        message = self.nodes.NGContextAudio.validate_inputs(audio=self.name, trim_start=5.0, trim_end=2.0)
+        self.assertIn("past Trim start", message)
 
 
 if __name__ == "__main__":

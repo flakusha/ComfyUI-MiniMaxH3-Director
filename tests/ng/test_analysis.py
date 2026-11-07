@@ -697,6 +697,35 @@ class ProviderTransport(unittest.IsolatedAsyncioTestCase):
         self.assertIn("one line per", body["messages"][1]["content"][0]["text"])
         self.assertEqual(data, {"text": "First line\nSecond line"})
 
+    async def test_each_medium_sends_its_own_purpose_model(self):
+        """The wire model follows the medium: text/caption/audio overrides each reach their own call site."""
+        self.answer = self.reply("image", "red object")
+        data = self.answering("image")
+        data["provider"].update({"model": "base-model", "model_text": "text-model",
+                                    "model_caption": "caption-model", "model_audio": "audio-model"})
+        await self.adapter.analyze(data)
+        self.assertEqual(self.requests[-1][2]["model"], "caption-model")
+        self.answer = self.reply("text", "slow camera")
+        data = self.answering("text")
+        data["provider"].update({"model": "base-model", "model_text": "text-model",
+                                    "model_caption": "caption-model", "model_audio": "audio-model"})
+        await self.adapter.analyze(data)
+        self.assertEqual(self.requests[-1][2]["model"], "text-model")
+        direct = module("ng.adapters.auto_direct")
+        self.answer = json.dumps({"shots": [{"start_s": 0, "end_s": 8, "action": "Alice walks.", "camera": "Static", "dialogue": ""}],
+                                 "soundscape": "wind", "music": "N/A"})
+        payload = self.payload("text", model="base-model", model_text="text-model",
+                               model_caption="caption-model", model_audio="audio-model")
+        await direct.direct({"provider": payload["provider"], "contexts": [],
+                             "director": {"idea": "Alice walks.", "project_seconds": 8}})
+        self.assertEqual(self.requests[-1][2]["model"], "text-model")
+        self.answer = self.reply("audio", "a choir")
+        data = self.answering("audio")
+        data["provider"].update({"model": "base-model", "model_text": "text-model",
+                                    "model_caption": "caption-model", "model_audio": "audio-model"})
+        await self.adapter.analyze(data)
+        self.assertEqual(self.requests[-1][2]["model"], "audio-model")
+
     async def test_transcribe_sends_the_whole_file_when_no_range_is_set(self):
         self.answer = "one line"
         await self.adapter.transcribe(self.transcribe_payload())
@@ -762,6 +791,13 @@ class ProviderTransport(unittest.IsolatedAsyncioTestCase):
                 await self.adapter.transcribe(payload)
         finally:
             await runner.cleanup()
+
+    def test_a_non_audio_failure_quotes_the_server_body(self):
+        """A non-audio 500 (OOM, model-load fail) stays recognisable instead of being relabelled."""
+        message = self.adapter.audio_error(500, "m1", '{"error":{"message":"CUDA out of memory"}}')
+        self.assertIn("server said", message)
+        self.assertIn("CUDA out of memory", message)
+        self.assertNotIn("mmproj", message)
 
     async def test_transcribe_names_the_missing_file_and_the_inverted_range(self):
         empty = self.transcribe_payload(); empty["widgets"]["audio"] = ""

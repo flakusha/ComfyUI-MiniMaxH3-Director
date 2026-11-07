@@ -71,7 +71,7 @@ class NGProjectRender(io.ComfyNode):
                                  io.LatentUpscaleModel.Input("upscale_model", optional=True,
                                                              tooltip="2K finish: a MiniMax H3 latent upscaler (models/latent_upscale_models) loaded with LatentUpscaleModelLoader. Used only when upscale_2k is on."),
                                  io.Boolean.Input("upscale_2k", default=False, optional=True, advanced=True,
-                                                  tooltip="Opt-in 2K finish: upscale each part's latent with upscale_model before decode (2x, decode only: audio passes through and the next part still pins the base-resolution latent).")],
+                                                  tooltip="Opt-in 2K finish: upscale each part's latent with upscale_model before decode (2x, decode only: audio passes through and the next part still pins the base-resolution latent). Large canvases decode at 2x (1280x704 finishes at 2560x1408); leave off if VRAM is tight.")],
                          outputs=render_outputs(), enable_expand=True)
 
     @classmethod

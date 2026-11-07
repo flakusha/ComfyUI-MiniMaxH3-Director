@@ -110,6 +110,7 @@ class Execution(unittest.TestCase):
         self.assertEqual((item.name, item.id), ("old castle", "image_old_castle"))
 
     def test_audio_context_reads_its_length_and_speaker(self):
+        # execute returns (item, trimmed_audio, max_duration): [0] is the context item, not the sound.
         saved = self.context_nodes.probe.duration_seconds
         saved_decode = self.context_nodes.trimmed_audio
         self.context_nodes.probe.duration_seconds = lambda source: 7.5

@@ -44,6 +44,8 @@ def decode_audio(source, start_s=0.0, end_s=0.0, rate=None, layout=None):
     last = min(max(first, round((float(end_s) - origin) * rate) if end_s > 0 else total.shape[1]), total.shape[1])
     if not (total.shape[1] - first):
         raise ValueError("The selected range holds no audio; set Trim end past Trim start and inside the file.")
+    if last <= first:
+        raise ValueError("The selected range holds no audio; set Trim end past Trim start and inside the file.")
     return torch.from_numpy(np.ascontiguousarray(total[:, first:last])), rate
 
 

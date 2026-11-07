@@ -63,7 +63,7 @@ MEDIA_LABEL = {"image": "image", "video": "video", "audio": "audio", "text": "te
 UNSUPPORTED_HINT = {
     "image": "This provider cannot read images. Choose a vision model, or describe the picture in a Text card.",
     "video": "This provider cannot read video. Choose a vision model and attach a still picture, or describe the clip in a Text card.",
-    "audio": "This provider cannot read audio. Choose a model with audio input, or describe the sound in a Text card.",
+    "audio": "This provider cannot read audio. Choose a model with audio input, or describe the sound in a Text card. For a local audio-capable server (llama.cpp + mmproj), choose Custom URL and switch Audio on.",
     "text": "This provider cannot read text.",
 }
 

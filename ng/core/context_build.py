@@ -39,7 +39,11 @@ def widget_lyrics(widgets):
         return []
     start = options.get("start_s", 0.0) if isinstance(options, dict) else 0.0
     end = options.get("end_s", 0.0) if isinstance(options, dict) else 0.0
-    return lyrics.story_stamps(lyrics.stamped_lines(text), float(start or 0.0), float(end or 0.0))
+    try:
+        start_s, end_s = float(start or 0.0), float(end or 0.0)
+    except (TypeError, ValueError):
+        raise SchemaError("context.widgets.context_options.start_s", "expected a number, got %r" % (start,)) from None
+    return lyrics.story_stamps(lyrics.stamped_lines(text), start_s, end_s)
 
 
 def card_words(entries, played=False):

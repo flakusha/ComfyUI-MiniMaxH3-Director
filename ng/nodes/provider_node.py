@@ -29,7 +29,7 @@ class NGAIProvider(io.ComfyNode):
                                  io.String.Input("model", default="", tooltip="Model served by your selected provider."),
                                  io.String.Input("api_key_env", default="", advanced=True, tooltip="Environment variable containing the key; never paste the key here."),
                                  io.Boolean.Input("vision", default=True, tooltip="Declare that the selected model accepts images."),
-                                 io.Boolean.Input("audio", default=False, tooltip="Declare input_audio support; not supported by this Ollama transport."),
+                                 io.Boolean.Input("audio", default=False, tooltip="Declare input_audio support; not supported by this Ollama transport. For a local audio-capable server (llama.cpp + mmproj), choose Custom URL and switch Audio on."),
                                  io.Int.Input("timeout_seconds", default=120, min=5, max=900, advanced=True,
                                               tooltip="How long one analysis request may take before it is given up."),
                                  io.Int.Input("max_tokens", default=512, min=64, max=128000, advanced=True,

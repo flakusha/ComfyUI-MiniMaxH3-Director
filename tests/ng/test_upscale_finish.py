@@ -106,6 +106,16 @@ class UpscaleFinish(unittest.TestCase):
         self.assertFalse(inputs[-1].default)
         self.assertTrue(inputs[-1].optional)
 
+    def test_toggling_the_finish_reuses_the_resume_cache(self):
+        """sampled_with is identical with/without upscale_2k: toggling 2K reuses the resume cache."""
+        inputs = dict(chunks=["plan", 0], clip=["clip", 0], vae=["v", 0], audio_vae=["a", 0], model_fl2va=["fl2va", 0])
+        settings = dict(seed=1, steps=8, sampler_name="res_multistep", scheduler="simple", shift_video=12.0, shift_audio=3.0)
+        resumes = lambda graph: sorted(node["inputs"]["settings"] for node in graph.values()
+                                        if node["class_type"] == "NGResumeChunk")
+        upscale = dict(model=["upscaler", 0], width=768, height=1152)
+        self.assertEqual(resumes(render_sequence(inputs, settings)[0]),
+                         resumes(render_sequence(inputs, {**settings, "upscale": upscale})[0]))
+
 
 if __name__ == "__main__":
     unittest.main()

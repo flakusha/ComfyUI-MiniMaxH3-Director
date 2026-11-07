@@ -96,7 +96,19 @@ def _validate_linked_file(linked, widget_value, media):
 
 def _linked_length(audio_in):
     """Exact seconds of a connected AUDIO payload; the batch dim is ignored and no file is decoded."""
-    return float(audio_in["waveform"].shape[-1]) / float(audio_in["sample_rate"])
+    try:
+        rate = float(audio_in["sample_rate"])
+        frames = audio_in["waveform"].shape[-1]
+    except (KeyError, TypeError, IndexError):
+        raise ValueError(_no_file_error("audio")) from None
+    if rate <= 0:
+        raise ValueError(_no_file_error("audio"))
+    return float(frames) / rate
+
+
+def _linked_float(value):
+    """A linked trim arrives as None when the upstream is not a constant; that means unset, not 0."""
+    return float(value or 0.0)
 
 
 def _subject_inputs():
@@ -179,10 +191,13 @@ class NGContextAudio(io.ComfyNode):
     def fingerprint_inputs(cls, audio, trim_start=0.0, trim_end=0.0, **_):
         # a linked audio_in arrives as None here (non-constant links resolve only for constants), so the cache key
         # follows the mirrored widget file - which the card rewrites whenever the origin changes its file
-        return trim_window.fingerprint(probe.file_stamp(audio), float(trim_start), float(trim_end))
+        return trim_window.fingerprint(probe.file_stamp(audio), _linked_float(trim_start), _linked_float(trim_end))
 
     @classmethod
     def validate_inputs(cls, audio, trim_start=0.0, trim_end=0.0, audio_in=None, **_):
+        start_s, end_s = _linked_float(trim_start), _linked_float(trim_end)
+        if start_s > 0 and end_s > 0 and end_s <= start_s:
+            return "Trim end (%s) must be past Trim start (%s)." % (end_s, start_s)
         return _validate_linked_file(audio_in, audio, "audio")
 
     @classmethod
@@ -192,8 +207,8 @@ class NGContextAudio(io.ComfyNode):
                        context_id=context_id, color=color, **_widget_extras(extras))
         options = ContextOptions.from_json(widgets.get("context_options", "")).to_dict()
         # a connected trim value is authoritative; the card's own widgets stay the fallback (0 = the stored range)
-        start_s = float(trim_start) if trim_start > 0 else options["start_s"]
-        end_s = float(trim_end) if trim_end > 0 else options["end_s"]
+        start_s = _linked_float(trim_start) if (trim_start or 0.0) > 0 else options["start_s"]
+        end_s = _linked_float(trim_end) if (trim_end or 0.0) > 0 else options["end_s"]
         # a linked audio gives the exact length from its payload; the file header probe stays the unlinked path.
         # The trims stay independent of the link: they cut the mirrored file whatever card it came from.
         if audio_in is not None:

@@ -60,16 +60,18 @@ def audio_error(status, model, body_text=""):
                 "and a text/vision model cannot hear it - and that the audio model loads with its mmproj "
                 "(llama-swap entry needs the projector file / --mmproj flag); server said: %s"
                 % (model, body[:200]))
-    return ("Audio analysis failed (HTTP %d, model '%s'); check whether the model supports input_audio."
-            % (status, model))
+    return ("Audio analysis failed (HTTP %d, model '%s'); check whether the model supports input_audio.%s"
+            % (status, model, (" server said: " + body[:200]) if body else ""))
 
 
 async def audio_generate(config, prompt, source, key, wav=None, system=None):
     if config.provider == "ollama":
         raise ValueError("This Ollama transport has no audio input; choose an input_audio-compatible provider or describe the sound manually.")
-    # `wav` and `system` belong to the Transcribe action: it sends the card's selected range through the
-    # one decode (not the 15 s preview cap) and a transcription role instead of the analysis framing.
-    # Every other caller keeps sending the preview wav and the analysis framing, exactly as before.
+    # NOTE (intentional, 2026-11-07): Analyze sends the 15 s preview even when the card has a Trim window;
+    # Transcribe sends the windowed range. A trimmed card's Analyze hears audio the video does not contain,
+    # while Transcribe hears the right range - kept because Analyze answers "what is this sound" from the card's
+    # file, while Transcribe writes down the exact range the video plays. Plumbing trim into analyze would
+    # change the pinned 15 s cap (test_analysis pins it); revisit only with that decision.
     wav = wav if wav is not None else await asyncio.to_thread(preview_media.audio_wav, source)
     entry, url, model = endpoint(config, "audio")
     if not url or not model:

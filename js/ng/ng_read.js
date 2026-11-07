@@ -87,11 +87,21 @@ export function connectedProvider(node) {
     return provider;
   }
   // The Director and the Storyboard take the AI provider of the Context Connector on their "context" input.
+  // The Studio lab node carries its own ai_provider socket instead, which the direct branch above resolves.
   if (node.comfyClass === "NGH3Director" || node.comfyClass === "NGStoryboard") {
     const connector = upstreamNode(node.graph, node.inputs?.find((input) => input.name === "context"));
     return connector ? connectedProvider(connector) : null;
   }
   return null;
+}
+
+// Control clips render through the ControlNet patch: on the product Director it hangs off the Context Connector,
+// on the Studio lab node off the node's own model_patch socket (review F3).
+export function controlPatchConnected(node) {
+  const own = node.inputs?.find((input) => input.name === "model_patch");
+  if (own) return own.link != null;
+  const connector = upstreamNode(node.graph, node.inputs?.find((input) => input.name === "context"));
+  return connector?.inputs?.some((input) => input.name === "model_patch" && input.link != null) ?? false;
 }
 
 export function contextProvider(node) {

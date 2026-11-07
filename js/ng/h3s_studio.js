@@ -19,7 +19,7 @@ import { studioAI, basis as aiBasis } from "./h3s_ai.js";
 import { readQuick, changeQuick } from "./h3s_quick.js";
 import { offerFor } from "./h3c_model.js";
 import { values, applyValues, request } from "./ng_widgets.js";
-import { readPayload, readContexts, connectedProvider, contextNodes, upstreamNode } from "./ng_read.js";
+import { readPayload, readContexts, connectedProvider, controlPatchConnected, contextNodes } from "./ng_read.js";
 import { contextColor } from "./ng_identity.js";
 import { hasRenderPath, projectRenderIds } from "./ng_graph.js";
 import { attachProgress } from "./ng_studio_progress.js";
@@ -39,8 +39,7 @@ function load(S) {
   S.contexts = contentEntries(readContexts(S.node), contextColor);
   S.byId = new Map(S.contexts.map((entry) => [entry.id, entry]));
   S.ai = Boolean(connectedProvider(S.node));
-  const connector = upstreamNode(S.node.graph, S.node.inputs?.find((input) => input.name === "context"));
-  S.controlConnected = connector?.inputs?.some((input) => input.name === "model_patch" && input.link != null);
+  S.controlConnected = controlPatchConnected(S.node);
   S.turboProfiles = turboProfiles;
   const project = readProject(S.values.shots || "");
   S.docError = project.error;

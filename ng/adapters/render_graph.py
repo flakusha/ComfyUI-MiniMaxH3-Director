@@ -20,7 +20,8 @@ def turbo_models(graph, inputs, settings):
 
 # Everything in the render settings that changes the sampled latent.
 RESUME_SETTINGS = ("output", "seed", "steps", "sampler_name", "scheduler", "shift_video", "shift_audio", "turbo", "turbo_lora_fl2va",
-                   "turbo_lora_ref2va", "ref_image_size", "resize_method", "control_strength", "control_start", "control_end", "spectrum")
+                   "turbo_lora_ref2va", "ref_image_size", "resize_method", "control_strength", "control_start", "control_end", "spectrum",
+                   "models")
 # Spectrum (xmarre/ComfyUI-Spectrum-MiniMax-H3, installed by the user) with the values of our A/B: 20 steps took 353 s instead
 # of 526 s at equal quality (comparison 2026-10-20, M11). Not with Turbo: a few-step LoRA leaves no steps to forecast.
 SPECTRUM = dict(enabled=True, blend_weight=0.5, degree=1, ridge_lambda=0.1, window_size=2.0, flex_window=0.75, warmup_steps=1,

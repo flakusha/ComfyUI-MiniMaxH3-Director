@@ -45,6 +45,13 @@ class Keys(unittest.TestCase):
             previous = resume.part_key(normal,SETTINGS)
         self.assertEqual(resume.part_key(normal,SETTINGS),previous)
 
+    def test_the_models_menu_choice_invalidates_every_part(self):
+        # the menu picks the files place pictures are made with: a swap re-renders from the first part, like a seed change
+        keys = lambda js, models: [resume.part_key(j, {**SETTINGS, "models": models}) for j in js]
+        rounds = plan(["One.", "Two."])
+        self.assertEqual(keys(rounds, ""), keys(plan(["One.", "Two."]), ""))
+        self.assertTrue(all(x != y for x, y in zip(keys(rounds, ""), keys(rounds, '{"sam3": "other.safetensors"}'))))
+
     def test_a_changed_part_changes_its_key_and_every_later_one(self):
         keys = lambda js: [resume.part_key(j, SETTINGS) for j in js]
         ka = keys(plan(["One.", "Two.", "Three."]))

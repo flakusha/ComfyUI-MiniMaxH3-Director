@@ -4,7 +4,10 @@ queued again, so a run that died after hours only samples the parts it had not f
 A part's key covers what it was made from: its own plan (chunk, prompt, references and the files behind them), the render
 settings, and the keys of every part before it, because a continued part is pinned to the one before. Changing part 5
 renders part 5 and everything after it again; parts 1 to 4 come from disk. The models themselves are not in the key: after
-swapping a checkpoint, delete the folder. The folder is under ComfyUI's output folder, because ComfyUI empties its temp
+swapping a checkpoint, delete the folder. The Models menu choice (`models`) is in the key, because later parts are
+conditioned on the place pictures it picks. A place picture itself is written anew by every render, so its file stamp is
+not in the key: the earlier part it comes from is in the chain, and stamping every run's rewrite would never reuse a part.
+The folder is under ComfyUI's output folder, because ComfyUI empties its temp
 folder at every start, which is exactly when a resume is needed."""
 import hashlib
 import json

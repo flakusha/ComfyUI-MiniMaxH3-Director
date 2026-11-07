@@ -37,7 +37,9 @@ class NGH3Director(io.ComfyNode):
         return io.Schema(node_id="NGH3Director", display_name="H3 Director", category=CATEGORY,
                          description="Plan your project: idea, reusable contexts, editable scenes and timing. Connect Result to H3 Director Output; sampling remains in the downstream graph.",
                          inputs=[NGInputs.Input("context", display_name="context"),
-                                 *NGDirector.define_schema().inputs[:-1],
+                                 # The planner's context wiring (raw cards on the lab node, the Connector here) and its Output
+                                 # switch (each owner declares its own) stay out: this list is the shared planning widgets.
+                                 *[item for item in NGDirector.define_schema().inputs if item.id not in ("contexts", "output")],
                                  # force_input, so it is a socket, not a widget: workflows saved before it keep their
                                  # widget values on the same inputs (test_node's positional-widget trap does not apply).
                                  io.Float.Input("duration_seconds", default=0.0, min=0.0, max=3600.0, step=0.01, optional=True, force_input=True,

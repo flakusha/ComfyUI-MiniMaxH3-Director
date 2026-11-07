@@ -36,11 +36,16 @@ def render_outputs():
 
 
 def split_render_inputs(values):
-    names = ("chunks", "clip", "vae", "audio_vae", "model_fl2va", "model_ref2va")
+    names = ("chunks", "clip", "vae", "audio_vae", "model_fl2va", "model_ref2va", "preview_vae", "model_patch")
     inputs = {name: values[name] for name in names if name in values}
     if not any(inputs.get(name) for name in ("model_fl2va", "model_ref2va")):
         raise ValueError("Connect an H3 model to model_fl2va (text/frames) or model_ref2va (references).")
-    settings = {name: values[name] for name in ("seed", "steps", "sampler_name", "scheduler", "shift_video", "shift_audio")}
+    # The Studio lab node carries the product Director's extras; Render Sequence has no such widgets, so its
+    # values simply lack these keys and the graph keeps its defaults (review F3).
+    settings = {name: values[name] for name in ("seed", "steps", "sampler_name", "scheduler", "shift_video", "shift_audio",
+                                                "turbo", "turbo_lora_fl2va", "turbo_lora_ref2va", "resize_method", "ref_image_size",
+                                                "resume", "resume_delete_done", "control_strength", "control_start", "control_end",
+                                                "models", "output", "spectrum") if name in values}
     return inputs, settings
 
 

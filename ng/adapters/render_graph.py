@@ -124,5 +124,8 @@ def still_sequence(inputs, settings):
 def director_sequence(planning, inputs, settings):
     graph = GraphBuilder()
     director = graph.node("NGDirector", "plan", **planning)
-    expanded, outputs = render_sequence({**inputs, "chunks": director.out(0)}, settings)
+    # The Studio lab node plans through the same planner node; its Output switch picks the stills loop, whose planner
+    # input plans one still per shot (review F3). Both loops return the same four outputs, then the plan strings.
+    sequence = still_sequence if settings.get("output") == "images" else render_sequence
+    expanded, outputs = sequence({**inputs, "chunks": director.out(0)}, settings)
     return {**graph.finalize(), **expanded}, (*outputs, director.out(2), director.out(1))

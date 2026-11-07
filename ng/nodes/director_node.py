@@ -9,6 +9,7 @@ from ..core.context import ContextItem, DirectorContext
 from ..core.limits import DEFAULT_CHUNK_SECONDS, DEFAULT_SOUNDSCAPE, PIN_AUDIO_DEFAULT
 from ..adapters.probe import image_size
 from ..core.project import describe, jobs, plan_project
+from ..core.stills import plan_stills
 from .context_nodes import CATEGORY, NGContext
 
 NGChunk = io.Custom("NG_CHUNK")
@@ -41,6 +42,10 @@ class NGDirector(io.ComfyNode):
                 io.String.Input("music", default="", tooltip="Score of the whole video; N/A for none."),
                 io.String.Input("prepend_text", default="", force_input=True, optional=True, tooltip="Text in front of every prompt, for example LoRA trigger words."),
                 io.Autogrow.Input("contexts", template=contexts, optional=True),
+                # Appended last: older saves keep their widget values. The Studio lab node passes its Output switch
+                # through here, so Pictures plan one still per shot instead of video chunks (review F3).
+                io.Combo.Input("output", options=["video", "images"], default="video", optional=True,
+                               tooltip="Video, or one picture per shot (text to image, or a First frame picture changed as the shot says)."),
             ],
             outputs=[NGChunk.Output(display_name="chunks", is_output_list=True), io.String.Output(display_name="warnings"),
                      io.String.Output(display_name="plan")],
@@ -48,12 +53,17 @@ class NGDirector(io.ComfyNode):
 
     @classmethod
     def execute(cls, idea, shots, project_seconds, chunk_seconds, width, height, mode, continuity, pin_frames,
-                soundscape, music, prepend_text="", contexts=None):
+                soundscape, music, prepend_text="", contexts=None, output="video"):
         items = tuple(c for c in (contexts or {}).values() if isinstance(c, ContextItem))
         context = DirectorContext(idea=idea, project_seconds=project_seconds, width=width, height=height, mode=mode, shots_text=shots,
                                   soundscape=soundscape, music=music, prepend_text=prepend_text or "", items=items)
         plan = ContinuityPlan(mode=continuity, video_frames=int(pin_frames), audio_frames=PIN_AUDIO_DEFAULT)
-        project = plan_project(context, chunk_seconds, plan, image_size)
+        if output == "images":
+            project = plan_stills(context, image_size)
+            if not project.stills:
+                raise ValueError("Pictures: write an idea or a shot; each shot becomes one picture.")
+        else:
+            project = plan_project(context, chunk_seconds, plan, image_size)
         return io.NodeOutput(jobs(project), "\n".join(str(i) for i in project.issues), describe(project))
 
 

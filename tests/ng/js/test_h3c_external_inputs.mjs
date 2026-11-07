@@ -1,0 +1,177 @@
+// Real Context card extension hooks, offline host DOM/API: a linked audio_in mirrors the origin's file into the
+// card's own audio widget, locks the file controls, re-syncs on origin changes and restores the own file on unlink.
+import assert from "node:assert/strict";
+import test from "node:test";
+import { installDom } from "./fake_dom.mjs";
+
+const settle = (ms = 90) => new Promise((resolve) => setTimeout(resolve, ms));
+
+installDom();
+const proto = Object.getPrototypeOf(document.body);
+proto.querySelectorAll = function (selector) { return this.find((node) => selector.split(",").map((v) => v.trim().toUpperCase()).includes(node.tagName)); };
+proto.querySelector = function (selector) { return this.querySelectorAll(selector)[0] || null; };
+proto.pause = function () {};
+globalThis.requestAnimationFrame = () => {};
+const state = { presetNames: ["P"], preset: {} };
+const payloads = (url) => url.includes("/ng/presets") ? { ok: true, names: state.presetNames }
+  : url.includes("/ng/preset?") ? { ok: true, widgets: state.preset }
+  : url.includes("/ng/waveform") ? { ok: true, peaks: [0.5], duration_s: 3, sample_rate: 44100, channels: 2 }
+  : { ok: true };
+let fetches = 0;
+const apiCalls = () => fetches;
+const api = { apiURL: (path) => path, fetchApi: async (url) => { fetches++; return { ok: true, json: async () => payloads(String(url)) }; } };
+const extensions = [];
+globalThis.window = { comfyAPI: { app: { app: { registerExtension: (extension) => extensions.push(extension) } }, api: { api } } };
+await import("../../../js/ng/h3c_card.js");
+const extension = extensions.find((entry) => entry.name === "mmxd.ng.context_cards");
+assert.ok(extension, "execute the actual product extension");
+
+const { values } = await import("../../../js/ng/ng_widgets.js");
+
+function makeCard(widgetValues, comfyClass = "NGContextAudio") {
+  const card = { id: 1, comfyClass, properties: {}, size: [800, 800], inputs: [], outputs: [{ links: [1] }],
+    widgets: Object.entries(widgetValues).map(([name, value]) => ({ name, value, options: { values: [value] } })),
+    setSize(size) { this.size = size; }, setDirtyCanvas() {},
+    addDOMWidget(name, type, root) { this.root = root; const widget = { name, type, serialize: false }; this.widgets.push(widget); return widget; } };
+  const connector = { id: 2, comfyClass: "NGContextConnector", inputs: [{ name: "contexts.0", link: 1 }], widgets: [], outputs: [] };
+  const director = { id: 3, comfyClass: "NGH3Director", inputs: [{ name: "context", link: 2 }], widgets: [] };
+  const all = [card, connector, director];
+  const graph = { _nodes: all, links: { 1: { origin_id: 1, target_id: 2 }, 2: { origin_id: 2, target_id: 3 } },
+    getNodeById: (id) => all.find((node) => node.id === id) };
+  for (const node of all) node.graph = graph;
+  return { card, graph };
+}
+
+function makeLoader(graph, comfyClass, widgets, linkId, title = comfyClass, id = 10 + linkId) {
+  const loader = { id, comfyClass, title, widgets, inputs: [], outputs: [{ links: [] }] };
+  graph._nodes.push(loader);
+  graph.links[linkId] = { origin_id: id, target_id: 1 };
+  return loader;
+}
+
+function link(card, linkId, port = "audio_in") {
+  card.inputs.push({ name: port, link: linkId });
+  card.onConnectionsChange?.();
+}
+
+function unlink(card, linkId, port = "audio_in") {
+  card.inputs.find((entry) => entry.name === port && entry.link === linkId).link = null;
+  card.onConnectionsChange?.();
+}
+
+const fileSelect = (card) => card.root.find((node) => node.attributes?.["aria-label"] === "File")[0];
+const uploadButton = (card) => card.root.find((node) => node.tagName === "BUTTON" && node.innerText === "Upload")[0];
+const chip = (card) => card.root.find((node) => node.classList?.contains("h3c-link"))[0];
+
+const AUDIO_WIDGETS = { audio: "voice.wav", name: "Voice", description: "", content: "voice", usage: "voice", preserve: "high",
+  speaker: "", trim_start: 0.0, trim_end: 0.0, context_id: "ctx_voice", color: "", content_roles: "", usage_roles: "", context_options: "", subject_ids: "" };
+const TEXT_WIDGETS = { text: "card note", name: "Rules", description: "", content: "rules", usage: "rule", preserve: "high",
+  context_id: "ctx_text", color: "", content_roles: "", usage_roles: "", context_options: "", subject_ids: "" };
+
+test("A linked external input owns the card's file: mirror, lock, re-sync, preset filter and restore", async (t) => {
+  const { card, graph } = makeCard({ ...AUDIO_WIDGETS });
+  extension.nodeCreated(card);
+  assert.equal(values(card).audio, "voice.wav");
+  assert.equal(fileSelect(card).disabled, false, "unlinked, the file picker stays editable");
+  assert.equal(chip(card), undefined);
+
+  await t.test("linking mirrors the origin's file, locks the controls and names the origin", async () => {
+    const loader = makeLoader(graph, "LoadAudio", [{ name: "audio", value: "song.wav" }], 7, "Load Audio");
+    link(card, 7);
+    await settle();
+    assert.equal(values(card).audio, "song.wav", "the origin's file is mirrored into the card's own widget");
+    assert.equal(card.properties.ng_external_saved.audio, "voice.wav", "the card's own file is kept for unlink");
+    assert.equal(fileSelect(card).disabled, true, "the file picker locks");
+    assert.equal(uploadButton(card).disabled, true, "Upload locks");
+    assert.match(chip(card).innerText, /Linked · Load Audio · song\.wav/);
+    assert.ok(loader.widgets[0].ngExternalHooked, "the origin widget's callback is wrapped for this card");
+    assert.equal(card.root.find((node) => node.classList?.contains("h3c-warn"))[0], undefined, "no warning while the origin carries a file");
+  });
+
+  await t.test("a saved workflow that loads while linked keeps its stored own file", async () => {
+    const linked = makeCard({ ...AUDIO_WIDGETS, audio: "song.wav" });
+    linked.card.properties.ng_external_saved = { audio: "own.wav" };
+    linked.card.inputs.push({ name: "audio_in", link: 7 });
+    makeLoader(linked.graph, "LoadAudio", [{ name: "audio", value: "song.wav" }], 7, "Load Audio");
+    extension.nodeCreated(linked.card);
+    await settle();
+    assert.equal(values(linked.card).audio, "song.wav");
+    assert.equal(linked.card.properties.ng_external_saved.audio, "own.wav", "the mirror must not overwrite the saved own value");
+    unlink(linked.card, 7);
+    await settle();
+    assert.equal(values(linked.card).audio, "own.wav");
+  });
+
+  await t.test("changing the origin's file re-syncs without any graph event", async () => {
+    const loader = graph._nodes.find((node) => node.comfyClass === "LoadAudio");
+    loader.widgets[0].value = "other.wav";
+    loader.widgets[0].callback("other.wav");
+    await settle();
+    assert.equal(values(card).audio, "other.wav", "the mirror follows the origin");
+    assert.match(chip(card).innerText, /other\.wav/);
+    const before = apiCalls();   // baseline only once the mirror has fully settled
+    await settle(250);
+    assert.equal(apiCalls(), before, "the mirror settles: no render/request loop keeps running");
+  });
+
+  await t.test("loading a preset on a linked card skips the file key", async () => {
+    state.preset = { audio: "preset.wav", name: "From preset", description: "A preset." };
+    const load = card.root.find((node) => node.tagName === "BUTTON" && node.innerText === "Load")[0];
+    assert.ok(load && !load.disabled, "the preset list arrived, Load is enabled");
+    load.onclick();
+    await settle();
+    assert.equal(values(card).name, "From preset", "the preset's name lands");
+    assert.equal(values(card).audio, "other.wav", "the preset's file never overwrites the linked one");
+  });
+
+  await t.test("unlinking restores the card's previous own file", async () => {
+    const loader = graph._nodes.find((node) => node.comfyClass === "LoadAudio");
+    unlink(card, 7);
+    await settle();
+    assert.equal(values(card).audio, "voice.wav", "the value captured at connect time comes back");
+    assert.equal(card.properties.ng_external_saved?.audio, undefined);
+    assert.equal(fileSelect(card).disabled, false, "the picker unlocks");
+    assert.equal(uploadButton(card).disabled, false);
+    assert.equal(chip(card), undefined, "the link chip is gone");
+    assert.equal(loader.widgets[0].ngExternalWatch.size, 0, "this card unsubscribed from the origin");
+  });
+
+  await t.test("a linked origin without a file warns and leaves the card's value alone", async () => {
+    makeLoader(graph, "EmptyAudio", [{ name: "sample_rate", value: 44100 }, { name: "duration", value: 3 }], 8);
+    link(card, 8);
+    await settle();
+    assert.equal(values(card).audio, "voice.wav", "nothing to mirror; the card's own file stays");
+    assert.ok(card.root.find((node) => node.classList?.contains("h3c-warn")).length >= 1, "chip and status warn");
+    assert.match(card.root.innerText, /carries no file/);
+    assert.match(chip(card).innerText, /EmptyAudio/);
+    assert.equal(graph._nodes.find((node) => node.comfyClass === "LoadAudio").widgets[0].ngExternalWatch.size, 0,
+      "the old origin stays unsubscribed; the new one has no file widget to watch");
+  });
+});
+
+test("A linked text_in is the note: shown read-only, the card's own text untouched", async (t) => {
+  const { card, graph } = makeCard({ ...TEXT_WIDGETS }, "NGContextText");
+  extension.nodeCreated(card);
+  const editor = () => card.root.find((node) => node.attributes?.["aria-label"] === "Note")[0];
+  assert.equal(editor().disabled, false);
+
+  await t.test("linking shows the origin's text read-only", async () => {
+    makeLoader(graph, "PrimitiveString", [{ name: "string", value: " STYLE: noir. " }], 7, "Primitive String");
+    link(card, 7, "text_in");
+    await settle();
+    assert.equal(editor().disabled, true, "the note editor locks");
+    assert.equal(editor().value, " STYLE: noir. ", "the linked text is shown");
+    assert.equal(values(card).text, "card note", "the card's own text is not mirrored over");
+    const insert = card.root.find((node) => node.tagName === "BUTTON" && node.innerText.startsWith("+ "))[0];
+    insert.onclick();
+    assert.equal(values(card).text, "card note", "quick insert does not edit a linked note");
+    assert.match(card.root.innerText, /note is linked/);
+  });
+
+  await t.test("unlinking brings the own note back", async () => {
+    unlink(card, 7, "text_in");
+    await settle();
+    assert.equal(editor().disabled, false);
+    assert.equal(editor().value, "card note");
+  });
+});

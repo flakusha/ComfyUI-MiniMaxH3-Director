@@ -8,29 +8,39 @@ import { videoUpload } from "./h3c_upload.js";
 export const box = (caption, ...children) => h("div", { class: "h3c-box" }, caption ? h("div", { class: "h3c-cap" }, caption) : null, ...children);
 const cap = (text, ...tools) => h("div", { class: "h3c-cap" }, text, h("span", { class: "h3c-grow" }), ...tools);
 
-// Name, file (with ComfyUI's own upload) and whether the AI has looked at this card.
+// Name, file (with ComfyUI's own upload) and whether the AI has looked at this card. A linked external input
+// (audio_in and friends) greys the file controls out and shows where the card's file comes from.
 export function topRow(S, actions) {
   const name = h("input", { class: "h3c-in", value: S.values.name || "", placeholder: `Name, e.g. ${S.media === "image" ? "Alice" : S.media === "audio" ? "Alice voice" : "Camera move"}`,
     "aria-label": "Name", oninput: (event) => actions.set("name", event.target.value, false) });
   const badge = h("span", { class: S.analyzed ? "h3c-badge done" : "h3c-badge" }, S.analyzed ? "✦ Analyzed" : "Not analyzed");
   if (S.media === "text") return h("div", { class: "h3c-row" }, h("div", { style: { flex: "1 1 auto", display: "grid" } }, name), badge);
   // minWidth 0: a select is as wide as its longest file name and pushed Upload over the badge (user 2026-10-19)
-  const file = h("select", { class: "h3c-in", style: { flex: "1 1 auto", minWidth: "0" }, "aria-label": "File", onchange: (event) => actions.set(S.media, event.target.value) },
+  const linked = Boolean(S.external?.linked);
+  const file = h("select", { class: "h3c-in", style: { flex: "1 1 auto", minWidth: "0" }, "aria-label": "File",
+    title: linked ? "Linked; the origin card owns the file." : undefined,
+    onchange: (event) => actions.set(S.media, event.target.value) },
     S.files.map((value) => h("option", { value }, value)));
   file.value = S.values[S.media] || "";
+  file.disabled = linked;
+  const link = linked ? h("span", { class: "h3c-link" + (S.external.file ? "" : " h3c-warn"), title: "Linked; the origin card owns the file." },
+    `Linked · ${S.external.label || "?"}${S.external.file ? ` · ${S.external.file}` : ""}`) : null;
   const gear = CARD_MODELS[S.media] ? h("button", { class: "h3c-btn", title: "Models this card uses", "aria-label": "Models",
     "aria-pressed": String(Boolean(S.modelsOpen)), onclick: actions.toggleModels }, icon("gear", 14)) : null;
   return h("div", { class: "h3c-grid", style: { gridTemplateColumns: "minmax(0,1fr) minmax(0,1.2fr) auto" } }, name,
-    h("div", { class: "h3c-row", style: { flexWrap: "nowrap" } }, file,
-      S.media === "video" ? videoUpload(S, actions) : h("button", { class: "h3c-btn", style: { flex: "0 0 auto" }, onclick: actions.upload }, "Upload")),
+    h("div", { class: "h3c-col" },
+      h("div", { class: "h3c-row", style: { flexWrap: "nowrap" } }, file,
+        S.media === "video" ? videoUpload(S, actions) : h("button", { class: "h3c-btn", style: { flex: "0 0 auto" }, disabled: linked, onclick: actions.upload }, "Upload")), link),
     h("div", { class: "h3c-row", style: { flexWrap: "nowrap" } }, badge, S.media === "image" ? editButton(S, actions) : null, gear));
 }
 
 // The editor (h3c_editor.js): mask, structure picture, character sheet. Lit while the card has an edit mask.
+// Locked while the card's picture is linked: the editor creates new files and would silently unmirror the card.
 function editButton(S, actions) {
-  const masked = Boolean(S.opts?.edit_mask);
-  return h("button", { class: masked ? "h3c-btn on" : "h3c-btn", title: masked ? "Edit: this card has an edit mask" : "Edit: mask, structure, character sheet",
-    "aria-label": "Edit picture", disabled: !S.values.image, onclick: actions.openEditor }, icon("brush", 14));
+  const masked = Boolean(S.opts?.edit_mask), linked = Boolean(S.external?.linked);
+  return h("button", { class: masked ? "h3c-btn on" : "h3c-btn", title: linked ? "Linked; the origin card owns the picture."
+      : masked ? "Edit: this card has an edit mask" : "Edit: mask, structure, character sheet",
+    "aria-label": "Edit picture", disabled: !S.values.image || linked, onclick: actions.openEditor }, icon("brush", 14));
 }
 
 // The card's Models menu (gear in the top row): which file each extra model of this card is (ng_models.js).

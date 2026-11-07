@@ -111,11 +111,14 @@ class Execution(unittest.TestCase):
 
     def test_audio_context_reads_its_length_and_speaker(self):
         saved = self.context_nodes.probe.duration_seconds
+        saved_decode = self.context_nodes.trimmed_audio
         self.context_nodes.probe.duration_seconds = lambda source: 7.5
+        self.context_nodes.trimmed_audio = lambda source, start_s=0.0, end_s=0.0: {"waveform": None, "sample_rate": 0}
         try:
-            (item,) = self.out("NGContextAudio", audio="v.wav", name="V", description="", content="voice", usage="voice", preserve="high", speaker=" Alice ")
+            item = self.out("NGContextAudio", audio="v.wav", name="V", description="", content="voice", usage="voice", preserve="high", speaker=" Alice ")[0]
         finally:
             self.context_nodes.probe.duration_seconds = saved
+            self.context_nodes.trimmed_audio = saved_decode
         self.assertEqual((item.length_s, item.speaker, item.usage), (7.5, "Alice", ("voice",)))
 
     def test_replacing_a_file_changes_the_cache_key_of_its_context_node(self):
@@ -134,7 +137,7 @@ class Execution(unittest.TestCase):
         finally:
             if os.path.exists(path):
                 os.remove(path)
-        self.assertEqual(self.nodes["NGContextAudio"].fingerprint_inputs(audio="not there.wav"), "missing")
+        self.assertEqual(self.nodes["NGContextAudio"].fingerprint_inputs(audio="not there.wav"), "missing:0.0:0.0")
 
     def test_text_context_keeps_the_text(self):
         (item,) = self.out("NGContextText", text="Keep the camera slow.", name="", description="", content="rules", usage="style", preserve="high")

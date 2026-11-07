@@ -15,8 +15,10 @@ export async function videoSource(api, source) {
 export function videoUpload(S, actions) {
   const input = h("input", { type: "file", accept: "video/*", "aria-label": "Upload video", hidden: true,
     onchange: (event) => { const file = event.target.files?.[0]; if (file) actions.uploadVideo(file); } });
+  const linked = Boolean(S.external?.linked);
   return h("span", { class: "h3c-row", style: { flex: "0 0 auto" } }, input,
-    h("button", { class: "h3c-btn", disabled: Boolean(S.busy), onclick: () => input.click() }, "Upload"));
+    h("button", { class: "h3c-btn", disabled: Boolean(S.busy) || linked, title: linked ? "Linked; the origin card owns the video." : undefined,
+      onclick: () => input.click() }, "Upload"));
 }
 
 export async function uploadVideo(api, file) {

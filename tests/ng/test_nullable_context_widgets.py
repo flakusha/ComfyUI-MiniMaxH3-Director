@@ -49,7 +49,8 @@ class NullableContextWidgets(unittest.TestCase):
         self.assertFalse(missing)
         nested = self.io.build_nested_inputs({key: entries[0] for key, entries in values.items()}, v3)
         self.assertEqual(nested[field], value)
-        with patch.object(self.node_module.probe, "duration_seconds", return_value=5.0):
+        with patch.object(self.node_module.probe, "duration_seconds", return_value=5.0), \
+                patch.object(self.node_module, "trimmed_audio", return_value={"waveform": None, "sample_rate": 0}):
             return asyncio.run(self.execution._async_map_node_over_list("audit", "context", node, values, "execute", v3_data=v3))[0].args[0]
 
     def test_real_runtime_none_links_produce_unset_text(self):

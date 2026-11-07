@@ -1001,6 +1001,16 @@ Every picture, video, sound and note is a **card**: an H3 Context node connected
 - Where a card is used shows in the Director's shots and lanes. A card that no shot uses is part of every render part.
 - **Preset** (save and load the card's settings) and **Color**.
 
+### A file from another node
+
+Every card has one extra input socket on its left: **image**, **video**, **audio** or **text**. Connect **Load Image**,
+**Load Video**, **Load Audio** — or another card — and the linked file becomes the card's file: the card shows it, the
+waveform follows it, and the renders use it. While linked, **Upload** and the file picker are locked and a *Linked*
+chip names the origin. Change the file on the origin and the card follows; remove the link and the card's previous
+file comes back. The Text card shows the linked text read-only instead of its own note. A link whose origin carries
+no file (a generated or recorded sound, for example) shows a warning and a run stops until a file is picked on the
+origin; the card's own range, name and description stay editable either way.
+
 ### Image
 
 ![H3 Context Image](js/guide/images/wf2-card-image.jpg)

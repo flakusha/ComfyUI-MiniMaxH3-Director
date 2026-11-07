@@ -19,6 +19,10 @@ const CSS = `
 .h3c-btn.ai:hover:not(:disabled){background:#2A2346}
 .h3c-in{background:#0E1117;border:1px solid #2E3848;border-radius:8px;min-height:30px;padding:0 8px;min-width:0}
 .h3c-in:focus{outline:2px solid #8FC1FF;outline-offset:1px}
+.h3c-in:disabled{opacity:.45;cursor:not-allowed}
+.h3c-col{display:flex;flex-direction:column;gap:4px;min-width:0}
+.h3c-link{display:block;border:1px solid #2E4B6E;border-radius:999px;padding:1px 8px;font-size:11px;color:#8FC1FF;background:#0E1622;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.h3c-link.h3c-warn{border-color:#5A4028;color:#F2B98A}
 textarea.h3c-in{padding:8px 10px;line-height:1.45;resize:vertical;width:100%}
 .h3c-chk{display:flex;align-items:center;gap:8px;min-height:26px;cursor:pointer;border:0;background:transparent;padding:0 4px;text-align:left;border-radius:6px;width:100%}
 .h3c-chk:hover{background:#1C2330}

@@ -8,9 +8,11 @@ import { CARD_MODELS, modelState } from "./ng_models.js";
 import { mediaURL, imageBlock, videoBlock, videoSoundBox, audioBlock, listenBox, wirePlayback, moveHeads } from "./h3c_media.js";
 import { textBody } from "./h3c_text.js";
 import { lyricsBox, stampLine } from "./h3c_lyrics.js";
+import { transcribeBox } from "./h3c_transcribe.js";
 import { values, applyValues, newContextId, ownIdentity, analysisFingerprint, request, followNodeWidth } from "./ng_widgets.js";
 import { contextOptions, setOptions, selectedRoles } from "./ng_context_controls.js";
 import { hideNative } from "./ng_editor_fields.js";
+import { externalSource, watchOrigin } from "./ng_external.js";
 import { contextProvider, relatedContexts } from "./ng_read.js";
 import { downstreamNodes } from "./ng_graph.js";
 import { aiAction } from "./ng_ai_request.js";
@@ -66,7 +68,7 @@ function layout(S, actions) {
   if (S.media === "video") parts.push(videoBlock(S, actions), two(contentBox(S, actions), usageBox(S, actions)), controlBox(S, actions), suggestionBox(S, actions),
     S.usage === "control" ? null : two(videoSoundBox(S, actions), ownerBox(S, actions, "E.g. a walk cycle for a figure.")), descriptionBox(S, actions));
   if (S.media === "audio") parts.push(audioBlock(S, actions), two(contentBox(S, actions), usageBox(S, actions)), suggestionBox(S, actions),
-    two(speakerBox(S, actions), listenBox(S, actions)), lyricsBox(S, actions), descriptionBox(S, actions));
+    two(speakerBox(S, actions), listenBox(S, actions)), transcribeBox(S, actions), lyricsBox(S, actions), descriptionBox(S, actions));
   if (S.media === "text") parts.push(...textBody(S, actions));
   parts.push(presetRow(S, actions), statusLine(S));
   return parts.filter(Boolean);
@@ -117,6 +119,46 @@ function attach(node, media) {
     say(`Another card already had ${changes.name ? `the name “${before.name}”` : "this ID"}; this card is now ${changes.name ? `“${changes.name}”` : "its own"}.`, true);
   }
 
+  // The linked external input (audio_in and friends) owns the card's file: mirror the origin's file into the
+  // media widget, lock the card's file controls, and keep the card's own value for the day the link is removed.
+  // Synced on every render; the origin widget's callback re-syncs this card when it changes.
+  let unwatch = null;
+  const externalLinked = () => Boolean(S.external?.linked);
+  function syncExternal() {
+    const before = S.external;
+    S.external = externalSource(node, media);
+    if (!S.external.linked) {
+      if (before?.linked) {
+        // the link is gone: the card's previous own file comes back and the card is self-contained again
+        const saved = node.properties.ng_external_saved?.[media];
+        const widget = node.widgets?.find((entry) => entry.name === media);
+        if (saved != null && widget && widget.value !== saved) applyValues(node, { [media]: saved });
+        if (node.properties.ng_external_saved) delete node.properties.ng_external_saved[media];
+        S.status = ""; S.statusWarn = false;
+      }
+      unwatch?.(); unwatch = null;
+      return;
+    }
+    if (!before?.linked) {
+      // freshly linked: the card's own file steps aside before the mirror writes over it. A saved workflow that
+      // loads while linked already carries the saved own value in its properties - keep it, don't store the mirror.
+      node.properties.ng_external_saved ||= {};
+      if (!(media in node.properties.ng_external_saved)) node.properties.ng_external_saved[media] = S.values[media] ?? "";
+    }
+    unwatch?.(); unwatch = null;
+    if (S.external.origin) unwatch = watchOrigin(S.external.origin, media === "text" ? null : media, schedule);
+    if (media === "text") {
+      // no mirror: the backend receives the linked string itself; an empty one falls back to the card's own note
+      if (!S.external.file && !S.busy) { S.status = "The linked text is empty; the card's own note is used until the origin says something."; S.statusWarn = false; }
+      return;
+    }
+    if (S.external.file && S.external.file !== S.values[media]) {
+      applyValues(node, { [media]: S.external.file });
+      S.values = values(node);
+    }
+    if (!S.external.file && !S.busy) { S.status = `Linked ${S.external.label || "node"} carries no file - pick one on it; a run would stop here.`; S.statusWarn = true; }
+  }
+
   function load() {
     S.values = values(node);
     S.opts = contextOptions(node);
@@ -129,6 +171,18 @@ function attach(node, media) {
     const entries = relatedContexts(node), current = assetSubjects({ widgets: S.values });
     S.owners = { current, choices: assetChoices(entries, current, S.values.context_id) };
     S.speakers = subjectChoices(entries, S.values.speaker || "");
+    if (media === "audio") {
+      const linked = (name) => (node.inputs || []).some((entry) => entry.widget?.name === name && entry.link != null);
+      S.trimLinked = { start: linked("trim_start"), end: linked("trim_end") };
+      // the range the card plays: a linked Trim value wins over the stored one (0 = unset), matching the node's execute
+      S.trim = { start: Number(S.values.trim_start) > 0 ? Number(S.values.trim_start) : (S.opts.start_s || 0),
+        end: Number(S.values.trim_end) > 0 ? Number(S.values.trim_end) : (S.opts.end_s || 0) };
+      // a LINKED 0 means "the file end" to the link's author, but the node's fold reads the stored options first;
+      // keep them equal to the linked values so card and run can never disagree
+      if ((S.trimLinked.start || S.trimLinked.end) && (S.opts.start_s !== S.trim.start || S.opts.end_s !== S.trim.end))
+        setOptions(node, { start_s: S.trim.start, end_s: S.trim.end });
+    }
+    syncExternal();
     S.files = (node.widgets?.find((widget) => widget.name === media)?.options?.values || []).slice();
     if (S.values[media] && !S.files.includes(S.values[media])) S.files.unshift(S.values[media]);
     S.accent = /^#[0-9a-f]{6}$/i.test(S.values.color || "") ? S.values.color : FAMILY[node.comfyClass].color;
@@ -166,11 +220,13 @@ function attach(node, media) {
       applyValues(node, { [name]: value }); node.graph?.change?.(); if (!redraw) S.values = values(node);
     },
     upload() {
+      if (externalLinked()) return say("The file is linked; the origin card owns it.", true);
       const widget = node.widgets?.find((entry) => entry.name === "upload" || entry.name === "choose file to upload");
       if (widget?.callback) widget.callback(); else say("Use ComfyUI's file upload for this node type.", true);
     },
     async uploadVideo(file) {
       if (S.busy) return;
+      if (externalLinked()) return say("The video is linked; the origin card owns it.", true);
       S.busy = "upload-video"; const before = JSON.stringify(values(node)); say("Uploading video …");
       try {
         const uploaded = await uploadVideo(api, file);
@@ -184,15 +240,20 @@ function attach(node, media) {
     setKeep(key, level) { setOptions(node, { preserve: { ...contextOptions(node).preserve, [key]: level } }); },
     setOptions(changes) { setOptions(node, changes); },
     controlKind(kind) {
+      if (externalLinked()) return say("The video is linked; control flows need the card's own file.", true);
       const opts = contextOptions(node);
       if (opts.control_original && opts.control_result === values(node).video) applyValues(node, { video: opts.control_original });
       setOptions(node, { control_kind: kind, control_original: "", control_result: "", control_mask: "" });
     },
     controlEngine(engine) { S.depthEngine = engine; render(); },
-    openEditor() { openPictureEditor(node, api, (text, warn) => { if (text) say(text, warn); else render(); }); },
+    openEditor() {
+      if (externalLinked()) return say("The picture is linked; the origin card owns it.", true);
+      openPictureEditor(node, api, (text, warn) => { if (text) say(text, warn); else render(); });
+    },
     setMask(file) { setOptions(node, { control_mask: file, control_result: values(node).video }); },
     async uploadMask(file) {
       if (S.busy) return;
+      if (externalLinked()) return say("The video is linked; the origin card owns it.", true);
       S.busy = "upload-mask"; const before = JSON.stringify(values(node)); say("Uploading mask …");
       try {
         const uploaded = await uploadMask(api, file);
@@ -203,6 +264,7 @@ function attach(node, media) {
     },
     async generateControl() {
       if (S.busy || !values(node).video) return;
+      if (externalLinked()) return say("The video is linked; the origin card owns it.", true);
       S.busy = "control"; say("Generating control video through ComfyUI's queue …");
       const before = JSON.stringify(values(node)), opts = contextOptions(node);
       const source = (opts.control_result === values(node).video && opts.control_original) || values(node).video, kind = opts.control_kind || "canny";
@@ -224,7 +286,12 @@ function attach(node, media) {
           ? "The installed Depth Anything 3 package cannot import DepthAnything3Net. Choose MoGe 2 or repair that package; this card was kept." : error.message, true);
       } finally { S.busy = false; if (!removed) render(); }
     },
-    setRange(start, end) { setOptions(node, { start_s: start, end_s: end }); },
+    setRange(start, end) {
+      // the audio card keeps the range in its Trim widgets (the node folds them into context_options at run time);
+      // the stored copy follows so an unlinked drag and a linked value never disagree on the fallback
+      if (media === "audio") { applyValues(node, { trim_start: start, trim_end: end }); setOptions(node, { start_s: start, end_s: end }); }
+      else setOptions(node, { start_s: start, end_s: end });
+    },
     setOwner(id) { applyValues(node, { subject_ids: JSON.stringify(id ? [id] : []) }); node.graph?.change?.(); },
     setListen(key, value) { node.properties.ng_preview_settings[key] = value; S.listen = node.properties.ng_preview_settings; render(); },
     beginPointer() { S.dragging = true; },
@@ -242,7 +309,9 @@ function attach(node, media) {
       if (!name) return;
       try {
         const data = await request(api, "/ng/preset?" + new URLSearchParams({ media, name }));
-        applyValues(node, data.widgets); node.properties.ng_preset_name = S.presetName = name; say(`Loaded preset “${name}”.`);
+        const widgets = { ...data.widgets };
+        if (externalLinked()) delete widgets[media];   // the link owns the file; a preset's file must not overwrite it
+        applyValues(node, widgets); node.properties.ng_preset_name = S.presetName = name; say(`Loaded preset “${name}”.`);
         keepOwnIdentity(true);
       } catch (error) { say(error.message, true); }
     },
@@ -292,14 +361,45 @@ function attach(node, media) {
       setOptions(node, { lyrics: result.text }); render();
       queueMicrotask(() => { S.els.lyrics?.focus(); S.els.lyrics?.setSelectionRange(result.caret, result.caret); });
     },
+    // Decision 3: the provider's audio model is a second hearing beside Whisper, which stays the one
+    // clock. The card's range (or the whole file) goes out; the plain words come back and are shown for
+    // review - only acceptTranscript writes the Lyrics, so nothing is ever replaced silently.
+    async transcribe() {
+      const provider = contextProvider(node);
+      if (!provider || S.busy || !values(node).audio) return;
+      if (provider.source === "clip") { say("Transcription needs a provider that accepts audio (input_audio); the connected CLIP encoder has no audio input. ⟳ Time with Whisper writes down the words instead.", true); return; }
+      S.busy = "transcribe"; S.transcript = null; controller = new AbortController(); say("");
+      const before = JSON.stringify(values(node));
+      try {
+        const data = await request(api, "/ng/transcribe", { media, widgets: values(node), provider,
+          start_s: S.trim?.start || 0, end_s: S.trim?.end || 0 }, controller.signal);
+        if (JSON.stringify(values(node)) !== before) { say("The card changed while the AI was listening; its answer was discarded. Transcribe again.", true); return; }
+        if (!String(data.text || "").trim()) say("The AI heard nothing it could write down.", true);
+        else S.transcript = data.text;
+      } catch (error) { say(error.message === "AI action cancelled." ? "AI cancelled, nothing changed." : `Transcribe failed: ${error.message}`, error.message !== "AI action cancelled."); }
+      finally { S.busy = ""; controller = null; render(); }
+    },
+    acceptTranscript() {
+      const text = String(S.els.transcript?.value ?? S.transcript ?? "").replace(/\r\n?/g, "\n").trim();
+      S.transcript = null;
+      if (!text) { say("The transcript is empty; the lyrics were left alone.", true); return; }
+      setOptions(node, { lyrics: text });
+      say("Lyrics set from the transcript, without times. ⟳ Time with Whisper adds when each line is sung.");
+      render();
+    },
+    discardTranscript() { S.transcript = null; render(); },
     cancel() { controller?.abort(); },
     setNote(text) { applyValues(node, { text }); S.values = values(node); },
     insert(key) {
+      if (externalLinked()) return say("The note is linked; the origin node owns it.", true);
       const editor = S.els.editor, text = values(node).text || "", at = editor?.selectionStart ?? text.length, end = editor?.selectionEnd ?? at, token = `[${key}]`;
       actions.setNote(text.slice(0, at) + token + text.slice(end)); render();
       queueMicrotask(() => { S.els.editor?.focus(); S.els.editor?.setSelectionRange(at, at + token.length); });
     },
-    useTemplate(name) { const text = values(node).text || "", body = TEMPLATES[name] || ""; actions.setNote(text.trim() ? `${text}\n${body}` : body); render(); },
+    useTemplate(name) {
+      if (externalLinked()) return say("The note is linked; the origin node owns it.", true);
+      const text = values(node).text || "", body = TEMPLATES[name] || ""; actions.setNote(text.trim() ? `${text}\n${body}` : body); render();
+    },
   };
 
   // Redraw everything; the field being typed in gets its focus and caret back by its place among the fields.
@@ -388,11 +488,12 @@ function attach(node, media) {
   document.addEventListener("ng-context-changed", outside);
   const gone = node.onRemoved;
   node.onRemoved = function (...args) {
-    removed = true; clearTimeout(timer); controller?.abort(); watcher?.disconnect(); S.els.audio?.pause(); S.els.video?.pause?.(); S.els.original?.pause?.(); S.els.mask?.pause?.();
+    removed = true; unwatch?.(); clearTimeout(timer); controller?.abort(); watcher?.disconnect(); S.els.audio?.pause(); S.els.video?.pause?.(); S.els.original?.pause?.(); S.els.mask?.pause?.();
     document.removeEventListener("ng-context-changed", outside); return gone?.apply(this, args);
   };
   // A file dragged onto the card goes through ComfyUI's own upload of this node (the same as dropping it on a Load Image).
   if (media !== "text") dropTarget(root, async (event) => {
+    if (externalLinked()) return say("The file is linked; drop it on the origin card instead.", true);
     if (!(node.onDragOver?.(event) && await node.onDragDrop?.(event))) say(`Drop a ${media} file here.`, true);
   });
   // The card shows its own picture or video. ComfyUI's preview of the upload widget would come below it, and in Vue mode

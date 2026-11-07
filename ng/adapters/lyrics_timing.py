@@ -6,12 +6,12 @@ import os
 import re
 import struct
 
-import av
 import folder_paths
 import numpy as np
 
 from ..core import lyrics
 from . import model_files
+from .audio_decode import decode_audio
 from .preview_media import require_path
 
 try:
@@ -126,16 +126,9 @@ def _load_model(path, device):
 
 
 def _samples(path):
-    """The song as Whisper reads it, 16 kHz mono float, decoded here so no ffmpeg on PATH is needed."""
-    chunks = []
-    with av.open(path) as container:
-        if not container.streams.audio:
-            raise ValueError("Choose a source containing audio.")
-        resampler = av.AudioResampler(format="flt", layout="mono", rate=whisper.audio.SAMPLE_RATE)
-        for frame in container.decode(container.streams.audio[0]):
-            chunks.extend(sound.to_ndarray().reshape(-1) for sound in resampler.resample(frame))
-        chunks.extend(sound.to_ndarray().reshape(-1) for sound in resampler.resample(None))
-    return np.concatenate(chunks).astype(np.float32) if chunks else np.zeros(0, np.float32)
+    """The song as Whisper reads it, 16 kHz mono float, decoded through the shared decoder (adapters/audio_decode)."""
+    wave, _ = decode_audio(path, rate=16000, layout="mono")
+    return wave.reshape(-1).numpy().astype(np.float32)
 
 
 def time_lyrics(source, text, device, chosen=""):

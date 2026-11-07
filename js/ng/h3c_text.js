@@ -7,10 +7,13 @@ import { usageBox, ownerBox, suggestionBox } from "./h3c_parts.js";
 export const CHARACTER_LIMIT = 2000;
 
 export function textBody(S, actions) {
-  const text = S.values.text || "", story = S.usage === "scene";
+  // a linked text_in is the note: shown read-only, the card's own text stays untouched underneath
+  const linked = Boolean(S.external?.linked);
+  const text = (linked ? S.external?.file || "" : S.values.text || ""), story = S.usage === "scene";
   const editor = h("textarea", { class: "h3c-in h3c-editor", rows: 9, value: text, spellcheck: false, "aria-label": "Note",
-    placeholder: "A story, a rule or a look, in any language. [character] marks a part to fill in; @Name points at a connected Context.",
-    oninput: (event) => actions.setNote(event.target.value) });
+    placeholder: linked ? "" : "A story, a rule or a look, in any language. [character] marks a part to fill in; @Name points at a connected Context.",
+    disabled: linked, title: linked ? "Linked; the origin node owns this text." : undefined,
+    oninput: linked ? null : (event) => actions.setNote(event.target.value) });
   S.els.editor = editor;
   const template = h("select", { class: "h3c-in", style: { flex: "1 1 auto" }, "aria-label": "Template" },
     Object.keys(TEMPLATES).map((name) => h("option", { value: name }, name)));

@@ -32,8 +32,9 @@ function rangeDrag(S, actions, total, onPreview, player) {
 const clamp = (t, a, b) => Math.max(a, Math.min(b, t));
 // Playback stays inside the chosen part, so a seek does too.
 function seek(S, player, t) {
-  const end = S.opts.end_s || player.duration || 0;
-  player.currentTime = clamp(t, S.opts.start_s || 0, Math.max(S.opts.start_s || 0, end - 0.05));
+  const start = S.trim ? (S.trim.start || 0) : (S.opts.start_s || 0);
+  const end = S.trim ? (S.trim.end || player.duration || 0) : (S.opts.end_s || player.duration || 0);
+  player.currentTime = clamp(t, start, Math.max(start, end - 0.05));
 }
 
 // Where playback is: a line over the strip or waveform that follows the player (moveHeads) and can be dragged to look or
@@ -112,12 +113,17 @@ function drawWave(canvas, envelope, range) {
 export function audioBlock(S, actions) {
   const audio = S.els.audio, envelope = S.envelope;
   if (!S.values.audio) return h("div", { class: "h3c-box" }, h("span", { class: "h3c-hint" }, "Choose or upload a sound file."));
-  const total = envelope?.duration_s || 0, range = [S.opts.start_s || 0, S.opts.end_s || total];
+  const total = envelope?.duration_s || 0;
+  const linked = S.trimLinked || { start: false, end: false }, locked = linked.start || linked.end;
+  // the card shows the range as the node plays it: a linked Trim value wins, otherwise the dragged one
+  const range = [S.trim?.start || 0, S.trim?.end || total];
   const canvas = h("canvas", { width: 720, height: 72 });
   drawWave(canvas, envelope, range);
   const sel = total ? selection(range, total) : null;
-  const wave = h("div", { class: "h3c-wave", title: "Drag to choose the part of the file this card stands for; click to move the playhead",
-    onpointerdown: rangeDrag(S, actions, total, (r) => { drawWave(canvas, envelope, r); sel.style.left = `${r[0] / total * 100}%`; sel.style.width = `${(r[1] - r[0]) / total * 100}%`; }, audio) },
+  const wave = h("div", { class: "h3c-wave",
+    title: locked ? "The range is set by a connected Trim start/end input and cannot be dragged here" : "Drag to choose the part of the file this card stands for; click to move the playhead",
+    style: locked ? { opacity: "0.55", cursor: "default" } : undefined,
+    onpointerdown: locked ? null : rangeDrag(S, actions, total, (r) => { drawWave(canvas, envelope, r); sel.style.left = `${r[0] / total * 100}%`; sel.style.width = `${(r[1] - r[0]) / total * 100}%`; }, audio) },
     canvas, sel, total ? playhead(S, total, audio) : null);
   const info = envelope ? `${clock(total)} · ${(envelope.sample_rate / 1000).toFixed(1)} kHz · ${envelope.channels === 2 ? "stereo" : `${envelope.channels} ch`}` : S.waveError || "Reading the waveform …";
   return h("div", { class: "h3c-box" },
@@ -125,7 +131,8 @@ export function audioBlock(S, actions) {
       onclick: () => (audio.paused ? audio.play().catch(() => {}) : audio.pause()) }, audio.paused ? "▶" : "❚❚"),
     h("span", { class: "h3c-lbl" }, info), h("span", { class: "h3c-grow" }),
     total ? h("span", { class: "h3c-lbl" }, `Selected: ${clock(range[0])} – ${clock(range[1])} (${(range[1] - range[0]).toFixed(1)} s)`) : null),
-    wave, h("span", { class: "h3c-hint" }, "On an audio lane the Studio places this part and can start later in the file."));
+    wave, h("span", { class: "h3c-hint" }, locked ? "The range comes from connected Trim start/end inputs; the card mirrors them read-only."
+      : "On an audio lane the Studio places this part and can start later in the file."));
 }
 
 export function listenBox(S, actions) {

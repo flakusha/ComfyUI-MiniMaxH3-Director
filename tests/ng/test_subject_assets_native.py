@@ -52,14 +52,18 @@ class NativeAssetPresentation(unittest.TestCase):
         self.assertEqual([item["type"] for item in encoder.presentation], ["audio", "video", "audio"])
         self.assertIn("<Audio 1> is the soundtrack of <Video 1>", encoder.prompt)
 
-    def test_native_schema_and_execute_consume_relationships_without_media_inputs(self):
+    def test_native_schema_and_execute_consume_relationships_without_extra_media_inputs(self):
+        """Subject cards keep their relationship wiring; the only media-typed input is the card's own external
+        socket (`image_in`/`video_in`), whose link mirrors the origin's file into the media combo."""
         nodes = load_full_pack().NODE_CLASS_MAPPINGS
+        own_port = {"Image": {"IMAGE"}, "Video": {"VIDEO"}, "Text": set()}
         for kind in ("Image", "Video", "Text"):
             node = nodes["NGContext" + kind]
             inputs = {item.id: item for item in node.GET_SCHEMA().inputs}
             self.assertTrue(inputs["subject_ids"].optional)
             self.assertEqual(inputs["subject_ids"].io_type, "STRING")
-            self.assertFalse({"IMAGE", "VIDEO", "AUDIO"} & {item.io_type for item in inputs.values()})
+            self.assertEqual({"IMAGE", "VIDEO", "AUDIO"} & {item.io_type for item in inputs.values()}, own_port[kind],
+                             "the card's own external socket is the only media-typed input")
         item = nodes["NGContextImage"].execute(image="coat.png", name="Coat", description="", content="outfit", usage="reference",
               preserve="high", context_id="coat", subject_ids='["alice","bob"]').args[0]
         self.assertEqual(item.subject_ids, ("alice", "bob"))

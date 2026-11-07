@@ -64,13 +64,18 @@ class ProductNodes(unittest.TestCase):
                          ["MODEL", "CONDITIONING", "CONDITIONING", "LATENT", "FLOAT", "INT", "INT", "STRING", "NG_DIRECTOR_RESULT", "INT",
                           "INT", "FLOAT", KSampler.SAMPLERS, KSampler.SCHEDULERS, "SAMPLER", "SIGMAS", "VAE"])
 
-    def test_media_contexts_load_files_directly_without_external_media_ports(self):
+    def test_media_contexts_load_files_directly_with_one_external_port(self):
+        """Each media card keeps its file combo (and upload) and gains exactly one optional typed socket
+        (`audio_in`/`video_in`/`image_in`) whose connection mirrors the origin's file into the combo."""
+        own_port = {"image": "IMAGE", "video": "VIDEO", "audio": "AUDIO"}
         for media in ("image", "video", "audio"):
             schema = self.nodes["NGContext" + media.title()].GET_SCHEMA()
             inputs = {value.id:value for value in schema.inputs}
             self.assertEqual(inputs[media].io_type, "COMBO")
             self.assertIsNotNone(inputs[media].upload)
-            self.assertFalse({"IMAGE", "VIDEO", "AUDIO"} & {value.io_type for value in schema.inputs})
+            self.assertEqual({"IMAGE", "VIDEO", "AUDIO"} & {value.io_type for value in schema.inputs}, {own_port[media]},
+                             "the card's own external socket is the only media-typed input")
+            self.assertTrue(inputs[media + "_in"].optional)
             self.assertNotIn("source_revision", inputs)
         self.assertNotIn("NGHTTPContextAnalysis", self.nodes)
 

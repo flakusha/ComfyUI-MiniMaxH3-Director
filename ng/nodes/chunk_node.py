@@ -90,7 +90,7 @@ class NGChunkConditioning(io.ComfyNode):
         if apply_sigma_shift:
             shifted = mm.MiniMaxH3SigmaShift.execute(model=model, shift_video=float(shift_video), shift_audio=float(shift_audio))
             model = getattr(shifted, "args", shifted)[0]
-        model = audio_locks.bind_source(model, job, audio_vae)
+        model = audio_locks.bind_source(model, job, built.lock)
         return io.NodeOutput(model, built.positive, built.latent, job.compiled.prompt)
 
 

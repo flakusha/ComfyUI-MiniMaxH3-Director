@@ -26,10 +26,15 @@ class AudioLockStages(unittest.TestCase):
         self.jobs = project.jobs(result)
         self.model = ModelPatcher(torch.nn.Linear(1, 1), torch.device("cpu"), torch.device("cpu"))
         self.vae = object()
+        # what the conditioning build hands to the sampler: the lock's encode and its spans
+        self.encoded = torch.arange(178, dtype=torch.float32)[None, None, None, :].expand(1, 32, 2, 178)
+        self.spans = [(2.0, 7.0)]
+        self.lock = (self.encoded, self.spans)
 
-    def held(self, mm, latent, refs, frames, vae):
-        self.assertIs(vae, self.vae)
-        self.assertEqual(refs, self.jobs[1].compiled.of_kind("lock"))
+    def held(self, latent, encoded, spans, fps):
+        self.assertIs(encoded, self.encoded)
+        self.assertEqual(spans, tuple(self.spans))
+        self.assertEqual(fps, 40)
         video, audio = latent["samples"].unbind()
         value = torch.arange(audio.shape[-1], dtype=audio.dtype)[None, None, None, :].expand_as(audio)
         mask = torch.ones_like(audio)
@@ -48,8 +53,8 @@ class AudioLockStages(unittest.TestCase):
         def native(*args, **kw):
             calls.append((args, kw))
             return args[1] + 10  # partial schedule output retains noise in held positions
-        with patch.object(self.adapter, "_hold_locked_audio", side_effect=self.held):
-            bound = self.adapter.bind_source(self.model, job, self.vae)
+        with patch.object(self.adapter, "lock_audio_latent", side_effect=self.held):
+            bound = self.adapter.bind_source(self.model, job, self.lock)
             wrappers = bound.get_all_wrappers(WrappersMP.OUTER_SAMPLE)
             executor = WrapperExecutor.new_executor(native, wrappers)
             for sigmas in (torch.tensor([1.0, 0.5]), torch.tensor([0.5, 0.0])):
@@ -73,19 +78,19 @@ class AudioLockStages(unittest.TestCase):
     def test_no_lock_keeps_the_original_model_and_an_existing_wrapper_survives(self):
         marker = lambda *args: None
         self.model.add_wrapper_with_key(WrappersMP.OUTER_SAMPLE, "another_extension", marker)
-        self.assertIs(self.adapter.bind_source(self.model, self.jobs[2], self.vae), self.model)
-        bound = self.adapter.bind_source(self.model, self.jobs[0], self.vae)
+        self.assertIs(self.adapter.bind_source(self.model, self.jobs[2], self.lock), self.model)
+        bound = self.adapter.bind_source(self.model, self.jobs[0], self.lock)
         self.assertIsNot(bound, self.model)
         self.assertIn(marker, bound.get_all_wrappers(WrappersMP.OUTER_SAMPLE))
-        again = self.adapter.bind_source(bound, self.jobs[1], self.vae)
+        again = self.adapter.bind_source(bound, self.jobs[1], self.lock)
         self.assertEqual(len(again.get_wrappers(WrappersMP.OUTER_SAMPLE, "ng_audio_lock")), 1)
 
     def test_source_is_applied_when_a_sampler_omits_the_noise_mask(self):
         video = torch.zeros(1, 24, 32, 4, 4)
         audio = torch.full((1, 32, 2, 178), 99.0)
         packed, shapes = pack_latents((video, audio))
-        with patch.object(self.adapter, "_hold_locked_audio", side_effect=self.held):
-            bound = self.adapter.bind_source(self.model, self.jobs[1], self.vae)
+        with patch.object(self.adapter, "lock_audio_latent", side_effect=self.held):
+            bound = self.adapter.bind_source(self.model, self.jobs[1], self.lock)
             wrapper = bound.get_wrappers(WrappersMP.OUTER_SAMPLE, "ng_audio_lock")[0]
             args = wrapper(lambda *args, **kw: args, packed, packed, None, torch.tensor([1.0, 0.0]), None, None, False, 0,
                            latent_shapes=shapes)
@@ -94,17 +99,35 @@ class AudioLockStages(unittest.TestCase):
         self.assertTrue(torch.all(am[..., :59] == 0))
         self.assertTrue(torch.all(am[..., 59:] == 1))
 
+    def test_the_restore_reuses_the_parts_encode_instead_of_encoding_at_sampling_time(self):
+        # The 2026-11-06 multi-part freeze: the restore derived its own held audio at every sampler call,
+        # decoding the source file and running the audio VAE while the diffusion model streamed its weights back in.
+        # The wrapper must restore from the encode the conditioning build carried in, and nothing else.
+        video = torch.zeros(1, 24, 32, 4, 4)
+        audio = torch.full((1, 32, 2, 178), 99.0)
+        packed, shapes = pack_latents((video, audio))
+        self.assertNotIn("audio_vae", self.adapter.AudioLockSource.__dataclass_fields__)
+        with patch.object(self.builder, "_encode_locked_audio",
+                          side_effect=AssertionError("the lock must be encoded once, where the part is built")):
+            bound = self.adapter.bind_source(self.model, self.jobs[1], self.lock)
+            wrapper = bound.get_wrappers(WrappersMP.OUTER_SAMPLE, "ng_audio_lock")[0]
+            args = wrapper(lambda *a, **k: a, packed, packed, None, torch.tensor([1.0, 0.0]), None, None, False, 0,
+                           latent_shapes=shapes)
+        _, restored = unpack_latents(args[1], shapes)
+        self.assertTrue(torch.equal(restored[..., 80:], self.encoded[..., 80:]))
+        self.assertTrue(torch.all(restored[..., :80] == 99.0))
+
     def test_conditioning_node_binds_the_current_chunk_to_its_returned_model(self):
         pack = load_full_pack()
         node = pack.NODE_CLASS_MAPPINGS["NGChunkConditioning"]
         import sys
         owner = sys.modules["mmxd_full_pack.ng.nodes.chunk_node"]
-        built = self.builder.BuiltChunk([], {}, 0, ())
+        built = self.builder.BuiltChunk([], {}, 0, (), self.lock)
         with patch.object(owner.chunk_builder, "build_chunk", return_value=built), patch.object(owner, "core"), \
              patch.object(owner.audio_locks, "bind_source", return_value="bound") as bind:
             out = node.execute(self.jobs[0], object(), object(), audio_vae=self.vae, model_fl2va=self.model, apply_sigma_shift=False)
         self.assertEqual(out.args[0], "bound")
-        bind.assert_called_once_with(self.model, self.jobs[0], self.vae)
+        bind.assert_called_once_with(self.model, self.jobs[0], self.lock)
 
 
 if __name__ == "__main__":

@@ -7,17 +7,22 @@ from comfy.patcher_extension import WrappersMP
 from comfy.utils import pack_latents, unpack_latents
 
 from ...minimax_core import core
+from ...minimax_director import lock_audio_latent
 from ..core.limits import FPS
 from . import media
-from .chunk_builder import _hold_locked_audio
 from .latents import validate_chunk
 
 
 @dataclass(frozen=True)
 class AudioLockSource:
-    refs: tuple
+    """Restores one part's locked audio from the encode its conditioning build already made (chunk_builder lock).
+    Deriving it here again decoded the whole source file and ran the audio VAE at every sampler call, while the
+    diffusion model was streaming its own weights back in - on a memory-starved GPU that interleaving is exactly the
+    load the multi-part renders froze under (2026-11-06), and the result was the same encode every time."""
+
+    encoded: object
+    spans: tuple
     sampled_frames: int
-    audio_vae: object
 
     def __call__(self, executor, *args, **kwargs):
         # OUTER_SAMPLE sees native packed latents before latent-format normalization.
@@ -28,7 +33,7 @@ class AudioLockSource:
         video, audio = unpack_latents(values[1], shapes)
         latent = {"samples": NestedTensor((video, audio))}
         validate_chunk(latent, self.sampled_frames, "Audio lock")
-        held = _hold_locked_audio(core(), latent, self.refs, self.sampled_frames, self.audio_vae)
+        held = lock_audio_latent(latent, self.encoded, self.spans, core().AUDIO_LATENT_FPS)
         source = held["samples"].unbind()[1].to(audio)
         video_mask, audio_mask = held["noise_mask"].unbind()
         restored = torch.where(audio_mask.to(audio.device) == 0, source, audio)
@@ -39,14 +44,14 @@ class AudioLockSource:
         return executor(*values, **kwargs)
 
 
-def bind_source(model, job, audio_vae):
-    refs = job.compiled.of_kind("lock")
-    if not refs:
+def bind_source(model, job, lock):
+    if not job.compiled.of_kind("lock"):
         return model
     bound = model.clone()
     bound.remove_wrappers_with_key(WrappersMP.OUTER_SAMPLE, "ng_audio_lock")
+    encoded, spans = lock
     bound.add_wrapper_with_key(WrappersMP.OUTER_SAMPLE, "ng_audio_lock",
-                               AudioLockSource(refs, job.chunk.sampled_frames, audio_vae))
+                               AudioLockSource(encoded, tuple(spans), job.chunk.sampled_frames))
     return bound
 
 

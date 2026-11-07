@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **A locked song is encoded once per render part, not again at the sampler's start** (2026-11-06, user report).
+  The audio-lock restore rebuilt the very held audio the conditioning build had already made: at every
+  sampler call of every part it decoded the whole source file again and ran the audio VAE exactly while the
+  diffusion model was streaming its weights back in after the part-boundary reload - and a multi-part music
+  video froze there every time, its log going silent right after the model's "prepared for dynamic VRAM loading"
+  line (three attempts on a 24 GB RX 7900 XTX holding a 10 GB resident text encoder under a 21 GB staged model;
+  kern.log shows the card's SDMA rings timing out and the device leaving the bus under the same renders, which
+  no node code can promise to prevent). The restore now runs on the encode the build carries with the part -
+  plain tensor math on resident data - so a part's sampling starts with no extra model loaded and no source
+  file read. The audio itself is byte for byte what it was: the encode inputs never differed between the two
+  calls.
+
 - **A song's [mm:ss] stamps reach the planning** (user report, 2026-11-06). 0008 carried an audio card's words into
   the planning, but read them through the Whisper-alignment helper, which strips the leading `[mm:ss]` stamp from every
   line - so the planner saw the words without their times and could not pace its beats and lines by them. The words now

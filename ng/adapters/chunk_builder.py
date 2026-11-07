@@ -22,6 +22,9 @@ class BuiltChunk:
     latent: dict
     trim_frames: int
     dropped_anchors: tuple
+    # the part's encoded audio lock as (latent, spans): the sampling-time restore (adapters/audio_locks.py) reuses
+    # it instead of encoding the locked audio again while the diffusion model is streaming its own weights in
+    lock: tuple = None
 
 
 def _first_two(out):
@@ -125,14 +128,15 @@ def _locked_waveform(locks, sampled_frames, sample_rate, steps_per_second=None):
     return {"waveform": track.clamp(-1, 1), "sample_rate": sample_rate}
 
 
-def _hold_locked_audio(mm, latent, locks, sampled_frames, audio_vae):
+def _encode_locked_audio(mm, locks, sampled_frames, audio_vae):
+    """The locked clips as one encoded audio latent and their spans. Every use inside one part wants this same
+    result, so the part encodes it once where it is built and the sampler's restore reuses that (adapters/audio_locks.py)."""
     if audio_vae is None:
         raise ValueError("an audio item is set to lock, which needs the audio VAE: connect minimax_h3_audio_vae to 'audio_vae'")
     # Built at the VAE's own rate, so whole latent steps are whole samples (32 kHz / 40 = 800) and no resampling rounds them.
     mix = _locked_waveform(locks, sampled_frames, getattr(audio_vae, "audio_sample_rate", legacy.AUDIO_SR), mm.AUDIO_LATENT_FPS)
     encoded, _ = mm._encode_ref_audio(audio_vae, mix)
-    spans = [(r.start_f / float(FPS), (r.start_f + r.length_f) / float(FPS)) for r in locks]
-    return lock_audio_latent(latent, encoded, spans, mm.AUDIO_LATENT_FPS)
+    return encoded, [(r.start_f / float(FPS), (r.start_f + r.length_f) / float(FPS)) for r in locks]
 
 
 def build_chunk(job, clip, vae, audio_vae=None, previous=None, ref_image_size="match", mm=None, resize_method="crop") -> BuiltChunk:
@@ -145,9 +149,12 @@ def build_chunk(job, clip, vae, audio_vae=None, previous=None, ref_image_size="m
     positive, latent = _first_two(out)
     positive = scene_guides.apply_guides(mm, job, positive, latent, vae, audio_vae)
     continuity: ContinuityPlan = job.project.plan.continuity
+    lock = None
     locks = compiled.of_kind("lock")
     if locks:
-        latent = _hold_locked_audio(mm, latent, locks, job.chunk.sampled_frames, audio_vae)
+        encoded, spans = _encode_locked_audio(mm, locks, job.chunk.sampled_frames, audio_vae)
+        latent = lock_audio_latent(latent, encoded, spans, mm.AUDIO_LATENT_FPS)
+        lock = (encoded, spans)
         head_steps = math.ceil(job.chunk.head_frames / float(FPS) * mm.AUDIO_LATENT_FPS)
         if continuity.mode == "video_audio" and any(math.floor(r.start_f / float(FPS) * mm.AUDIO_LATENT_FPS) < head_steps for r in locks):
             continuity = dataclasses.replace(continuity, mode="video")       # a lock inside the head wins over audio carry
@@ -155,8 +162,8 @@ def build_chunk(job, clip, vae, audio_vae=None, previous=None, ref_image_size="m
         latent = continuation_latent.hold_prefix(latent, positive)
         if continuation_latent.uses_sound_prefix(job):
             latent, positive = continuation_latent.hold_sound_prefix(latent, positive)
-        return BuiltChunk(positive, latent, job.chunk.head_frames, ())
+        return BuiltChunk(positive, latent, job.chunk.head_frames, (), lock)
     if not job.chunk.head_frames:
-        return BuiltChunk(positive, latent, 0, ())
+        return BuiltChunk(positive, latent, 0, (), lock)
     positive, trim, dropped = conditioning.pin_previous(positive, latent, previous, continuity)
-    return BuiltChunk(positive, latent, trim, dropped)
+    return BuiltChunk(positive, latent, trim, dropped, lock)

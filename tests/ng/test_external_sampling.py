@@ -121,7 +121,7 @@ class ExternalSampling(unittest.TestCase):
 
     def test_disabled_shift_preserves_the_patched_model_and_default_still_applies_shift(self):
         job, model = self.jobs(self.result())[0], object()
-        built = types.SimpleNamespace(positive=[[torch.zeros(1, 2, 8), {}]], latent=av_latent(job.chunk.sampled_frames))
+        built = types.SimpleNamespace(positive=[[torch.zeros(1, 2, 8), {}]], latent=av_latent(job.chunk.sampled_frames), lock=None)
         shift = types.SimpleNamespace(execute=lambda **kw: types.SimpleNamespace(args=("shifted",)))
         fake_core = types.SimpleNamespace(MiniMaxH3SigmaShift=shift)
         with patch.object(self.chunk_module, "core", return_value=fake_core), \

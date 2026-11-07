@@ -175,6 +175,18 @@ class Placement(unittest.TestCase):
         result = plan([clip("a1", "song", 0, 4, "lock")])
         self.assertEqual([bool(c.of_kind("audio")) or bool(c.of_kind("lock")) for c in result.compiled], [True, False])
 
+    def test_a_lock_song_shorter_than_the_project_is_named(self):
+        # a trimmed lock caps the soundtrack: past the window the parts carry generated sound, so the card is named
+        short = song(usage=("lock",), length_s=5)
+        result = plan([], seconds=20, items=(short,))
+        self.assertIn(("soundtrack_short", "Song"), {(i.code, i.ref) for i in result.issues})
+        long = song(usage=("lock",), length_s=60)
+        self.assertNotIn("soundtrack_short", {i.code for i in plan([], seconds=20, items=(long,)).issues})
+        unknown = song(usage=("copy",), length_s=0)
+        self.assertNotIn("soundtrack_short", {i.code for i in plan([], seconds=20, items=(unknown,)).issues})
+        style = song(usage=("music_style",), length_s=5)
+        self.assertNotIn("soundtrack_short", {i.code for i in plan([], seconds=20, items=(style,)).issues})
+
 
 class PlainNames(unittest.TestCase):
     def test_without_reference_slots_a_mention_is_the_name_and_a_line_names_its_voice(self):

@@ -11,7 +11,7 @@ const TITLES = {
   length_snapped: "Length fitted to H3 grid", late_change: "Change just after a seam", guide_outside_project: "Time outside project",
   content_unknown: "Unknown content", canvas_snapped: "Size on 32 grid", canvas_from_image: "Size from picture",
   canvas_default: "Default size", audio_short: "Audio too short", audio_roles: "Several audio roles", audio_dulling: "Audio gets duller",
-  audio_clip_unknown: "Audio clip without audio Content", audio_clip_clipped: "Audio clip shortened", audio_clip_after_end: "Audio clip after project end", audio_clip_past_file: "Audio clip past file end",
+  audio_clip_unknown: "Audio clip without audio Content", audio_clip_clipped: "Audio clip shortened", audio_clip_after_end: "Audio clip after project end", audio_clip_past_file: "Audio clip past file end", soundtrack_short: "Song shorter than video",
   asset_relation_unavailable: "Assignment not possible",
 };
 

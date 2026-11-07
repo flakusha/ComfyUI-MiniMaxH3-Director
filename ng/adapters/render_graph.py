@@ -74,6 +74,10 @@ def render_sequence(inputs, settings):
         finished = graph.node("MiniMaxH3LatentUpscaleWithModel", "upscale", model=upscale["model"], samples=part,
                               width=upscale["width"], height=upscale["height"]).out(0)
     end = graph.node("EndLoop", "end", output_value=finished, next_iteration_value=part, accumulate=True)
+    # NOTE (review F9): long projects could stream through NGCollectVideo here instead of holding every frame for
+    # NGCollect, but that is not a bool: NGCollectVideo outputs a finished Video file (no images/audio/fps), so the
+    # CreateVideo step and the node's output contract would fork. Until a collect-mode option redesigns those outputs,
+    # long projects hand-build the loop with NGCollectVideo (docs/NG-external-sampling.md).
     collect = graph.node("NGCollect", "collect", latents=end.out(0), chunks=inputs["chunks"],
                          vae=inputs["vae"], audio_vae=inputs["audio_vae"])
     if settings.get("resume", True) and settings.get("resume_delete_done", True):

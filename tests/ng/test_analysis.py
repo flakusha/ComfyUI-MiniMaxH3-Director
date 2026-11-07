@@ -128,10 +128,14 @@ class Suggestions(unittest.TestCase):
         defaults = core.ProviderConfig.from_dict({"schema_version": 1})
         self.assertEqual((defaults.timeout_seconds, defaults.max_tokens, defaults.keep_alive), (120, 512, 0))
         self.assertEqual(core.ProviderConfig.from_dict({"schema_version": 1, "timeout_seconds": 30}).timeout_seconds, 30)
-        for change in ({"timeout_seconds": 0}, {"timeout_seconds": 5000}, {"max_tokens": 12}, {"max_tokens": 99999},
+        for change in ({"timeout_seconds": 0}, {"timeout_seconds": 5000}, {"max_tokens": 12},
+                       {"max_tokens": 200000}, {"max_tokens": 128001},
                        {"keep_alive": -1}, {"timeout_seconds": 12.5}, {"timeout_seconds": "120"}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 core.ProviderConfig.from_dict({"schema_version": 1, **change})
+        for change in ({"max_tokens": 99999}, {"max_tokens": 128000}):
+            self.assertEqual(core.ProviderConfig.from_dict({"schema_version": 1, **change}).max_tokens,
+                             int(change["max_tokens"]))
 
     def test_panel_only_field_is_not_part_of_the_saved_provider(self):
         # `source` steers the cards; a saved workflow must not carry it into the config.

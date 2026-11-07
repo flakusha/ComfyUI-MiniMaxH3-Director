@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **H3 Render Sequence can finish every part at 2x with a learned latent upscaler** (opt-in, 2026-11-07). A new advanced
+  `upscale_2k` toggle with an optional `upscale_model` socket inserts core's `MiniMaxH3LatentUpscaleWithModel` between
+  the sampler and the decode of each part: the picture decodes at twice the canvas, the audio passes through the nested
+  latent untouched, and the next part still pins the base-resolution latent — no re-noising and no changed conditioning,
+  so the decode-only shape stays outside the two-stage upscale contracts that NG-external-sampling.md warns about. The
+  model loads through ComfyUI's own `LatentUpscaleModelLoader` (`models/latent_upscale_models`, which recognises the H3
+  upscaler); toggle on with nothing connected is refused by name instead of quietly rendering 768p, and the Pictures
+  output refuses the finish too. Off, the loop graph is the same node for node.
+
 - **A locked song is encoded once per render part, not again at the sampler's start** (2026-11-06, user report).
   The audio-lock restore rebuilt the very held audio the conditioning build had already made: at every
   sampler call of every part it decoded the whole source file again and ran the audio VAE exactly while the

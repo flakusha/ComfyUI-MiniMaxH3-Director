@@ -67,11 +67,22 @@ class NGProjectRender(io.ComfyNode):
     def define_schema(cls):
         return io.Schema(node_id="NGProjectRender", display_name="H3 Render Sequence", category=CATEGORY,
                          description="Render the complete planned project through ComfyUI's native loop and sampler, with progress and interrupt.",
-                         inputs=[NGResult.Input("sequence")], outputs=render_outputs(), enable_expand=True)
+                         inputs=[NGResult.Input("sequence"),
+                                 io.LatentUpscaleModel.Input("upscale_model", optional=True,
+                                                             tooltip="2K finish: a MiniMax H3 latent upscaler (models/latent_upscale_models) loaded with LatentUpscaleModelLoader. Used only when upscale_2k is on."),
+                                 io.Boolean.Input("upscale_2k", default=False, optional=True, advanced=True,
+                                                  tooltip="Opt-in 2K finish: upscale each part's latent with upscale_model before decode (2x, decode only: audio passes through and the next part still pins the base-resolution latent).")],
+                         outputs=render_outputs(), enable_expand=True)
 
     @classmethod
-    def execute(cls, sequence):
-        graph, outputs = render_project(sequence)
+    def validate_inputs(cls, upscale_2k=False, upscale_model=None):
+        if upscale_2k and upscale_model is None:
+            return "2K finish is on, but no upscaler model is connected: install a MiniMax H3 latent upscaler in models/latent_upscale_models, load it with LatentUpscaleModelLoader and connect it to upscale_model."
+        return True
+
+    @classmethod
+    def execute(cls, sequence, upscale_2k=False, upscale_model=None):
+        graph, outputs = render_project(sequence, upscale_2k=upscale_2k, upscale_model=upscale_model)
         return io.NodeOutput(*outputs, expand=graph)
 
 

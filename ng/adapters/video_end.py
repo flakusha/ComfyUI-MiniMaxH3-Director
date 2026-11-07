@@ -12,6 +12,9 @@ from .probe import video_duration
 
 def tail_frames(source, start_s, end_s, count):
     """Resample a bounded tail at H3's clock, including the actual final source frame."""
+    # NOTE: cloud-API alternative (unapproved, decision 2026-11-07): this tail's last frame as one role=first_frame
+    # image per chunk on POST /v2/video_generation — no continuation endpoint for H3, clips capped at 15 s, and each
+    # clip regenerates its own audio, so speech and music break at every join; local latent prefix stays the baseline.
     path = input_path(source)
     if not path:
         raise ValueError("Choose an existing continuation video: %s" % source)

@@ -65,7 +65,14 @@ def render_sequence(inputs, settings):
         part = graph.node("NGResumeChunk", "resume", chunk=start.out(3), sampled=part, settings=sampled_with).out(0)
     # pictures of this part that later shots take their place from (core/places.py); a pass-through for every other part
     part = graph.node("NGPlaceStill", "place", chunk=start.out(3), sampled=part, vae=inputs["vae"], models=settings.get("models", "")).out(0)
-    end = graph.node("EndLoop", "end", output_value=part, next_iteration_value=part, accumulate=True)
+    finished = part
+    upscale = settings.get("upscale")
+    if upscale is not None:
+        # opt-in 2K finish: decode-only learned upscale per part (audio passes through, no re-noising, no new conditioning);
+        # the next part still pins this base-resolution latent, so pins, places and audio keep their contract
+        finished = graph.node("MiniMaxH3LatentUpscaleWithModel", "upscale", model=upscale["model"], samples=part,
+                              width=upscale["width"], height=upscale["height"]).out(0)
+    end = graph.node("EndLoop", "end", output_value=finished, next_iteration_value=part, accumulate=True)
     collect = graph.node("NGCollect", "collect", latents=end.out(0), chunks=inputs["chunks"],
                          vae=inputs["vae"], audio_vae=inputs["audio_vae"])
     if settings.get("resume", True) and settings.get("resume_delete_done", True):

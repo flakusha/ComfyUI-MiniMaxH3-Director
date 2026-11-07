@@ -95,9 +95,17 @@ def prepare_output(result, chunk_index, previous=None, loop_chunk=None, apply_si
     return graph.finalize(), outputs
 
 
-def render_project(result):
+def render_project(result, upscale_2k=False, upscale_model=None):
     if result.settings.control_strength and control_timing.clips(result.project.context) and result.inputs.model_patch is None:
         raise ValueError("Connect ModelPatchLoader to the Context Connector's model_patch for control clips.")
+    upscale = None
+    if upscale_2k:
+        if upscale_model is None:
+            raise ValueError("2K finish is on, but no upscaler model is connected: install a MiniMax H3 latent upscaler in models/latent_upscale_models, load it with LatentUpscaleModelLoader and connect it to upscale_model.")
+        if result.project.output == "images":
+            raise ValueError("2K finish upscales the video output; the Pictures output has no latent upscale.")
+        context = result.project.context
+        upscale = {"model": upscale_model, "width": context.width * 2, "height": context.height * 2}
     graph = GraphBuilder()
     chunks = graph.node("NGProjectChunks", "chunks", sequence=result)
     inputs = {**result.inputs.links(), "chunks": chunks.out(0), "preview": True}
@@ -106,5 +114,8 @@ def render_project(result):
     if result.inputs.model_patch is not None:
         inputs["model_patch"] = result.inputs.model_patch
     sequence = still_sequence if result.project.output == "images" else render_sequence
-    expanded, outputs = sequence(inputs, result.settings.values())
+    settings = result.settings.values()
+    if upscale is not None:
+        settings = {**settings, "upscale": upscale}
+    expanded, outputs = sequence(inputs, settings)
     return {**graph.finalize(), **expanded}, outputs

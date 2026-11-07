@@ -32,6 +32,9 @@ DEFAULT_CHUNK_SECONDS = 10.0
 FRAME_BUDGET = SAMPLED_MAX_FRAMES * 1280 * 704
 LONG_PART_FRAMES = 719      # 17 * 42 + 5: 29.96 s
 LONG_PART_SECONDS = 30.0
+# NOTE: cloud-API alternative (unapproved, decision 2026-11-07): per-chunk i2va on POST /v2/video_generation caps a
+# clip at 15 s against this local 30 s quality cap and breaks audio at joins; 768P parts could instead be regenerated
+# at 2K afterwards by resubmitting them with one extra role=base_video item.
 
 
 def max_frames(width, height):

@@ -398,6 +398,11 @@ Renders the parts one after another, carries picture and sound across each seam,
 Outputs: *video*, *images* (in Pictures mode), *audio* and *render_warnings*. After a crash, finished parts are kept and
 only the missing ones are rendered again.
 
+**2K finish (opt-in).** Turn on the advanced **upscale_2k** toggle and connect **Load Latent Upscale Model** (a learned
+H3 latent upscaler in `models/latent_upscale_models`) to the **upscale_model** socket: every part is upscaled 2x after
+sampling and decodes at twice the canvas, while the sound passes through unchanged and every seam still pins the
+base-resolution latent. Without a connected model the render is refused with a named error. Off, nothing changes.
+
 ### 5 · Save Video
 
 ![Save Video](js/guide/images/wf2-save.jpg)

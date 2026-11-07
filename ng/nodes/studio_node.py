@@ -51,7 +51,7 @@ class NGDirectorStudio(io.ComfyNode):
                                  io.Float.Input("control_end", default=1.0, min=0.0, max=1.0, step=0.001, optional=True, advanced=True,
                                                 tooltip="End within denoising, not seconds in the video."),
                                  io.String.Input("models", default="", optional=True, advanced=True,
-                                                 tooltip="Files the Studio's Models menu chose for place pictures (JSON); empty: the official names."),
+                                                 tooltip="Files the Studio's Models menu chose for place pictures (JSON); empty: the official names. A swap re-renders from the first part; a checkpoint or card-picture swap reuses stale parts, so delete output/h3-director-resume first."),
                                  io.Combo.Input("output", options=["video", "images"], default="video", optional=True,
                                                 tooltip="Video, or one picture per shot (text to image, or a First frame picture changed as the shot says)."),
                                  io.Boolean.Input("spectrum", default=False, optional=True, advanced=True,

@@ -123,7 +123,8 @@ function modelsSection(S, actions) {
   return [...section("Models", "Every file H3 Director uses: found or missing, and where to download it. H3's own files are chosen in the "
     + "loaders on the left; the extra ones on the card or node that uses them.", modelsList(S.models)),
   ...section("Models for place pictures", "Place pictures: SAM3 finds people, Qwen Image 2.1 paints them out or paints another view. "
-    + "Automatic takes the official file names; choose your own file if yours is renamed or another version.",
+    + "Automatic takes the official file names; choose your own file if yours is renamed or another version. "
+    + "A swap re-renders from the first part; a checkpoint or card-picture swap reuses stale parts, so delete output/h3-director-resume first.",
   modelsMenu(place, chosen, (purpose, file) => actions.setWidget("models", JSON.stringify({ ...chosen, [purpose]: file || undefined })), "h3s"))];
 }
 

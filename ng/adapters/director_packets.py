@@ -60,6 +60,18 @@ class DirectorResult:
     settings: RenderSettings
 
 
+def require_spectrum_pack(settings):
+    """Spectrum forecasting needs the user's own Spectrum pack; without it the run would fail at the unknown node."""
+    if settings.get("spectrum") and not settings.get("turbo"):
+        try:
+            from nodes import NODE_CLASS_MAPPINGS
+        except ImportError:
+            return
+        if "SpectrumApplyMiniMaxH3" not in NODE_CLASS_MAPPINGS:
+            raise ValueError("Spectrum is on, but ComfyUI-Spectrum-MiniMax-H3 is not installed: install "
+                             "xmarre/ComfyUI-Spectrum-MiniMax-H3, or turn Spectrum off (Director, Settings).")
+
+
 def chunk_job(result, chunk_index, loop_chunk=None):
     if loop_chunk is None:
         chunks = jobs(result.project)
@@ -74,6 +86,7 @@ def chunk_job(result, chunk_index, loop_chunk=None):
 
 def prepare_output(result, chunk_index, previous=None, loop_chunk=None, apply_sigma_shift=True, seed=None):
     job = chunk_job(result, chunk_index, loop_chunk)
+    require_spectrum_pack(result.settings.values())
     graph = GraphBuilder()
     inputs = result.inputs.links()
     inputs = turbo_models(graph, {name: value for name, value in inputs.items() if value is not None}, result.settings.values())
@@ -101,6 +114,7 @@ def prepare_output(result, chunk_index, previous=None, loop_chunk=None, apply_si
 
 
 def render_project(result, upscale_2k=False, upscale_model=None):
+    require_spectrum_pack(result.settings.values())
     if result.settings.control_strength and control_timing.clips(result.project.context) and result.inputs.model_patch is None:
         raise ValueError("Connect ModelPatchLoader to the Context Connector's model_patch for control clips.")
     upscale = None

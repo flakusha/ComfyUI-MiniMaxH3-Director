@@ -91,12 +91,13 @@ class NGChunkConditioning(io.ComfyNode):
             shifted = mm.MiniMaxH3SigmaShift.execute(model=model, shift_video=float(shift_video), shift_audio=float(shift_audio))
             model = getattr(shifted, "args", shifted)[0]
         model = audio_locks.bind_source(model, job, built.lock)
-        if built.dropped_anchors:
+        dropped = getattr(built, "dropped_anchors", ())
+        if dropped:
             # guides placed inside the pinned head are removed by the pin (adapters/conditioning.py): name them, so
             # nothing vanishes silently (core/issues.py: nothing is dropped without an Issue naming it)
             log.warning("[NG] chunk %d: dropped %d guide anchor(s) inside the pinned head at frame(s) %s.",
-                        job.index + 1, len(built.dropped_anchors),
-                        ", ".join(str(frame) for frame in built.dropped_anchors))
+                        job.index + 1, len(dropped),
+                        ", ".join(str(frame) for frame in dropped))
         return io.NodeOutput(model, built.positive, built.latent, job.compiled.prompt)
 
 

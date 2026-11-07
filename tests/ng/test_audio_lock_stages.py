@@ -129,6 +129,22 @@ class AudioLockStages(unittest.TestCase):
         self.assertEqual(out.args[0], "bound")
         bind.assert_called_once_with(self.model, self.jobs[0], self.lock)
 
+    def test_dropped_pin_anchors_are_warned_with_chunk_and_frames(self):
+        import logging
+        pack = load_full_pack()
+        node = pack.NODE_CLASS_MAPPINGS["NGChunkConditioning"]
+        import sys
+        owner = sys.modules["mmxd_full_pack.ng.nodes.chunk_node"]
+        dropped = self.builder.BuiltChunk([], {}, 22, (0, 5), None)
+        with patch.object(owner.chunk_builder, "build_chunk", return_value=dropped), patch.object(owner, "core"), \
+             patch.object(owner.audio_locks, "bind_source", return_value="bound"), \
+             self.assertLogs(owner.log, level=logging.WARNING) as logged:
+            node.execute(self.jobs[0], object(), object(), audio_vae=self.vae, model_fl2va=self.model, apply_sigma_shift=False)
+        message = " ".join(logged.output)
+        self.assertIn("chunk 1", message)
+        self.assertIn("0", message)
+        self.assertIn("5", message)
+
 
 if __name__ == "__main__":
     unittest.main()

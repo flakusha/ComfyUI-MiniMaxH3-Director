@@ -177,6 +177,34 @@ class ExternalContextInputs(unittest.TestCase):
             node.execute(audio="", name="", description="", content="voice", usage="voice",
                          preserve="high", speaker="", audio_in=bad_channels)
 
+    def test_execute_pushes_the_materialized_name_to_the_owning_card(self):
+        # The pushed name is content-hashed: the card cannot learn it any other way, and without it Time with
+        # Whisper keeps asking for a run. A mirrored widget needs no push; a missing node id stays silent.
+        import torch
+        from types import SimpleNamespace
+        node = self.node("NGContextAudio")
+        payload = {"waveform": torch.zeros(1, 2, 44100), "sample_rate": 44100}
+        calls = []
+        instance = SimpleNamespace(send_sync=lambda event, data, sid=None: calls.append((event, data, sid)))
+        hidden = SimpleNamespace(unique_id="7")
+
+        def run(audio, hide):
+            with patch("server.PromptServer.instance", instance), \
+                    patch.object(node, "hidden", hide, create=True), \
+                    patch.object(self.module, "trimmed_audio", return_value={"waveform": None, "sample_rate": 0}):
+                return node.execute(audio=audio, name="", description="", content="voice", usage="voice",
+                                    preserve="high", speaker="", audio_in=payload).args[0]
+
+        item = run("", hidden)
+        self.assertEqual(len(calls), 1)
+        event, data, _ = calls[0]
+        self.assertEqual(event, "minimax_h3_ng_audio")
+        self.assertEqual((data["node_id"], data["audio"]), ("7", item.source))
+        run("", None)
+        self.assertEqual(len(calls), 1, "no node id: silent, the run itself still succeeded")
+        run("voice.wav", hidden)
+        self.assertEqual(len(calls), 1, "a mirrored widget needs no push")
+
     def test_a_malformed_payload_names_the_card(self):
         # A linked AUDIO payload the mirror check already passed still has to read: {} and a
         # payload without a waveform name the card instead of raising a raw KeyError.

@@ -19,7 +19,12 @@ const payloads = (url) => url.includes("/ng/presets") ? { ok: true, names: state
   : { ok: true };
 let fetches = 0;
 const apiCalls = () => fetches;
-const api = { apiURL: (path) => path, fetchApi: async (url) => { fetches++; return { ok: true, json: async () => payloads(String(url)) }; } };
+const listeners = new Map();
+const listen = (name, fn) => listeners.set(name, [...(listeners.get(name) || []), fn]);
+const unlisten = (name, fn) => listeners.set(name, (listeners.get(name) || []).filter((entry) => entry !== fn));
+const emit = (name, detail) => { for (const fn of listeners.get(name) || []) fn({ detail }); };
+const api = { apiURL: (path) => path, fetchApi: async (url) => { fetches++; return { ok: true, json: async () => payloads(String(url)) }; },
+  addEventListener: listen, removeEventListener: unlisten };
 const extensions = [];
 globalThis.window = { comfyAPI: { app: { app: { registerExtension: (extension) => extensions.push(extension) } }, api: { api } } };
 await import("../../../js/ng/h3c_card.js");
@@ -209,4 +214,59 @@ test("A trim-era save repairs non-JSON role/options fields on configure", async 
     assert.equal(byName.context_options, "", "a filename in the options field resets");
     assert.equal(byName.usage_roles, "[\"voice\"]", "valid JSON is left alone");
   });
+});
+
+test("A run that saves a linked sound pushes its name into the card's empty widget", async (t) => {
+  const bare = makeCard({ ...AUDIO_WIDGETS, audio: "" });
+  bare.card.id = 4;
+  extension.nodeCreated(bare.card);
+  makeLoader(bare.graph, "EmptyAudio", [{ name: "sample_rate", value: 44100 }], 8);
+  link(bare.card, 8);
+  await settle();
+  assert.equal(values(bare.card).audio, "", "nothing to mirror; the widget stays empty");
+
+  await t.test("another card's push is ignored", async () => {
+    emit("minimax_h3_ng_audio", { node_id: 99, audio: "h3-external/other.flac" });
+    await settle();
+    assert.equal(values(bare.card).audio, "");
+  });
+
+  await t.test("the card's own push lands, previews and clears the warning", async () => {
+    const before = apiCalls();
+    emit("minimax_h3_ng_audio", { node_id: 4, audio: "h3-external/abc123.flac" });
+    await settle();
+    assert.equal(values(bare.card).audio, "h3-external/abc123.flac", "the pushed name becomes the card's file");
+    assert.ok(apiCalls() > before, "the new file previews (waveform request)");
+    assert.match(bare.card.root.innerText, /h3-external\/abc123\.flac/);
+    assert.doesNotMatch(bare.card.root.innerText, /carries no file/, "a saved sound needs no run");
+  });
+
+  await t.test("an occupied widget is never overwritten", async () => {
+    emit("minimax_h3_ng_audio", { node_id: 4, audio: "h3-external/def456.flac" });
+    await settle();
+    assert.equal(values(bare.card).audio, "h3-external/abc123.flac");
+  });
+});
+
+test("The materialized push fills only an empty audio widget of its own card", async () => {
+  const { watchMaterialized } = await import("../../../js/ng/ng_external.js");
+  const heard = [];
+  const events = new Map();
+  const stub = { addEventListener: (name, fn) => events.set(name, fn), removeEventListener: (name) => events.delete(name) };
+  const node = { id: 5, properties: {}, widgets: [{ name: "audio", value: "" }] };
+  const stop = watchMaterialized(node, "audio", stub, (file) => heard.push(file));
+  const fire = events.get("minimax_h3_ng_audio");
+  fire({ detail: { node_id: 5, audio: "h3-external/a.flac" } });
+  assert.deepEqual(heard, ["h3-external/a.flac"]);
+  fire({ detail: { node_id: 6, audio: "h3-external/b.flac" } });
+  fire({ detail: { node_id: 5, audio: 42 } });
+  fire({});
+  node.widgets[0].value = "mirror.wav";
+  fire({ detail: { node_id: 5, audio: "h3-external/c.flac" } });
+  assert.deepEqual(heard, ["h3-external/a.flac"], "wrong card, non-string, empty detail and occupied widgets are ignored");
+  stop();
+  assert.equal(events.has("minimax_h3_ng_audio"), false, "unsubscribe removes the listener");
+  watchMaterialized({ id: 5, properties: {}, widgets: [{ name: "audio", value: "" }] }, "image", stub, (file) => heard.push(file));
+  events.get("minimax_h3_ng_audio")({ detail: { node_id: 5, audio: "h3-external/d.flac" } });
+  assert.deepEqual(heard, ["h3-external/a.flac"], "image cards never take an audio push");
 });

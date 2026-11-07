@@ -9,7 +9,7 @@ import { stampLine, deviceNote } from "./h3c_lyrics.js";
 import { values, applyValues, newContextId, ownIdentity, analysisFingerprint, request, followNodeWidth } from "./ng_widgets.js";
 import { contextOptions, setOptions, selectedRoles } from "./ng_context_controls.js";
 import { hideNative } from "./ng_editor_fields.js";
-import { externalSource, watchOrigin } from "./ng_external.js";
+import { externalSource, watchOrigin, watchMaterialized } from "./ng_external.js";
 import { contextProvider, relatedContexts } from "./ng_read.js";
 import { downstreamNodes } from "./ng_graph.js";
 import { aiAction } from "./ng_ai_request.js";
@@ -130,7 +130,7 @@ function attach(node, media) {
       applyValues(node, { [media]: S.external.file });
       S.values = values(node);
     }
-    if (!S.external.file && !S.busy) { S.status = `Linked ${S.external.label || "node"} carries no file - ` + (media === "audio" ? "run the card once so Whisper can hear it." : "pick one on it; a run would stop here."); S.statusWarn = true; }
+    if (!S.external.file && !String(S.values[media] || "").startsWith("h3-external/") && !S.busy) { S.status = `Linked ${S.external.label || "node"} carries no file - ` + (media === "audio" ? "run the card once so Whisper can hear it." : "pick one on it; a run would stop here."); S.statusWarn = true; }
   }
 
   function load() {
@@ -477,9 +477,10 @@ function attach(node, media) {
   };
   const outside = () => { followRenames(); schedule(); };
   document.addEventListener("ng-context-changed", outside);
+  const stopSound = watchMaterialized(node, media, api, (file) => { applyValues(node, { [media]: file }); say(""); });
   const gone = node.onRemoved;
   node.onRemoved = function (...args) {
-    removed = true; unwatch?.(); clearTimeout(timer); controller?.abort(); watcher?.disconnect(); S.els.audio?.pause(); S.els.video?.pause?.(); S.els.original?.pause?.(); S.els.mask?.pause?.();
+    removed = true; unwatch?.(); stopSound?.(); clearTimeout(timer); controller?.abort(); watcher?.disconnect(); S.els.audio?.pause(); S.els.video?.pause?.(); S.els.original?.pause?.(); S.els.mask?.pause?.();
     document.removeEventListener("ng-context-changed", outside); return gone?.apply(this, args);
   };
   // A file dragged onto the card goes through ComfyUI's own upload of this node (the same as dropping it on a Load Image).

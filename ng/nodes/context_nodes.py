@@ -110,6 +110,21 @@ def _linked_length(audio_in):
     return float(wave.shape[-1]) / rate
 
 
+def _notify_materialized(node_cls, name):
+    """Tell the owning card its linked sound now has a file: the name is content-hashed, so the card cannot
+    learn it any other way, and without it Time with Whisper keeps asking for a run. A failed push stays
+    silent - the run itself already succeeded, and the next run pushes again."""
+    try:
+        from server import PromptServer
+        node_id = str(getattr(getattr(node_cls, "hidden", None), "unique_id", None) or "")
+        if not node_id:
+            return
+        client_id = getattr(PromptServer.instance, "client_id", None)
+        PromptServer.instance.send_sync("minimax_h3_ng_audio", {"node_id": node_id, "audio": name}, client_id)
+    except (AttributeError, OSError, RuntimeError):
+        pass
+
+
 def _linked_float(value):
     """A linked trim arrives as None when the upstream is not a constant; that means unset, not 0."""
     return float(value or 0.0)
@@ -192,7 +207,8 @@ class NGContextAudio(io.ComfyNode):
                                                   tooltip="The selected range as sound, in the file's own rate and channels; wire it into "
                                                           "CreateVideo's audio when no generated soundtrack is used."),
                                   io.Float.Output(display_name="max duration",
-                                                  tooltip="Seconds the selected range can play: the number to keep project_seconds under.")])
+                                                  tooltip="Seconds the selected range can play: the number to keep project_seconds under.")],
+                         hidden=[io.Hidden.unique_id])
 
     @classmethod
     def fingerprint_inputs(cls, audio, trim_start=0.0, trim_end=0.0, context_options="", **_):
@@ -224,9 +240,12 @@ class NGContextAudio(io.ComfyNode):
         # a linked audio gives the exact length from its payload; the file header probe stays the unlinked path.
         # The trims stay independent of the link: they cut the mirrored file whatever card it came from.
         if audio_in is not None:
+            mirror = str(audio or "").strip()
             audio = _linked_file(audio, "audio", audio_in)
             widgets["audio"] = audio
             length_s = _linked_length(audio_in)
+            if not mirror:
+                _notify_materialized(cls, audio)
         else:
             length_s = probe.duration_seconds(audio.replace(" [input]", ""))
         cut_start, cut_end = trim_window.check_window(start_s, end_s, length_s)

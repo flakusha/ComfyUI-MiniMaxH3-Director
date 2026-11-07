@@ -4,6 +4,7 @@
 // which every consumer (previews, waveform, lyrics, fingerprints, the Studio panel) already reads, and locks its
 // file controls while the link holds. Text needs no mirror: the backend receives the string itself.
 import { upstreamNode } from "./ng_read.js";
+import { values } from "./ng_widgets.js";
 
 // Schema ids must be unique next to the widgets they drive (a second input named like the widget is rejected),
 // so the ports carry the `_in` suffix and only the display label shows the plain medium.
@@ -52,4 +53,17 @@ export function watchOrigin(origin, media, notify) {
   }
   widget.ngExternalWatch.add(notify);
   return () => widget.ngExternalWatch.delete(notify);
+}
+
+// A run saved the card's linked sound to input/h3-external/ and pushed its name: the name is content-hashed,
+// so the card cannot learn it any other way. Keep it as the card's file while the widget is still empty, so
+// Whisper (and the next run) reads it; an occupied widget (mirror, user file) is never overwritten.
+// Audio-only: other media always mirror a file already. Returns the unsubscribe call.
+export function watchMaterialized(node, media, api, apply) {
+  const savedSound = ({ detail = {} }) => {
+    const file = typeof detail.audio === "string" && detail.audio;
+    if (media === "audio" && file && String(detail.node_id ?? "") === String(node.id) && !values(node)[media]) apply(file);
+  };
+  api.addEventListener?.("minimax_h3_ng_audio", savedSound);
+  return () => api.removeEventListener?.("minimax_h3_ng_audio", savedSound);
 }

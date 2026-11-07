@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **A song's [mm:ss] stamps reach the planning** (user report, 2026-11-06). 0008 carried an audio card's words into
+  the planning, but read them through the Whisper-alignment helper, which strips the leading `[mm:ss]` stamp from every
+  line - so the planner saw the words without their times and could not pace its beats and lines by them. The words now
+  travel with their stamps: the shot planner (Auto Direct, Make H3 prompt) is given each line exactly as the card
+  stores it, the Sound line names the stamp as a time to pace by and not words to copy, and cards without lyrics
+  change nothing byte for byte. Timed Lock or Copy songs are unchanged - the compiler still places those lines per
+  part.
 - **Cancel now stops a panel AI request even though it runs outside the queue** (2026-11-06, user report). 0007 watched
   ComfyUI's interrupt flag, but that flag is only ever raised for a queued prompt: the Studio's Analyze, Direct, Plan,
   Write and Storyboard buttons with a real provider (e.g. llama-swap) run in plain HTTP routes, so clicking Cancel

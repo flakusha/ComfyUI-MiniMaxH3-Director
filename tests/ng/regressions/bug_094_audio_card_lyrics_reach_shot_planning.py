@@ -44,10 +44,11 @@ def audio_card(usage, lyrics_text, context_id="audio_song"):
 
 
 class WidgetLyrics(unittest.TestCase):
-    def test_the_words_survive_their_stamps_and_an_untimed_line_is_kept(self):
-        """plain_lines strips stamps and the language tag; words without times stay usable words."""
+    def test_the_words_carry_their_stamps_and_an_untimed_line_is_kept(self):
+        """Each line keeps its stamp (BUG-095: the planner's timing information); the language tag goes,
+        and words without times stay usable words."""
         self.assertEqual(context_build.widget_lyrics(audio_card("voice", TIMED)["widgets"]),
-                         ["My master, where did you go", "I wait in the hall"])
+                         ["[00:01.00] My master, where did you go", "[00:05.00] I wait in the hall"])
         self.assertEqual(context_build.widget_lyrics(audio_card("voice", UNTIMED)["widgets"]),
                          ["Words that no Whisper ever timed", "A second plain line"])
 
@@ -64,7 +65,7 @@ class Meanings(unittest.TestCase):
         """The card's meaning is what the AI plans the shots from; without the words a Voice or Music style
         card reached it nameless (the report: filling Lyrics changed nothing)."""
         meaning = auto_direct._meanings([audio_card("voice", TIMED)])[0]
-        self.assertEqual(meaning["lyrics"], ["My master, where did you go", "I wait in the hall"])
+        self.assertEqual(meaning["lyrics"], ["[00:01.00] My master, where did you go", "[00:05.00] I wait in the hall"])
         self.assertEqual(meaning["usage"], "voice")
 
     def test_green_control_cards_without_lyrics_gain_no_key(self):

@@ -80,6 +80,16 @@ def plain_lines(text):
     return out
 
 
+def stamped_lines(text):
+    """Each lyric line with its [mm:ss] stamps kept; the language tag and blank lines dropped.
+
+    The stamps are the plan's timing information (BUG-095): they say when each line is heard in the song file,
+    so the AI planners pace beats and lines by them. plain_lines stays for the Whisper alignment, which must
+    see the words only. A stamped pause line (a stamp with no words) is kept - it too says when something is."""
+    return [line for line in (raw.strip() for raw in (text or "").splitlines())
+            if line and not LANGUAGE_RE.match(line)]
+
+
 def _tokens(text):
     return re.findall(r"\w+", text.lower())
 

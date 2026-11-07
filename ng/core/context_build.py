@@ -22,18 +22,18 @@ def widget_text(widgets, key):
 
 
 def widget_lyrics(widgets):
-    """An audio card's own words, stamps and language tag removed; [] without lyrics.
+    """An audio card's own words, one line each with its [mm:ss] stamp; [] without lyrics.
 
     The card keeps its words in context_options as LRC text; these are what the AI helpers (split into shots,
     Make H3 prompt) plan the shots from, next to the description - the one audio field beyond it that says WHAT
-    the sound says (BUG-094: on a card that does not play exactly, the default Voice or a Music style, the timed
-    path in lyrics.story_lines never sees them, and they reached no prompt at all)."""
+    the sound says (BUG-094) and WHEN (BUG-095: 094 first carried the words but plain_lines dropped their
+    stamps, the timing the planner paces its beats by). lyrics.story_lines keeps its own timed path."""
     try:
         options = json.loads(widgets.get("context_options") or "{}")
     except ValueError:
         return []
     text = options.get("lyrics") if isinstance(options, dict) else None
-    return lyrics.plain_lines(text) if isinstance(text, str) else []
+    return lyrics.stamped_lines(text) if isinstance(text, str) else []
 
 
 def card_words(entries, played=False):

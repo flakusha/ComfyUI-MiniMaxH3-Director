@@ -55,7 +55,8 @@ class ProductNodes(unittest.TestCase):
         self.assertEqual(inputs["vae"].io_type, "VAE")
         self.assertEqual(inputs["ai_provider"].io_type, "NG_AI_PROVIDER")
         director_outputs = self.nodes["NGH3Director"].GET_SCHEMA().outputs
-        self.assertEqual([value.io_type for value in director_outputs], ["NG_DIRECTOR_RESULT", "NG_CHUNK"])
+        self.assertEqual([value.io_type for value in director_outputs], ["NG_DIRECTOR_RESULT", "NG_CHUNK", "FLOAT"])
+        self.assertEqual(director_outputs[-1].id, "length_seconds")
         self.assertTrue(director_outputs[1].is_output_list)
         outputs = self.nodes["NGDirectorOutput"].GET_SCHEMA().outputs
         from comfy.samplers import KSampler

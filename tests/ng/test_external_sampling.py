@@ -43,13 +43,15 @@ class ExternalSampling(unittest.TestCase):
 
     def test_director_provides_the_whole_list_without_evaluating_model_links(self):
         director = self.director()
-        result, chunks = director.args
+        result, chunks, length_seconds = director.args
         out = self.nodes["NGDirectorOutput"].execute(result)
         self.assertIs(out.args[8], result)
         self.assertEqual([job.index for job in chunks], [0, 1, 2])
         self.assertTrue(all(job.project is result.project for job in chunks))
         self.assertEqual(result.inputs.model_fl2va, ["fl", 0])
         self.assertIsNone(director.expand)
+        # the real delivered length: 12s asked, the grid the parts landed on answered
+        self.assertGreater(length_seconds, 0)
         self.assertTrue(self.nodes["NGH3Director"].GET_SCHEMA().outputs[1].is_output_list)
 
     def test_the_directors_sampling_settings_reach_an_external_sampler(self):

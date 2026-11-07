@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **The Director's length can be wired in, and the real length comes out** (2026-11-06). The H3 Director's Length
+  was a widget only: no node could feed a desired duration in, and nothing reported the length the plan actually
+  delivers - the video snaps to H3's 17k+5 frame grid, so it can differ from the request by a fraction of a second.
+  A connection-only `duration_seconds` socket now overrides the Length widget when it carries a value above zero
+  (zero, a None from a bypassed node, or an unconnected socket means the widget as before; a negative length is
+  refused by name), and a new `length_seconds` output reports the planned video's real duration in seconds - the
+  same number the plan panel shows - for video and Pictures projects alike. Existing workflows are untouched: the
+  socket adds no widget and the output lands last.
 - **Lyrics reach the planning on every audio card** (user report, 2026-11-06). The Lyrics field fed exactly one
   consumer, the timed placement for a song played exactly (Use as Lock or Copy, or a Lock/Copy clip on an audio
   lane); on the default Voice card or a Music style card the words went nowhere - not into the AI's shot planning,

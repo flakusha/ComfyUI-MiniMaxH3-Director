@@ -3,6 +3,7 @@ import folder_paths
 from comfy_api.latest import io
 
 from ..adapters.director_packets import DirectorResult, RenderSettings
+from ..core import frames
 from ..core.chunks import ContinuityPlan
 from ..core.context import DirectorContext
 from ..core.limits import PIN_AUDIO_DEFAULT
@@ -37,6 +38,13 @@ class NGH3Director(io.ComfyNode):
                          description="Plan your project: idea, reusable contexts, editable scenes and timing. Connect Result to H3 Director Output; sampling remains in the downstream graph.",
                          inputs=[NGInputs.Input("context", display_name="context"),
                                  *NGDirector.define_schema().inputs[:-1],
+                                 # force_input, so it is a socket, not a widget: workflows saved before it keep their
+                                 # widget values on the same inputs (test_node's positional-widget trap does not apply).
+                                 io.Float.Input("duration_seconds", default=0.0, min=0.0, max=3600.0, step=0.01, optional=True, force_input=True,
+                                                tooltip="Automation (connection-only). Desired length in SECONDS, overriding the Length "
+                                                        "widget; 0 or unconnected uses the widget. The plan snaps the video to H3's "
+                                                        "17k+5 frame grid, so the rendered length can differ by a fraction of a "
+                                                        "second — the exact value is on the length_seconds output."),
                                  io.Combo.Input("style", options=["None", "Cinematic", "Anime", "Documentary", "Photorealistic"], default="None"),
                                  io.String.Input("prompt_override", multiline=True, default="", optional=True, advanced=True), *sampling_inputs(),
                                  *turbo_inputs(),
@@ -64,7 +72,12 @@ class NGH3Director(io.ComfyNode):
                                  io.Boolean.Input("spectrum", default=False, optional=True, advanced=True,
                                                   tooltip="With Turbo off: the Spectrum pack forecasts some sampling steps (about a third "
                                                           "faster at 20 steps). Needs ComfyUI-Spectrum-MiniMax-H3 installed.")],
-                         outputs=[NGResult.Output(display_name="result"), NGChunk.Output(display_name="chunks", is_output_list=True)])
+                         outputs=[NGResult.Output(display_name="result"), NGChunk.Output(display_name="chunks", is_output_list=True),
+                                  # appended last: existing workflows keep their output slots
+                                  io.Float.Output("length_seconds", display_name="length_seconds",
+                                                  tooltip="The video's real length in seconds after the plan snapped it to H3's "
+                                                          "17k+5 frame grid (24 fps). Wire it where the downstream timing has to "
+                                                          "match what is actually rendered.")])
 
     @classmethod
     def validate_inputs(cls, turbo_lora_fl2va="none", turbo_lora_ref2va="none"):
@@ -77,7 +90,21 @@ class NGH3Director(io.ComfyNode):
     def execute(cls, context, **values):
         text_inputs = {name: "" if values.get(name) is None else values[name]
                        for name in ("prepend_text", "prompt_override")}
-        director = DirectorContext(idea=values["idea"], project_seconds=values["project_seconds"],
+        # An automation socket has no minimum, and 0 is what an upstream node hands over when
+        # its own value was never set; a negative length is refused by name, 0 falls back to
+        # the Length widget. Same hazard and same handling as the legacy Director's
+        # start/end/duration sockets.
+        project_seconds = float(values["project_seconds"])
+        if values.get("duration_seconds") is not None:
+            external_seconds = float(values["duration_seconds"])
+            if external_seconds < 0:
+                raise ValueError("H3 Director: the connected 'duration_seconds' is %.3gs. It is a length in "
+                                 "seconds and cannot be negative. Check the node feeding it — a value that "
+                                 "was never set arrives here as 0, which means use the Length widget."
+                                 % external_seconds)
+            if external_seconds > 0:
+                project_seconds = external_seconds
+        director = DirectorContext(idea=values["idea"], project_seconds=project_seconds,
                                    width=values["width"], height=values["height"], mode=values["mode"],
                                    shots_text=values["shots"], soundscape=values["soundscape"], music=values["music"],
                                    items=context.contexts, style=values.get("style", ""), **text_inputs)
@@ -89,7 +116,9 @@ class NGH3Director(io.ComfyNode):
         else:
             project = plan_project(director, values["chunk_seconds"], continuity, image_size)
         settings = RenderSettings(**{name: values[name] for name in RenderSettings.__dataclass_fields__ if name in values})
-        return io.NodeOutput(DirectorResult(context, project, settings), jobs(project))
+        # the video's real length: the grid the chunks landed on, not the widget's request
+        length_seconds = frames.frames_to_seconds(project.plan.total_frames)
+        return io.NodeOutput(DirectorResult(context, project, settings), jobs(project), length_seconds)
 
 
 NODES = [NGH3Director]

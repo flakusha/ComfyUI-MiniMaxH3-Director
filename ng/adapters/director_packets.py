@@ -79,6 +79,8 @@ def chunk_job(result, chunk_index, loop_chunk=None):
             raise ValueError("Choose a chunk from 0 to %d." % (len(chunks) - 1))
         return chunks[chunk_index]
     job = loop_chunk[0] if isinstance(loop_chunk, list) else loop_chunk
+    if isinstance(loop_chunk, list) and len(loop_chunk) != 1:
+        raise ValueError("Connect Start Loop's list_item to loop_chunk, not the whole chunks list: it would render chunk 0 every iteration.")
     if not isinstance(job, ChunkJob) or job.project is not result.project:
         raise ValueError("Connect the current chunk to Start Loop's list_item from the same Director's chunks.")
     return job

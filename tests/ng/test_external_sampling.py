@@ -137,6 +137,11 @@ class ExternalSampling(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "same Director"):
             self.nodes["NGDirectorOutput"].execute(self.result(), loop_chunk=self.jobs(self.result())[0])
 
+    def test_a_whole_chunks_list_on_loop_chunk_names_the_list_item(self):
+        result = self.result()
+        with self.assertRaisesRegex(ValueError, "list_item"):
+            self.nodes["NGDirectorOutput"].execute(result, loop_chunk=self.jobs(result))
+
     def test_loop_socket_is_evaluated_but_previous_remains_a_raw_expansion_link(self):
         inputs = {i.id: i for i in self.nodes["NGDirectorOutput"].GET_SCHEMA().inputs}
         self.assertEqual(inputs["loop_chunk"].io_type, "NG_CHUNK")

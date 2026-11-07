@@ -126,9 +126,9 @@ class ExternalContextInputs(unittest.TestCase):
         import torch
         payload = {"waveform": torch.zeros(1, 1, 1), "sample_rate": 44100}
         node = self.node("NGContextAudio")
-        with self.assertRaisesRegex(ValueError, "connected audio has no file behind it"):
+        with self.assertRaisesRegex(ValueError, "no readable sound"):
             node.execute(audio="", name="", description="", content="voice", usage="voice", preserve="high",
-                         speaker="", audio_in=payload)
+                         speaker="", audio_in={})
         self.assertIn("no file behind it", node.validate_inputs(audio="", audio_in=payload))
         self.assertTrue(node.validate_inputs(audio="voice.wav", audio_in=payload), "a mirrored file passes")
         self.assertTrue(node.validate_inputs(audio="voice.wav", trim_start=1.0, trim_end=2.0, audio_in=payload))
@@ -140,6 +140,37 @@ class ExternalContextInputs(unittest.TestCase):
             with self.assertRaises(ValueError):
                 other.execute(**{media: "", port: object()}, **dict(name="", description="", preserve="high",
                               content=ROLES[media][0], usage=ROLES[media][1]))
+
+    def test_a_non_file_backed_payload_is_materialized_to_h3_external(self):
+        # Decoded/recorded audio has no file to mirror: execute writes it to input/h3-external/ so the
+        # linked card runs headlessly, and the item, the trim cut and the duration all read the materialized file.
+        import torch
+        node = self.node("NGContextAudio")
+        payload = {"waveform": torch.zeros(1, 2, 44100 * 2), "sample_rate": 44100}
+        captured = {}
+
+        def fake_trimmed(source, start, end):
+            captured["source"], captured["window"] = source, (start, end)
+            return {"waveform": None, "sample_rate": 0}
+
+        with patch.object(self.module, "trimmed_audio", side_effect=fake_trimmed):
+            item, _, max_duration = node.execute(audio="", name="", description="", content="voice", usage="voice",
+                                                 preserve="high", speaker="", audio_in=payload).args
+        source = captured["source"]
+        self.assertTrue(source.startswith("h3-external/") and source.endswith(".flac"), source)
+        self.assertEqual(item.source, source.replace(" [input]", ""))
+        self.assertAlmostEqual(item.length_s, 2.0)
+        self.assertAlmostEqual(max_duration, 2.0)
+        self.assertEqual(captured["window"], (0.0, 2.0))
+        probe = importlib.import_module(self.pack.__name__ + ".ng.adapters.probe")
+        self.assertAlmostEqual(probe.duration_seconds(item.source), 2.0, places=1)
+        again = node.execute(audio="", name="", description="", content="voice", usage="voice",
+                             preserve="high", speaker="", audio_in=payload).args[0]
+        self.assertEqual(again.source, item.source, "the same sound reuses its file")
+        bad_channels = {"waveform": torch.zeros(1, 6, 100), "sample_rate": 44100}
+        with self.assertRaisesRegex(ValueError, "only mono and stereo"):
+            node.execute(audio="", name="", description="", content="voice", usage="voice",
+                         preserve="high", speaker="", audio_in=bad_channels)
 
     def test_a_malformed_payload_names_the_card(self):
         # A linked AUDIO payload the mirror check already passed still has to read: {} and a

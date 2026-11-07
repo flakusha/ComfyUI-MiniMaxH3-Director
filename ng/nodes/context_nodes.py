@@ -81,12 +81,17 @@ def _no_file_error(media):
             % (media, media.capitalize()))
 
 
-def _linked_file(widget_value, media):
+def _linked_file(widget_value, media, linked=None):
     """A connected external input reaches the render only through the card's media widget: the frontend mirrors the
-    origin's file into it, so headless runs and non-file producers (decoded or recorded audio, composite pictures)
-    are named here instead of silently keeping a stale file."""
-    if not str(widget_value or "").strip():
-        raise ValueError(_no_file_error(media))
+    origin's file into it. A non-file-backed audio payload (decoded or recorded sound, nothing to mirror) is
+    materialized to input/h3-external/ instead, so linked cards execute headlessly; the card-naming error stays
+    for a payload with no readable sound at all."""
+    if str(widget_value or "").strip():
+        return str(widget_value)
+    if media == "audio" and linked is not None:
+        from ..adapters.linked_audio import materialize
+        return materialize(linked)
+    raise ValueError(_no_file_error(media))
 
 
 def _validate_linked_file(linked, widget_value, media):
@@ -215,7 +220,8 @@ class NGContextAudio(io.ComfyNode):
         # a linked audio gives the exact length from its payload; the file header probe stays the unlinked path.
         # The trims stay independent of the link: they cut the mirrored file whatever card it came from.
         if audio_in is not None:
-            _linked_file(audio, "audio")
+            audio = _linked_file(audio, "audio", audio_in)
+            widgets["audio"] = audio
             length_s = _linked_length(audio_in)
         else:
             length_s = probe.duration_seconds(audio.replace(" [input]", ""))

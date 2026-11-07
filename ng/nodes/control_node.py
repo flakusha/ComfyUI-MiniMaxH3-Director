@@ -58,6 +58,8 @@ class NGControlChunk(io.ComfyNode):
 
     @classmethod
     def check_lazy_status(cls, chunk, strength=1.0, model_patch=None, vae=None, **_):
+        if isinstance(chunk, list) and not chunk:
+            return []
         job = chunk[0] if isinstance(chunk, list) else chunk
         if strength == 0 or not control_timing.spans(job):
             return []
@@ -65,13 +67,14 @@ class NGControlChunk(io.ComfyNode):
 
     @classmethod
     def execute(cls, model, chunk, model_patch=None, vae=None, strength=1.0, start_percent=0.0, end_percent=1.0):
+        if isinstance(chunk, list) and not chunk:
+            raise ValueError("No render parts: the project has no chunks to steer.")
         job = chunk[0] if isinstance(chunk, list) else chunk
         if strength == 0 or not control_timing.spans(job):
             return io.NodeOutput(model)
         if model_patch is None or vae is None:
             raise ValueError("Connect ModelPatchLoader to the Context Connector's model_patch for control clips.")
-        if end_percent < start_percent:
-            raise ValueError("ControlNet denoising end must be at or after start.")
+        control.check_range(start_percent, end_percent)
         images = control_media.prepare(job)
         out = core().MiniMaxH3FunControlNetApply.execute(model=model, model_patch=model_patch, vae=vae, strength=strength,
                                                       start_percent=start_percent, end_percent=end_percent,

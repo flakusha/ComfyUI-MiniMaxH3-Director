@@ -99,10 +99,10 @@ def _linked_length(audio_in):
     try:
         rate = float(audio_in["sample_rate"])
         frames = audio_in["waveform"].shape[-1]
-    except (KeyError, TypeError, IndexError):
-        raise ValueError(_no_file_error("audio")) from None
+    except (KeyError, TypeError, AttributeError, IndexError, ZeroDivisionError):
+        raise ValueError("The connected audio has no readable sound - reconnect its source, or pick a file on the card.") from None
     if rate <= 0:
-        raise ValueError(_no_file_error("audio"))
+        raise ValueError("The connected audio has no readable sound - reconnect its source, or pick a file on the card.")
     return float(frames) / rate
 
 
@@ -152,7 +152,10 @@ class NGContextVideo(io.ComfyNode):
     def fingerprint_inputs(cls, video, context_options="", **_):
         options = ContextOptions.from_json(context_options)
         mask = probe.file_stamp(options.control_mask) if options.control_kind == "mask" and options.control_mask else ""
-        return probe.file_stamp(video) + ":" + mask
+        result = probe.file_stamp(options.control_result) if options.control_result else ""
+        original = probe.file_stamp(options.control_original) if options.control_original else ""
+        return "%s:%s:%s:%s:%s:%s" % (probe.file_stamp(video), mask, result, original,
+                                        options.mask_shape, options.mask_grow)
 
     @classmethod
     def validate_inputs(cls, video, video_in=None, **_):
@@ -188,10 +191,15 @@ class NGContextAudio(io.ComfyNode):
                                                   tooltip="Seconds the selected range can play: the number to keep project_seconds under.")])
 
     @classmethod
-    def fingerprint_inputs(cls, audio, trim_start=0.0, trim_end=0.0, **_):
+    def fingerprint_inputs(cls, audio, trim_start=0.0, trim_end=0.0, context_options="", **_):
         # a linked audio_in arrives as None here (non-constant links resolve only for constants), so the cache key
-        # follows the mirrored widget file - which the card rewrites whenever the origin changes its file
-        return trim_window.fingerprint(probe.file_stamp(audio), _linked_float(trim_start), _linked_float(trim_end))
+        # follows the mirrored widget file - which the card rewrites whenever the origin changes its file.
+        # A linked trim value is authoritative and the stored options range is the fallback, exactly as in
+        # execute: a preset-loaded range alone must bust the key, or a stale cached item is reused.
+        options = ContextOptions.from_json(context_options)
+        start_s = _linked_float(trim_start) if (trim_start or 0.0) > 0 else options.start_s
+        end_s = _linked_float(trim_end) if (trim_end or 0.0) > 0 else options.end_s
+        return trim_window.fingerprint(probe.file_stamp(audio), start_s, end_s)
 
     @classmethod
     def validate_inputs(cls, audio, trim_start=0.0, trim_end=0.0, audio_in=None, **_):

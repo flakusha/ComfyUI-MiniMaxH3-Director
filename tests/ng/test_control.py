@@ -81,6 +81,22 @@ class MaskShape(unittest.TestCase):
         self.assertEqual(float(fake.calls[-1]["mask"][0].sum()), 20.0 * 28.0)
         self.assertEqual(float(fake.calls[-1]["mask"][0, 0, 29]), 0.0)
 
+    def test_an_empty_chunk_list_names_the_missing_parts(self):
+        from _pack import load_full_pack
+        chunk_node = load_full_pack().NODE_CLASS_MAPPINGS["NGControlChunk"]
+        self.assertEqual(chunk_node.check_lazy_status(chunk=[]), [])
+        with self.assertRaisesRegex(ValueError, "No render parts"):
+            chunk_node.execute(model="m", chunk=[])
+
+    def test_an_inverted_range_is_refused_before_the_native_node(self):
+        # The public node used to pass inverted percents straight to MiniMaxH3FunControlNetApply;
+        # both nodes now share the one guard in the adapter.
+        with self.assertRaisesRegex(ValueError, "denoising end must be at or after start"):
+            control.check_range(0.8, 0.2)
+        with self.assertRaisesRegex(ValueError, "denoising end must be at or after start"):
+            control.apply(FakeCore(), "m", "p", "v", job(0, 243, 0), 1.0, 0.8, 0.2)
+        control.check_range(0.2, 0.8)
+
 
 if __name__ == "__main__":
     unittest.main()

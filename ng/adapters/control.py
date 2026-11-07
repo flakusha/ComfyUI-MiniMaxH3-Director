@@ -46,8 +46,15 @@ def shaped(mask, shape="box", grow=16):
     return hole.float()
 
 
+def check_range(start_percent, end_percent):
+    """Name an inverted denoising range before it reaches the native node as a cryptic error."""
+    if end_percent < start_percent:
+        raise ValueError("ControlNet denoising end must be at or after start.")
+
+
 def apply(mm, model, model_patch, vae, job, strength, start_percent, end_percent, control_video=None, mask=None, source_video=None,
           mask_shape="box", mask_grow=16):
+    check_range(start_percent, end_percent)
     control, hole = part_frames(control_video, job), part_frames(mask, job)
     if hole is not None:
         hole = shaped(hole, mask_shape, mask_grow)

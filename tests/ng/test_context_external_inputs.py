@@ -141,6 +141,17 @@ class ExternalContextInputs(unittest.TestCase):
                 other.execute(**{media: "", port: object()}, **dict(name="", description="", preserve="high",
                               content=ROLES[media][0], usage=ROLES[media][1]))
 
+    def test_a_malformed_payload_names_the_card(self):
+        # A linked AUDIO payload the mirror check already passed still has to read: {} and a
+        # payload without a waveform name the card instead of raising a raw KeyError.
+        import torch
+        node = self.node("NGContextAudio")
+        for bad in ({}, {"sample_rate": 44100}, {"waveform": None, "sample_rate": 44100}):
+            with self.subTest(payload=bad):
+                with self.assertRaisesRegex(ValueError, "no readable sound"):
+                    node.execute(audio="voice.wav", name="", description="", content="voice", usage="voice",
+                                 preserve="high", speaker="", audio_in=bad)
+
     def test_a_linked_text_is_the_note_and_an_empty_link_falls_back(self):
         item = self.execute("NGContextText", text_in=" STYLE: film noir. ").args[0]
         self.assertEqual(item.source, " STYLE: film noir. ", "the delivered string verbatim")
@@ -155,6 +166,33 @@ class ExternalContextInputs(unittest.TestCase):
             self.assertEqual(node.fingerprint_inputs(audio="song.wav", trim_start=0.0, trim_end=2.0, audio_in=None),
                              self.trim_window.fingerprint("1:2", 0.0, 2.0))
             stamp.assert_called_once_with("song.wav")
+
+    def test_a_preset_loaded_range_busts_the_audio_key_without_a_trim_change(self):
+        # The preset writes context_options directly; the trim widgets stay 0, so the key must
+        # read the stored range or a stale cached item is reused.
+        import json
+        node = self.node("NGContextAudio")
+        options = json.dumps({"schema_version": 1, "start_s": 1.0, "end_s": 2.5})
+        with patch.object(self.module.probe, "file_stamp", return_value="1:2"):
+            keyed = node.fingerprint_inputs(audio="song.wav", context_options=options)
+            plain = node.fingerprint_inputs(audio="song.wav", context_options="")
+            self.assertNotEqual(keyed, plain)
+            self.assertEqual(keyed, self.trim_window.fingerprint("1:2", 1.0, 2.5))
+
+    def test_a_control_option_change_busts_the_video_key(self):
+        # Mask-shape-only or control-file-only edits must re-run the card, not reuse the cached item.
+        import json
+        node = self.node("NGContextVideo")
+        base = json.dumps({"schema_version": 1, "control_kind": "mask", "control_mask": "m.png"})
+        shaped = json.dumps({"schema_version": 1, "control_kind": "mask", "control_mask": "m.png",
+                             "mask_shape": "outline"})
+        resulted = json.dumps({"schema_version": 1, "control_kind": "mask", "control_mask": "m.png",
+                               "control_result": "r.mp4"})
+        with patch.object(self.module.probe, "file_stamp", side_effect=lambda name: "stamp:" + name):
+            self.assertNotEqual(node.fingerprint_inputs(video="clip.mp4", context_options=shaped),
+                                node.fingerprint_inputs(video="clip.mp4", context_options=base))
+            self.assertNotEqual(node.fingerprint_inputs(video="clip.mp4", context_options=resulted),
+                                node.fingerprint_inputs(video="clip.mp4", context_options=base))
 
     def test_real_validation_resolves_the_link_for_validate_inputs(self):
         """The full V3 path proves OUR override actually runs there: a resolved payload with no widget file fails,

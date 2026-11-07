@@ -234,7 +234,7 @@ class TheAudioCardFoldsTrims(unittest.TestCase):
 
     def test_a_linked_audio_without_a_sample_rate_names_the_card(self):
         import torch
-        with self.assertRaisesRegex(ValueError, "no file behind it"):
+        with self.assertRaisesRegex(ValueError, "no readable sound"):
             self.nodes.NGContextAudio.execute(
                 audio=self.name, name="Song", description="", content="voice", usage="reference", preserve="high",
                 speaker="", trim_start=0.0, trim_end=0.0, context_id="audio_song",
@@ -243,7 +243,7 @@ class TheAudioCardFoldsTrims(unittest.TestCase):
     def test_a_linked_audio_with_a_zero_rate_names_the_card(self):
         import torch
         audio_in = {"waveform": torch.zeros(1, 1, 8), "sample_rate": 0}
-        with self.assertRaisesRegex(ValueError, "no file behind it"):
+        with self.assertRaisesRegex(ValueError, "no readable sound"):
             self.nodes.NGContextAudio.execute(
                 audio=self.name, name="Song", description="", content="voice", usage="reference", preserve="high",
                 speaker="", trim_start=0.0, trim_end=0.0, context_id="audio_song", audio_in=audio_in)

@@ -3,11 +3,9 @@
 import { h, keepKeys } from "./h3s_dom.js";
 import { ensureCardStyle } from "./h3c_style.js";
 import { TEMPLATES, usableFields, offerFor } from "./h3c_model.js";
-import { topRow, contentBox, usageBox, keepBox, ownerBox, descriptionBox, suggestionBox, presetRow, statusLine, box, modelsBox } from "./h3c_parts.js";
 import { CARD_MODELS, modelState } from "./ng_models.js";
-import { mediaURL, imageBlock, videoBlock, videoSoundBox, audioBlock, listenBox, wirePlayback, moveHeads } from "./h3c_media.js";
-import { textBody } from "./h3c_text.js";
-import { lyricsBox, stampLine, deviceNote } from "./h3c_lyrics.js";
+import { mediaURL, wirePlayback, moveHeads } from "./h3c_media.js";
+import { stampLine, deviceNote } from "./h3c_lyrics.js";
 import { values, applyValues, newContextId, ownIdentity, analysisFingerprint, request, followNodeWidth } from "./ng_widgets.js";
 import { contextOptions, setOptions, selectedRoles } from "./ng_context_controls.js";
 import { hideNative } from "./ng_editor_fields.js";
@@ -23,8 +21,8 @@ import { subjectChoices } from "./ng_subjects.js";
 import { followNoteRenames, knownNames } from "./ng_references.js";
 import { noteGrowth, followDraggedHeight, pushOnGrowth } from "./ng_layout.js";
 import { dropTarget } from "./ng_drop.js";
-import { controlBox } from "./h3c_control.js";
 import { controlGraph, controlSetup } from "./h3c_control_graph.js";
+import { layout, WIDTH } from "./h3c_layout.js";
 import { runJob } from "./h3b_queue.js";
 import { uploadMask } from "./h3c_mask.js";
 import { uploadVideo, videoSource } from "./h3c_upload.js";
@@ -34,7 +32,6 @@ import { cardContentHeight } from "./h3c_measure.js";
 const { app } = window.comfyAPI.app;
 const { api } = window.comfyAPI.api;
 const MEDIA = { NGContextImage: "image", NGContextVideo: "video", NGContextAudio: "audio", NGContextText: "text" };
-const WIDTH = { image: 660, video: 660, audio: 700, text: 780 };
 // One preset list request per medium for all cards that load together (six image cards asked six times); saving refreshes it.
 const presetLists = new Map();
 function presetNames(media, fresh = false) {
@@ -49,28 +46,6 @@ function presetNames(media, fresh = false) {
 function repairNullableText(node) {
   for (const widget of node.widgets || [])
     if (["name", "description", "speaker", "color"].includes(widget.name) && widget.value == null) widget.value = "";
-}
-
-function speakerBox(S, actions) {
-  const choose = h("select", { class: "h3c-in", "aria-label": "Whose voice", onchange: (event) => actions.set("speaker", event.target.value) },
-    h("option", { value: "" }, "— nobody (narrator)"), S.speakers.map((entry) => h("option", { value: entry.id }, entry.name)));
-  choose.value = S.values.speaker || "";
-  return box("Whose voice", choose, h("span", { class: "h3c-hint" }, "For “Voice”, and for who sings this card's Lyrics. Who speaks a line in a shot is set in the Studio."));
-}
-
-function layout(S, actions) {
-  const two = (...children) => h("div", { class: "h3c-grid", style: { gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" } }, ...children);
-  const parts = [topRow(S, actions), modelsBox(S, actions)];
-  if (S.media === "image") parts.push(h("div", { class: "h3c-grid", style: { gridTemplateColumns: "minmax(0,1.15fr) minmax(0,1fr)" } }, imageBlock(S), contentBox(S, actions)),
-    suggestionBox(S, actions), h("div", { class: "h3c-grid", style: { gridTemplateColumns: "minmax(0,1fr) minmax(0,1.25fr)" } }, usageBox(S, actions), keepBox(S, actions)),
-    two(ownerBox(S, actions, `Independent: this picture is a figure of its own; write @${S.values.name || "Name"} in the Studio.`), descriptionBox(S, actions)));
-  if (S.media === "video") parts.push(videoBlock(S, actions), two(contentBox(S, actions), usageBox(S, actions)), controlBox(S, actions), suggestionBox(S, actions),
-    S.usage === "control" ? null : two(videoSoundBox(S, actions), ownerBox(S, actions, "E.g. a walk cycle for a figure.")), descriptionBox(S, actions));
-  if (S.media === "audio") parts.push(audioBlock(S, actions), two(contentBox(S, actions), usageBox(S, actions)), suggestionBox(S, actions),
-    two(speakerBox(S, actions), listenBox(S, actions)), lyricsBox(S, actions), descriptionBox(S, actions));
-  if (S.media === "text") parts.push(...textBody(S, actions));
-  parts.push(presetRow(S, actions), statusLine(S));
-  return parts.filter(Boolean);
 }
 
 function attach(node, media) {

@@ -50,30 +50,37 @@ def texts_prompt(board, contexts=()):
                 entry["user_" + name] = panel[name].strip()
         panels.append(entry)
     figures = _figures(contexts)
-    # A long panel's beats stand in the example itself: told only by write_shot_as_beats, qwen3.5:9b wrote a 10 s panel
-    # as one block (2026-10-13).
+    # A long panel's beats stand in the example itself: told only by write_shot_as_beats, qwen3.5:9b wrote a 10 s panel as one block.
     example = ",".join('{"title":"...","caption":"...","shot":"%s"}' % (
         " ".join("%s: ..." % mark for mark in entry["write_shot_as_beats"].split(", ")) if "write_shot_as_beats" in entry else "...")
         for entry in panels)
     rules = [
-        "Write the texts of a %d-panel storyboard for a %s second video. Return only JSON with exactly %d panels, in order: "
-        '{"title":"...","subtitle":"...","panels":[%s]}' % (len(panels), _seconds(times[-1][1]), len(panels), example),
-        "The panels tell what should happen, in order: each panel continues where the one before ended, and together they "
-        "show all of it.",
-        "title (of the sheet): a few words in capitals, e.g. 'LUNA AND INFERNA - THE PACT'. subtitle: the characters and the "
-        "length in capitals, e.g. 'LUNA-ARC & INFERNA-FLAME - 10 SECONDS'.",
-        "panels[].title: two to four words in capitals that name the moment, e.g. 'INTRO - BOTH CHARACTERS'.",
-        "panels[].caption: one or two English sentences for the sheet: who does what, where, with which expression. Names "
-        "without @.",
-        "panels[].shot: the English description H3 renders for this panel: begin with the framing (e.g. 'A full-body shot "
-        "of ...'), then who is where in the frame, what they do, their expression and the light, then the camera. "
-        + CAMERA_RULE.replace("camera: ", "The camera: ", 1),
+        "Write the texts for a %d-panel storyboard for a %s second MiniMax H3 video. "
+        "Return one JSON object only, with exactly %d panels in the supplied order. "
+        "Do not add, omit, reorder, or duplicate panels. Do not change the supplied panel times. "
+        "Do not add fields outside the shape. Do not add prose, markdown, or code fences." % (
+            len(panels), _seconds(times[-1][1]), len(panels)),
+        "Exact shape for this request: "
+        '{"title":"...","subtitle":"...","panels":[%s]}. ' % example +
+        "Use the supplied shape as the authoritative output shape, including any per-panel beat example shown in it.",
+        "The panels are a sequential storyboard: each panel continues where the previous one ends, and together they "
+        "show the whole video.",
+        "title: a few words in capitals naming the sheet, e.g. 'LUNA AND INFERNA - THE PACT'. Do not use @names.",
+        "subtitle: the characters and length in capitals, e.g. 'LUNA-ARC & INFERNA-FLAME - 10 SECONDS'. Do not use @names.",
+        "panels[].title: two to four words in capitals naming the moment, e.g. 'INTRO - BOTH CHARACTERS'. Do not use @names.",
+        "panels[].caption: one or two English sentences for the sheet: who does what, where, with what expression. "
+        "Use plain names when known; do not use @names.",
+        "panels[].shot: the English description MiniMax H3 should render for this panel. "
+        "Begin with the framing, e.g. 'A full-body shot of ...', then who or what is where in the frame, what they do, "
+        "their expression, and the light. Finish with one camera sentence using the supplied camera vocabulary, with small "
+        "or large amplitude and slow or fast speed only when meaningful. If the camera does not move, write exactly: "
+        "'The camera holds a static shot.' Do not write 'cuts' as a camera action.",
         "A panel with write_shot_as_beats gets its shot as exactly those time beats, in that order, each beginning with its "
-        "mark, e.g. for '0–5s, 5–10s': '0–5s: A full-body shot of ... The camera holds a static shot. 5–10s: ...'; each beat "
-        "begins with its framing.",
-        "A panel's user_title, user_caption or user_shot is the user's own text: keep its meaning, you may only make it more "
-        "concrete.",
-        ("Name the characters by their exact @name in the shot: %s. Keep each one's look exactly as described." % "; ".join(figures))
+        "mark, e.g. for '0–5s, 5–10s': '0–5s: A full-body shot of ... The camera holds a static shot. 5–10s: ...'. "
+        "Do not invent, remove, alter, or reorder beat marks. Do not write [mm:ss] stamps that were not supplied.",
+        "A panel's user_title, user_caption or user_shot is the user's own text: preserve the user's meaning and make it "
+        "only more concrete. Do not change facts, characters, actions, or times.",
+        ("Name the characters in panels[].shot by their exact @names: %s. Keep each one's look exactly as described." % "; ".join(figures))
         if figures else "There are no character cards: describe the people concretely (age, hair, clothing) in every shot.",
         "Do not claim generation or media analysis has occurred.",
     ]

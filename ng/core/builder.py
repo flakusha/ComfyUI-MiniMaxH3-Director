@@ -1,9 +1,4 @@
-"""Make H3 prompt: plan a whole video from a direction, the Content cards and an optional request, in one AI call.
-
-The answer has the same shape as AI: split into shots (look, timed shots with real spoken lines, soundscape, music) and is
-read by the same parser, so the shot document, the compiler and the per-part writer work on it unchanged. What is new
-is where the story comes from: with no request, the pictures themselves (the model is shown them) and the direction.
-"""
+"""Make H3 prompt: plan a whole video from a direction, the Content cards and an optional request, in one AI call."""
 import json
 import re
 
@@ -11,14 +6,13 @@ from . import fields
 from .ai_json import read_object
 from .auto_direct import story
 from .context_build import card_id, card_words, widget_text
-from .directions import DIRECTIONS, LANGUAGES, SPEECH, check_adults, direction, shot_count
+from .directions import DIRECTIONS, LANGUAGES, SPEECH, check_allowed, direction, shot_count
 from .split import BEAT_RULE, CAMERA_RULE, _seconds, parse_split, shots_example
 
 SYSTEM = ("You are the director of a short video for MiniMax H3, which produces video with sound from a single detailed "
           "prompt. Plan the video concretely, visually, and aurally from the user's reference pictures, direction, and request. Respond with a single JSON object following the provided schema.")
 PLAN_TOKENS = 3072
-# Content of a picture that is a place or a thing rather than a figure: bound to the shots that show it, so a render part
-# without that place does not get it as a reference. A figure stays in every part (a shot that only says "she" still needs it).
+# A place picture binds to the shots showing it; a figure stays in every part (a shot saying only "she" still needs it).
 PLACES = ("environment", "location", "prop", "object", "style", "lighting", "composition")
 DEFAULT_QUICK = {"direction": "auto", "speech": "none", "language": "English"}
 
@@ -70,11 +64,10 @@ def kinds(contexts):
     names = {card_id(entry): entry["widgets"].get("name") for entry in contexts}
     out = {}
     for entry, usage, content in pictures(contexts):
-        widgets = entry["widgets"]
-        owners = [names.get(i) for i in re.split(r"[\s,\[\]\"]+", widgets.get("subject_ids") or "") if names.get(i)]
+        owners = [names.get(i) for i in re.split(r"[\s,\[\]\"]+", entry["widgets"].get("subject_ids") or "") if names.get(i)]
         kind = ("frame" if set(usage) & set(FRAMES) else "view" if owners else
                 "place" if content and set(content) <= set(PLACES) else "figure")
-        out[widgets.get("name") or ""] = (kind, owners[0] if owners else "")
+        out[entry["widgets"].get("name") or ""] = (kind, owners[0] if owners else "")
     return out
 
 
@@ -85,55 +78,47 @@ def _picture_line(number, entry, usage, content, shown, kind):
     widgets = entry["widgets"]
     name = widgets.get("name") or "Picture %d" % number
     sort, owner = kind
-    if sort == "frame":
-        what = " and ".join({"first_frame": "the FIRST FRAME of the video", "last_frame": "the LAST FRAME of the video"}.get(u, u)
-                            for u in usage if u in FRAMES)
-    else:
-        what = KIND_WORDS[sort] % owner if "%s" in KIND_WORDS[sort] else KIND_WORDS[sort]
+    words = {"first_frame": "the FIRST FRAME of the video", "last_frame": "the LAST FRAME of the video"}
+    what = (" and ".join(words.get(u, u) for u in usage if u in FRAMES) if sort == "frame"
+            else KIND_WORDS[sort] % owner if sort == "view" else KIND_WORDS[sort])
     described = (widgets.get("description") or "").strip()
     label = "@" + name if sort in ("figure", "place") else '"%s"' % name
     return "%s. %s - %s%s%s" % (number, label, what, ": " + described if described else "", "" if shown else " (not shown to you)")
 
 
 def _audio_line(entry):
-    widgets = entry["widgets"]
-    usage = _roles(widgets, "usage_roles")
-    content = _roles(widgets, "content_roles")
-    name = widgets.get("name") or "Audio"
-    played = "lock" in usage or "copy" in usage
-    how = ("played as the video's soundtrack, exactly as it is" if played else
+    widgets, usage = entry["widgets"], _roles(entry["widgets"], "usage_roles")
+    how = ("played as the video's soundtrack, exactly as it is" if {"lock", "copy"} & set(usage) else
            "voice of %s" % widgets.get("speaker") if "voice" in usage and widgets.get("speaker") else
            "a sound reference (%s)" % ", ".join(usage) if usage else "a sound reference")
     described = (widgets.get("description") or "").strip()
-    line = "- @%s - audio, %s; contains %s%s" % (name, how, ", ".join(content) or "sound", ": " + described if described else "")
+    line = "- @%s - audio, %s; contains %s%s" % (widgets.get("name") or "Audio", how,
+                                                  ", ".join(_roles(widgets, "content_roles")) or "sound",
+                                                  ": " + described if described else "")
     words = card_words([entry])   # the card's own words (BUG-094): the plan paces its shots and writes its lines by them
     return line + ("; its words, to be used as they are ([mm:ss] = when each line is heard in the video; write the words without it): %s" % " / ".join('"%s"' % word for word in words) if words else "")
 
 
 def _rule_line(entry):
     """A Text card that is not the story: written into every part as it is, so the plan must fit it (2026-10-18)."""
-    widgets = entry["widgets"]
-    usage = [u for u in _roles(widgets, "usage_roles") if u != "scene"]
-    text = widget_text(widgets, "text").strip()
-    return '- "%s" (%s): %s' % (widgets.get("name") or "Note", ", ".join(usage) or "rule", text) if usage and text else None
+    usage = [u for u in _roles(entry["widgets"], "usage_roles") if u != "scene"]
+    text = widget_text(entry["widgets"], "text").strip()
+    return '- "%s" (%s): %s' % (entry["widgets"].get("name") or "Note", ", ".join(usage) or "rule", text) if usage and text else None
 
 
 def _video_line(entry):
     """A Video card: what H3 takes from it. A control video only steers movement and framing; its source's look is never
     described, or the source's figure turns up in the video (T6, 2026-10-16)."""
-    widgets = entry["widgets"]
-    usage = _roles(widgets, "usage_roles")
-    name = widgets.get("name") or "Video"
+    usage, name = _roles(entry["widgets"], "usage_roles"), entry["widgets"].get("name") or "Video"
     if "control" in usage:
         return "- %s - a control video: it steers movement and framing of the shots it lies under; do not describe what it shows" % name
-    described = (widgets.get("description") or "").strip()
+    described = (entry["widgets"].get("description") or "").strip()
     return "- @%s - video, %s%s" % (name, ", ".join(usage) or "reference", ": " + described if described else "")
 
 
 def soundtrack(contexts):
     """True when an audio card plays as the soundtrack (Lock or Copy): its music then is the music."""
-    return any(entry.get("media") == "audio" and ({"lock", "copy"} & set(_roles(entry["widgets"], "usage_roles")))
-               for entry in contexts)
+    return any(entry.get("media") == "audio" and ({"lock", "copy"} & set(_roles(entry["widgets"], "usage_roles"))) for entry in contexts)
 
 
 _PACE = "a sung line of 4 to 7 words takes about 3 seconds, so give each shot one line per 3 seconds of its length, and none to a shot shorter than 3 seconds"
@@ -141,8 +126,7 @@ _PACE = "a sung line of 4 to 7 words takes about 3 seconds, so give each shot on
 
 def _speech_rule(quick, sung, played, has_request, words=(), played_words=()):
     speech, language = quick["speech"], quick["language"]
-    given = (" If the request gives words to say (in quotes or after 'says:'), use exactly those words in their own language."
-             if has_request else "")
+    given = " If the request gives words to say (in quotes or after 'says:'), use exactly those words in their own language." if has_request else ""
     if speech == "none":
         return "Speech: nobody speaks or sings. lines is [] in every shot."
     if speech == "dialogue":
@@ -154,18 +138,17 @@ def _speech_rule(quick, sung, played, has_request, words=(), played_words=()):
                 "two words per second. speaker is empty; delivery is says." % (given, language))
     if sung:
         return "Speech: the sung lines are already placed at their times (below); lines is []. Show the singer singing them."
+    singer = "speaker is the exact name of the singer (without @); delivery is sings."
+    if played and played_words:
+        # the soundtrack's own words carry no Whisper times: the shots write the lines and pace them (BUG-094)
+        return "Speech: the singer sings the soundtrack's own words (see Sound) as they are.%s %s. %s" % (given, _PACE, singer)
     if played:
-        if played_words:
-            # the soundtrack's own words carry no Whisper times: the shots write the lines and pace them (BUG-094)
-            return ("Speech: the singer sings the soundtrack's own words (see Sound) as they are.%s %s. speaker is the exact name of the singer (without @); delivery is sings." % (given, _PACE))
         return ("Speech: the singer sings along to the soundtrack, whose words are not known: write no lines ([]) and show the "
                 "singing performance (mouth, breath, expression) in the action.")
     # A rendered 10 s song (2026-10-06) sang every word, but the 6-word line of a 2 s last shot was cut off at the end.
     if words:
-        return ("Speech: the character sings the words carried on an audio card (see Sound) as they are.%s %s. speaker is "
-                "the exact name of the singer (without @); delivery is sings." % (given, _PACE))
-    return ("Speech: the character sings.%s Otherwise write short original lyrics in %s: %s. speaker is the exact name "
-            "of the singer (without @); delivery is sings." % (given, language, _PACE))
+        return "Speech: the character sings the words carried on an audio card (see Sound) as they are.%s %s. %s" % (given, _PACE, singer)
+    return "Speech: the character sings.%s Otherwise write short original lyrics in %s: %s. %s" % (given, language, _PACE, singer)
 
 
 def _frame_rule(found):
@@ -173,15 +156,15 @@ def _frame_rule(found):
     last = [entry["widgets"].get("name") for entry, usage, _ in found if "last_frame" in usage]
     who = " Call the people in it by what they are (for example 'the white-haired elf'), not by the picture's name."
     if first and last:
-        return ("The video moves continuously from \"%s\" (its first frame) to \"%s\" (its last frame): use one shot unless the "
-                "request asks for more, and describe the path between the two pictures: how pose, framing and light change, "
+        return ("The video moves continuously from \"%s\" (its first frame) to \"%s\" (its last frame): use one shot "
+                "unless the request asks for more, and describe the path between them: how pose, framing and light change, "
                 "ending on the final pose of the last picture named concretely.%s" % (first[0], last[0], who))
     if first:
         return ("The video starts exactly on \"%s\": shot 1 begins with what that picture shows (same people, pose, place, "
                 "framing, light) and develops forward from it.%s" % (first[0], who))
     if last:
-        return ("The video ends exactly on \"%s\": the last shot arrives at what that picture shows; name its final pose, framing "
-                "and light concretely.%s" % (last[0], who))
+        return ("The video ends exactly on \"%s\": the last shot arrives at what that picture shows; name its final pose, "
+                "framing and light concretely.%s" % (last[0], who))
     return ""
 
 
@@ -190,42 +173,45 @@ def _action_rule(found, names):
         return ("action: two or three English sentences of what is visible: begin with the framing (for example 'A medium shot "
                 "of a woman ...'), then who is where in the frame, what they do and their expression. Describe each character's "
                 "look once, concretely (age, hair, clothing).")
-    mentions = ("Name the characters and places by their exact @name (%s) whenever they are visible; never write the name of a "
-                "picture in quotes. " % ", ".join("@" + n for n in names))
     return ("action: two or three English sentences of what is visible: begin with the framing (for example 'A medium shot of "
-            "@Name ...', 'A close-up of ...'), then who is where in the frame, what they do and their expression. " + mentions +
-            "Keep every character's face, hair, clothing and colours exactly as the pictures show them; invent no other main "
-            "characters.")
+            "@Name ...', 'A close-up of ...'), then who is where in the frame, what they do and their expression. Name the "
+            "characters and places by their exact @name (%s) whenever they are visible; never write the name of a picture in "
+            "quotes. Keep every character's face, hair, clothing and colours exactly as the pictures show them; invent no other "
+            "main characters." % ", ".join("@" + n for n in names))
 
 
 def _rules(quick, seconds, found, names, played, parts, sung, kinds_of):
     plan, (fewest, most) = direction(quick["direction"]), shot_count(seconds, quick["direction"])
+    music = ("the soundtrack plays as it is: describe its instruments and tempo in one sentence, or N/A if it has no music."
+             if played else "one English sentence of %s; instruments and tempo, no mood words." % plan.music)
+    look = ("look: one or two English sentences that every shot shares. Start with the style the pictures are made in, judged "
+            "from the pictures themselves: a photograph is 'Live-action, photorealistic'; a drawing, painting or anime illustration "
+            "is '2D anime' or 'illustrated'; only a rendered 3D image is '3D CG'. Then the place where the video happens, its light "
+            "and colour palette. No action. The pictures only say how the characters and places look: when a picture is a "
+            "character sheet, a collage, has text or a plain studio background, the video happens in a real place that fits the "
+            "request and the direction, never on a sheet or in front of a plain backdrop." if found else
+            "look: one or two English sentences that every shot shares: the visual style (for example 'Live-action, cinematic', "
+            "'2D anime', '3D CG'), the place, the light and the colour palette. No action.")
     rules = [
-        "look: one or two English sentences that every shot shares. Start with the style the pictures are made in, judged "
-        "from the pictures themselves: a photograph is 'Live-action, photorealistic'; a drawing, painting or anime illustration "
-        "is '2D anime' or 'illustrated'; only a rendered 3D image is '3D CG'. Then the place where the video happens, its light "
-        "and colour palette. No action. The pictures only say how the characters and places look: when a picture is a "
-        "character sheet, a collage, has text or a plain studio background, the video happens in a real place that fits the "
-        "request and the direction, never on a sheet or in front of a plain backdrop." if found else
-        "look: one or two English sentences that every shot shares: the visual style (for example 'Live-action, cinematic', "
-        "'2D anime', '3D CG'), the place, the light and the colour palette. No action.",
-        "shots: %s, in order, end to end from 0 to %s s. Start a new shot only when the view changes (another framing, angle or "
-        "place); a slow change of distance stays inside one shot as camera movement." % (
+        look,
+        "shots: %s, ordered and non-overlapping, end to end from 0 to %s s. Start a new shot only when the view changes "
+        "(another framing, angle or place); a slow change of distance stays inside one shot as camera movement. Do not "
+        "write timestamps, [mm:ss], cut labels, or absolute times in prose." % (
             "exactly 1 shot" if most == 1 else "%d to %d shots" % (fewest, most), _seconds(seconds)),
         _action_rule(found, names),
         CAMERA_RULE,
         BEAT_RULE,
         "lines: each entry is {\"speaker\":\"\",\"delivery\":\"says\",\"language\":\"English\",\"text\":\"...\"}; one sentence "
-        "or sung phrase per entry, word for word, in the shot where it is heard.",
+        "or sung phrase per entry, word for word, in the shot where it is heard. speaker is the exact supplied name, or \"\" "
+        "only for a narrator/voiceover; a shot with no line uses []. Never write \"N/A\" for speaker or lines.",
         "soundscape: one or two English sentences of ambience and physical sounds (footsteps, cloth, wind, impacts, breathing); "
-        "no speech, no music.",
-        "music: " + ("the soundtrack plays as it is: describe its instruments and tempo in one sentence, or N/A if it has no music."
-                     if played else "one English sentence of %s; instruments and tempo, no mood words." % plan.music),
+        "no speech, no singing, no music.",
+        "music: " + music + ' Write "N/A" only in this field, never in another.',
     ]
+    usable = [name for name, (sort, _) in kinds_of.items() if sort in ("view", "place")]
     frame = _frame_rule(found)
     if frame:
         rules.insert(2, frame)
-    usable = [name for name, (sort, _) in kinds_of.items() if sort in ("view", "place")]
     if usable:
         rules.insert(3, "uses: the names of the pictures among %s whose view or place this shot shows, for example [\"%s\"]; "
                      "[] when none. Use each of them in at least one shot." % (", ".join('"%s"' % n for n in usable), usable[0]))
@@ -233,7 +219,8 @@ def _rules(quick, seconds, found, names, played, parts, sung, kinds_of):
         rules.append("Everyone in the video is an adult, 18 or older: call them women and men, never girls or boys. If the "
                      "pictures or the request show or suggest anyone under 18, answer only {\"refused\":\"minor\"}.")
     if len(parts) > 1:
-        rules.append("The video is rendered in separate parts with hard cuts between them: %s. A cut fits best at a part boundary."
+        rules.append("The video is rendered in separate parts with hard cuts between them: %s. A shot may cross a part boundary; "
+                     "prefer a cut at a part boundary when the sequence allows it."
                      % ", ".join("%s-%s s" % (_seconds(a), _seconds(b)) for a, b in parts))
     if sung:
         rules.append("These sung lines are already placed at their times, so do NOT put them into lines; let the action follow "
@@ -241,42 +228,41 @@ def _rules(quick, seconds, found, names, played, parts, sung, kinds_of):
     return rules
 
 
+def _speaks(quick, sung, played, played_words=()):
+    """True when the answer's example shot carries a line: speech is wanted and no line is already placed."""
+    return quick["speech"] != "none" and not sung and not (quick["speech"] == "singing" and played and not played_words)
+
+
 def _shape(quick, sung, played, kinds_of, undescribed=(), played_words=()):
     """The answer's JSON shape. With speech, the example shot carries a line: an empty list in the example made qwen3.5:9b
     leave a song without lyrics."""
-    speaks = quick["speech"] != "none" and not sung and not (quick["speech"] == "singing" and played and not played_words)
-    line = ('{"speaker":"%s","delivery":"%s","language":"%s","text":"..."}' % (
-        "" if quick["speech"] == "voiceover" else next((n for n, (k, _) in kinds_of.items() if k == "figure" and n), "Name"),
-        "sings" if quick["speech"] == "singing" else "says", quick["language"])) if speaks else ""
+    speaker = "" if quick["speech"] == "voiceover" else next((n for n, (k, _) in kinds_of.items() if k == "figure" and n), "Name")
+    line = '{"speaker":"%s","delivery":"%s","language":"%s","text":"..."}' % (speaker, "sings" if quick["speech"] == "singing" else "says",
+                                                                                 quick["language"])
     uses = ',"uses":[]' if any(sort in ("view", "place") for sort, _ in kinds_of.values()) else ""
     describe = ',"describe":{"%s":"..."}' % undescribed[0] if undescribed else ""
-    return '{"look":"...","shots":%s,"soundscape":"...","music":"..."%s}' % (shots_example(uses, line), describe)
+    return '{"look":"...","shots":%s,"soundscape":"...","music":"..."%s}' % (
+        shots_example(uses, line if _speaks(quick, sung, played, played_words) else ""), describe)
 
 
-def plan_prompt(quick, idea, seconds, contexts, shown=0, parts=(), sung=()):
-    """The user turn for planning; the first `shown` pictures are attached in the order listed."""
-    found = pictures(contexts)
-    kinds_of = kinds(contexts)
-    undescribed = [entry["widgets"].get("name") for number, (entry, _, _) in enumerate(found, 1)
-                   if number <= shown and entry["widgets"].get("name") and not (entry["widgets"].get("description") or "").strip()]
-    request = story(idea, contexts)
-    check_adults(quick["direction"], request, *[entry["widgets"].get("description", "") for entry in contexts])
-    if not request.strip() and not found:
-        raise ValueError("Make H3 prompt needs a picture on a Context card or a few words in the Prompt.")
-    played = soundtrack(contexts)
-    words, played_words = card_words(contexts, False), card_words(contexts, True)   # the cards' own words (BUG-094)
-    plan = direction(quick["direction"])
-    lines = [
-        "Plan a %s second video. Answer with JSON only, in this shape:" % _seconds(seconds),
-        _shape(quick, sung, played, kinds_of, undescribed, played_words),
-        "",
-        "Direction: %s. %s" % (plan.label, plan.plan),
-        _speech_rule(quick, sung, played, bool(request.strip()), words, played_words),
-        "Request: %s" % (request.strip() or "(none - build the video from the pictures and the direction)"),
-    ]
+def _opening_lines(quick, seconds, kinds_of, undescribed, played, played_words, request, words, plan, sung=()):
+    lines = ["Plan a %s second video. Return only one JSON object that matches the shape below exactly. "
+             "Do not add prose, markdown, extra fields, or invented facts." % _seconds(seconds),
+             "Shape (authoritative for this request):", _shape(quick, sung, played, kinds_of, undescribed, played_words)]
+    if _speaks(quick, sung, played, played_words):
+        # An empty example list made qwen3.5:9b leave a song without lyrics: with speech wanted and no line
+        # placed, the shape's example line is the structure to use.
+        lines.append("The shape example shows the spoken/sung line structure: use it whenever the Request supplies speech or "
+                     "song and no line is already placed.")
+    return lines + ["", "Direction: %s. %s" % (plan.label, plan.plan),
+                    _speech_rule(quick, sung, played, bool(request.strip()), words, played_words),
+                    "Request: %s" % (request.strip() or "(none - build the video from the pictures and the direction)")]
+
+
+def _media_lines(lines, found, shown, kinds_of, contexts):
     if found:
         lines += ["", "Pictures%s:" % (" (attached in this order)" if shown >= len(found) else
-                                     " (the first %d attached in this order)" % shown if shown else "")]
+                                         " (the first %d attached in this order)" % shown if shown else "")]
         lines += [_picture_line(number, entry, usage, content, number <= shown, kinds_of[entry["widgets"].get("name") or ""])
                   for number, (entry, usage, content) in enumerate(found, 1)]
     sounds = [_audio_line(entry) for entry in contexts if entry.get("media") == "audio"]
@@ -287,7 +273,25 @@ def plan_prompt(quick, idea, seconds, contexts, shown=0, parts=(), sung=()):
         lines += ["", "Videos:"] + videos
     notes = [line for line in (_rule_line(entry) for entry in contexts if entry.get("media") == "text") if line]
     if notes:
-        lines += ["", "Rules (added to every part as they are; plan shots that fit them, do not repeat them):"] + notes
+        lines += ["", "User rules: the rules below are appended to every rendered part exactly as written. Plan shots "
+                  "that obey them. Do not restate, paraphrase, or summarize them inside the JSON answer:"] + notes
+    return lines
+
+
+def plan_prompt(quick, idea, seconds, contexts, shown=0, parts=(), sung=()):
+    """The user turn for planning; the first `shown` pictures are attached in the order listed."""
+    found = pictures(contexts)
+    kinds_of = kinds(contexts)
+    undescribed = [entry["widgets"].get("name") for number, (entry, _, _) in enumerate(found, 1) if number <= shown
+                   and entry["widgets"].get("name") and not (entry["widgets"].get("description") or "").strip()]
+    request = story(idea, contexts)
+    check_allowed(quick["direction"], request, *[entry["widgets"].get("description", "") for entry in contexts])
+    if not request.strip() and not found:
+        raise ValueError("Make H3 prompt needs a picture on a Context card or a few words in the Prompt.")
+    played = soundtrack(contexts)
+    words, played_words = card_words(contexts, False), card_words(contexts, True)   # the cards' own words (BUG-094)
+    lines = _opening_lines(quick, seconds, kinds_of, undescribed, played, played_words, request, words, direction(quick["direction"]), sung)
+    lines = _media_lines(lines, found, shown, kinds_of, contexts)
     names = [name for name, (sort, _) in kinds_of.items() if name and sort in ("figure", "place")]
     rules = _rules(quick, seconds, found, names, played, parts, sung, kinds_of)
     if undescribed:
@@ -296,7 +300,8 @@ def plan_prompt(quick, idea, seconds, contexts, shown=0, parts=(), sung=()):
         rules.insert(0, "describe: for %s, one English sentence each of what the picture shows that must stay the same: who or "
                      "what it is, face, hair, body, clothing and colours (or the place and its light). Not the pose, not the "
                      "background of a figure." % ", ".join('"%s"' % n for n in undescribed))
-    return "\n".join(lines + ["", "Rules:"] + ["- " + rule for rule in rules])
+    return "\n".join(lines + ["", "Rules:"] + ["- " + rule for rule in rules] +
+                        ["", "Do not claim that any generation, rendering, or media analysis has occurred."])
 
 
 def _uses(data, contexts):
@@ -315,9 +320,8 @@ def _uses(data, contexts):
             pattern = r"@%s(?![\w])" % re.escape(name)
             if isinstance(shot.get("action"), str) and re.search(pattern, shot["action"], re.I):
                 named.add(name)
-                sort, owner = sorts[name]
-                if sort == "view":
-                    shot["action"] = re.sub(pattern, "@" + owner, shot["action"], flags=re.I)
+                if sorts[name][0] == "view":
+                    shot["action"] = re.sub(pattern, "@" + sorts[name][1], shot["action"], flags=re.I)
         out.append(named)
     return out
 
@@ -332,7 +336,8 @@ def _bind(result, contexts, uses):
         shot["media"] += [{"schema_version": 1, "context_id": ids[name], "role": "context"} for name in sorted(names) if ids.get(name)]
         for line in shot["spoken"]:
             if line["speaker_id"] in frames:
-                line.update(speaker_id="", voice=frames[line["speaker_id"]])
+                line["voice"] = frames[line["speaker_id"]]
+                line["speaker_id"] = ""
     result["shots"] = json.dumps(data, ensure_ascii=False)
     return result
 
@@ -351,9 +356,7 @@ def _speakers(data, contexts, quick):
             if not isinstance(line, dict) or quick["speech"] == "voiceover":
                 continue
             speaker = str(line.get("speaker") or "").strip().lstrip("@")
-            if speaker in figures:
-                continue
-            if sorts.get(speaker, ("",))[0] == "frame":
+            if speaker in figures or sorts.get(speaker, ("",))[0] == "frame":
                 continue
             if len(figures) == 1 and speaker.casefold() not in ("narrator", "a narrator"):
                 line["speaker"] = figures[0]
@@ -365,9 +368,8 @@ def _descriptions(data, contexts):
     given = {str(k).strip().lstrip("@").casefold(): v for k, v in given.items()}
     out = {}
     for entry, _, _ in pictures(contexts):
-        widgets = entry["widgets"]
-        text = given.get((widgets.get("name") or "").casefold())
-        if not (widgets.get("description") or "").strip() and isinstance(text, str) and text.strip():
+        text = given.get((entry["widgets"].get("name") or "").casefold())
+        if not (entry["widgets"].get("description") or "").strip() and isinstance(text, str) and text.strip():
             out[card_id(entry)] = " ".join(text.split())[:500]
     return out
 
@@ -389,12 +391,10 @@ def parse_plan(text, seconds, contexts, quick, sung=()):
         for shot in data.get("shots") or ():
             if isinstance(shot, dict):
                 shot["lines"] = []
-    uses = _uses(data, contexts)
+    uses, descriptions = _uses(data, contexts), _descriptions(data, contexts)
     _speakers(data, contexts, quick)
-    descriptions = _descriptions(data, contexts)
     result = parse_split(data, seconds, contexts, "", sung)
     if descriptions:
         result["descriptions"] = descriptions
-    if quick["direction"] == "spicy":
-        check_adults("spicy", result["shots"], result.get("look", ""))
+    check_allowed(quick["direction"], result["shots"], result.get("look", ""))
     return _bind(result, contexts, uses)

@@ -1,13 +1,8 @@
 """The final prompt of one render part: written out by an AI from the compiled one, or edited by hand, and checked.
 
-The compiler's prompt is always valid H3 notation but terse. MiniMax's own pipeline (H3-Context-IR, not released) turns
-free-form input into long, detailed prompts; this is our version of that last step. The AI writes only what is prose -
-the description body and the two sound fields. Everything the planner computed stays the planner's: the alignment line,
-subject_definitions, summary, retention_analysis, the shot markers and cut times, every <d> line and speaker ID, and the
-labels. An answer that changes any of those is refused and the compiled prompt stays.
-
-A part's own prompt is stored in the shot document with the key of the compiled prompt it was written from. When the
-plan changes (timing, shots, media, Look), the key no longer matches, the compiled prompt is used and the user is told.
+The AI writes only what is prose - the description body and the two sound fields. Everything the planner computed
+stays the planner's; an answer changing any of it is refused and the compiled prompt stays. A part's own prompt is
+stored with the key of the compiled prompt it was written from; when the plan changes, the compiled prompt is used.
 """
 import hashlib
 import re
@@ -116,6 +111,30 @@ CRAFT = ("Write movement and expression as a change from one state to another (f
          "embedding:... word of the draft exactly as written, after the same sentence: it is an effect the user chose.")
 
 
+def _body_rules(opening, count, exact, labels_rule, words):
+    return [
+        "description: " + opening,
+        "Keep every shot marker and cut time exactly as in the draft (for example [Shot 2] At 00:04.500, the camera cuts to ...); "
+        "this part has exactly %s: do not add, remove, merge, rename, or reorder shots or cuts." % count,
+        "Copy every <d>...</d> block exactly as written in the draft, with its speaker in front of it, in the same order. "
+        "Keep each <d> block immediately after its speaker. "
+        "Do not add, remove, translate, paraphrase, reorder, or invent spoken or sung words: they may appear only inside <d>." + exact,
+        labels_rule,
+        "The draft is only a skeleton: write new sentences of your own, two or three for every shot, describing what is visible "
+        "and audible: appearance, position in the frame, actions and small movements, facial expression, light, and the camera "
+        "movement as one natural sentence with amplitude and speed only when meaningful (e.g. The camera pushes in with small amplitude at slow speed); "
+        "when the camera does not move, write exactly: The camera holds a static shot. Do not introduce subjects, objects, places, "
+        "actions, dialogue, music, or setting details that are not present in the draft, figures, story, or supplied rules. "
+        "Only the shot markers, the cut times, the labels and the lines above are taken over word for "
+        "word. Write about %s words. English, except inside <d>." % words,
+        "overall_soundscape: one to three English sentences of ambience and physical sounds; no speech, no singing.",
+        "non_diegetic_music: the score only the audience hears (instruments, tempo, dynamics), or N/A.",
+        "The draft, figures, and story below are material for detail only; they never change shot markers, cut times, shot "
+        "count, labels, speaker IDs, or spoken/sung lines.",
+        CRAFT,
+    ]
+
+
 def request(compiled, mode, seconds, story="", figures="", continues=False, part=(1, 1), guidance="", pictures=()):
     """The user turn for the writer: rules, the compiled draft, and the story and figures as material for detail only.
 
@@ -127,41 +146,34 @@ def request(compiled, mode, seconds, story="", figures="", continues=False, part
     reference = mode == "ref2va"
     fields = ("summary", "description", "overall_soundscape", "non_diegetic_music") if reference else (
         "description", "overall_soundscape", "non_diegetic_music")
-    rules = [
-        "Rewrite the description of part %d of %d of a MiniMax H3 video (%s, %.2f s). Return exactly these %s labelled fields "
-        "and nothing else:\n%s" % (part[0], part[1], mode.upper(), seconds, "four" if reference else "three",
-                                    "\n".join(name + ": ..." for name in fields)),
-        "description: " + ("start with one or two sentences of the overall visual style, then [Shot 1]." if reference
-                           else "start with [Shot 1], then the visual style and the opening composition in one sentence, then what happens."),
-        "Keep every shot marker and cut time exactly as in the draft (for example [Shot 2] At 00:04.500, the camera cuts to ...); "
-        "this part has exactly %s: add no shot and no cut." % ("1 shot" if len(CUT_RE.findall(body)) < 2 else "%d shots" % len(CUT_RE.findall(body))),
-        "Copy every <d>...</d> block exactly as written in the draft, with its speaker in front of it, in the same order. "
-        "Add no other spoken or sung words and never write lyrics outside <d>.%s" % (
-            " The lines, each to be written exactly like this where it is heard:\n" + "\n".join("- " + line for line in vocal_lines(body))
-            if DIALOGUE_RE.search(body) else ""),
-        ("Use only these labels: %s, and keep the speaker IDs such as (S1)." % ", ".join(labels)) if labels
-        else "Use no <...> labels; keep the speaker IDs such as (S1).",
-        "The draft is only a skeleton: write new sentences of your own, two or three for every shot, describing what is visible "
-        "and audible: appearance, position in the frame, actions and small movements, facial expression, light, and the camera "
-        "movement as a sentence with amplitude and speed (e.g. The camera pushes in with small amplitude at slow speed), or The camera "
-        "holds a static shot when it does not move. Only the shot markers, the labels and the lines above are taken over word for "
-        "word. About %s words. English, except inside <d>."
-        % ("350 to 500" if reference else "250 to 400"),  # ref-en 5.2: a generation task's description is normally 350-500 words
-        "overall_soundscape: one to three English sentences of ambience and physical sounds; no speech, no singing.",
-        "non_diegetic_music: the score only the audience hears (instruments, tempo, dynamics), or N/A.",
-        "The story and the figures below are material for detail only; they never change times, cuts or words.",
-        CRAFT,
-    ]
-    if BEAT_RE.search(body):
-        # shot_share.py gives a part the time beats of its own share of a shot; dropped, the part plays the whole action again
-        rules.append("Keep each time beat of the draft (such as 0–2.5s:) at the start of its own sentences, in the same order and "
-                     "with the same times, and describe only what the draft puts into that beat.")
-    if continues:
-        rules.append("This part continues the previous part: open in the middle of the same action, do not introduce the scene "
-                     "again, and keep the camera's framing unless the draft names a new move.")
+    count = "1 shot" if len(CUT_RE.findall(body)) < 2 else "%d shots" % len(CUT_RE.findall(body))
+    exact = (" Write no spoken or sung lines unless they are present in the draft." if not DIALOGUE_RE.search(body) else
+             " The lines, each to be written exactly like this where it is heard:\n" +
+             "\n".join("- " + line for line in vocal_lines(body)))
+    opening = ("start with one or two sentences of the overall visual style, then [Shot 1]." if reference else
+               "start with [Shot 1], then the visual style and the opening composition in one sentence, then what happens.")
+    labels_rule = (("Use only these labels: %s, and keep the speaker IDs such as (S1). Do not invent other labels." % ", ".join(labels))
+                   if labels else "Use no <...> labels; keep the speaker IDs such as (S1).")
+    words = "350 to 500" if reference else "250 to 400"  # ref-en 5.2: a generation task's description is normally 350-500 words
+    rules = ["Rewrite the description of part %d of %d of a MiniMax H3 video (%s, %.2f s). "
+             "Answer only with the following labelled fields, in this order, as plain prose:\n%s" % (
+                 part[0], part[1], mode.upper(), seconds, "\n".join(name + ": ..." for name in fields))]
     if reference:
-        rules.insert(1, _summary_rule(sections))
-    rules += _extra_rules(head, reference, guidance, pictures)
+        rules.append(_summary_rule(sections))
+    rules.append("No JSON, no markdown, no extra labels, no headings, no commentary, and no field that is not listed above.")
+    rules += _body_rules(opening, count, exact, labels_rule, words)
+    if BEAT_RE.search(body):
+        # shot_share.py gives a part the time beats of its own share of a shot; dropped, the part plays the whole action again.
+        rules.append("Keep each time beat of the draft (such as 0–2.5s:) at the start of its own sentence group, in the same order "
+                     "and with the same times; describe only what the draft puts into that beat. Do not move details between "
+                     "beats, and do not invent new beat times.")
+    if continues:
+        rules.append("This part continues the previous part: open in the middle of the ongoing action. Do not reintroduce the "
+                     "scene, reset the camera, or create a new opening; keep the camera's framing unless the draft names a new "
+                     "camera move.")
+    extra = _extra_rules(head, reference, guidance, pictures)
+    if extra:
+        rules.append("Apply these supplied rules exactly as written:\n" + "\n".join("- " + rule for rule in extra))
     draft = "\n".join(part_ for part_ in (head, "description: " + body, "overall_soundscape: " + sections.get("overall_soundscape", ""),
                                           "non_diegetic_music: " + sections.get("non_diegetic_music", "")) if part_)
     out = "\n".join(rules) + "\n\nDraft:\n" + draft

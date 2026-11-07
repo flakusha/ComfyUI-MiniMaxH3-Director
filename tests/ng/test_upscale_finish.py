@@ -97,6 +97,31 @@ class UpscaleFinish(unittest.TestCase):
         result = self.nodes["NGH3Director"].execute(**values).args[0]
         with self.assertRaisesRegex(ValueError, "Pictures"):
             self.nodes["NGProjectRender"].execute(sequence=result, upscale_2k=True, upscale_model=["upscaler", 0])
+        message = self.nodes["NGProjectRender"].validate_inputs(sequence=result, upscale_2k=True,
+                                                                  upscale_model=["upscaler", 0])
+        self.assertIn("Pictures", message)
+        self.assertIs(self.nodes["NGProjectRender"].validate_inputs(sequence=self.result(), upscale_2k=True,
+                                                                      upscale_model=["upscaler", 0]), True)
+
+    def test_control_clips_without_a_model_patch_are_flagged_before_the_run(self):
+        import json
+        from dataclasses import replace
+        ctx, options, project, chunks = (module("ng.core." + name) for name in ("context", "context_options", "project", "chunks"))
+        card = ctx.ContextItem("pose", "pose", "video", "pose.mp4", usage=("control",), length_s=20,
+                               options=options.ContextOptions(control_kind="pose"))
+        doc = json.dumps(dict(format="h3-director-shots", schema_version=1, shots=[],
+                              control=[dict(schema_version=1, id="a", context_id="pose", start=0, end=4, offset=0, lane="control")]))
+        planned = project.plan_project(ctx.DirectorContext(idea="A walk.", project_seconds=12, width=64, height=64,
+                                                           mode="fl2va", shots_text=doc, items=(card,)), 4,
+                                       chunks.ContinuityPlan("video_audio"))
+        packets = module("ng.adapters.director_packets")
+        inputs = packets.DirectorInputs(["clip", 0], ["vae", 0], ["audio", 0], ["model", 0])
+        result = packets.DirectorResult(inputs, planned, packets.RenderSettings())
+        with self.assertRaisesRegex(ValueError, "model_patch"):
+            self.nodes["NGProjectRender"].execute(sequence=result)
+        self.assertIn("model_patch", self.nodes["NGProjectRender"].validate_inputs(sequence=result))
+        patched = replace(result, inputs=replace(inputs, model_patch=["patch", 0]))
+        self.assertIs(self.nodes["NGProjectRender"].validate_inputs(sequence=patched), True)
 
     def test_widget_and_model_port_are_appended_and_the_port_is_optional(self):
         inputs = list(self.nodes["NGProjectRender"].GET_SCHEMA().inputs)

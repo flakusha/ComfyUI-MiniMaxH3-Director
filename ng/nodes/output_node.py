@@ -3,6 +3,7 @@ from comfy.samplers import KSampler
 from comfy_api.latest import io
 
 from ..adapters.director_packets import prepare_output, render_project
+from ..core import control_timing
 from ..core.project import jobs
 from .context_nodes import CATEGORY
 from .director_node import NGChunk
@@ -75,9 +76,17 @@ class NGProjectRender(io.ComfyNode):
                          outputs=render_outputs(), enable_expand=True)
 
     @classmethod
-    def validate_inputs(cls, upscale_2k=False, upscale_model=None):
+    def validate_inputs(cls, sequence=None, upscale_2k=False, upscale_model=None):
         if upscale_2k and upscale_model is None:
             return "2K finish is on, but no upscaler model is connected: install a MiniMax H3 latent upscaler in models/latent_upscale_models, load it with LatentUpscaleModelLoader and connect it to upscale_model."
+        if sequence is not None:
+            project = getattr(sequence, "project", None)
+            inputs, settings = getattr(sequence, "inputs", None), getattr(sequence, "settings", None)
+            if project is not None and inputs is not None and settings is not None:
+                if project.output == "images" and upscale_2k:
+                    return "2K finish upscales the video output; the Pictures output has no latent upscale."
+                if settings.control_strength and control_timing.clips(project.context) and inputs.model_patch is None:
+                    return "Connect ModelPatchLoader to the Context Connector's model_patch for control clips."
         return True
 
     @classmethod

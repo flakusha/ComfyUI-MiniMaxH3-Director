@@ -64,6 +64,15 @@ class Preview(unittest.TestCase):
             self.assertTrue(out["error"])
         self.assertFalse(preview.plan_preview({"contexts": [{"media": "gif", "widgets": {}}]})["ok"])
 
+    def test_none_widgets_are_an_error_not_a_crash(self):
+        # bugs 073-075: None widget values dereferenced as None.attribute 500d the panel; the plan route answers ok:false.
+        # every current None path is already coerced, so the pin simulates a future uncoerced dereference inside planning
+        from unittest import mock
+        with mock.patch.object(preview, "plan_project", side_effect=AttributeError("'NoneType' has no attribute 'strip'")):
+            out = preview.plan_preview({"director": {"idea": "A dog runs.", "project_seconds": 30}})
+        self.assertFalse(out["ok"])
+        self.assertTrue(out["error"])
+
     def test_malformed_requests_and_nonfinite_numbers_are_errors(self):
         for payload in (None, [], {"director": []}, {"director": "bad"}, {"contexts": [None]},
                         {"contexts": [{"media": "image", "widgets": []}]}, {"contexts": "bad"},

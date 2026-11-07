@@ -54,7 +54,7 @@ def plan_preview(payload, probe=None, image_size=None):
             project = plan_stills(context, image_size)
         else:
             project = plan_project(context, float(values["chunk_seconds"]), continuity, image_size)
-    except (SchemaError, KeyError, ValueError, TypeError, OverflowError) as error:
+    except (SchemaError, KeyError, ValueError, TypeError, AttributeError, OverflowError) as error:
         return {"ok": False, "error": str(error)}
     return {"ok": True, "width": project.context.width, "height": project.context.height, "total_s": round(frames.frames_to_seconds(project.plan.total_frames), 3), "total_frames": project.plan.total_frames,
             "fps": FPS, "requested_frames": project.plan.requested_frames,

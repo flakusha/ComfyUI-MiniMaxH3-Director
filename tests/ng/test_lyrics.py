@@ -177,7 +177,6 @@ class Placement(unittest.TestCase):
 
 class Captions(unittest.TestCase):
     def test_story_time_lrc_srt_and_chapters_come_from_the_same_window(self):
-        nodes = module("ng.nodes.context_nodes")
         lrc = lyrics.card_lrc(SONG)
         self.assertIn("[00:01.00] My master", lrc)
         language, lines = lyrics.parse(SONG)
@@ -198,6 +197,58 @@ class Captions(unittest.TestCase):
         asr = module("ng.core.asr")
         self.assertEqual(asr.select("no-such-backend")[0], "whisper")
         self.assertEqual(asr.select()[0], "whisper")
+
+    def test_qwen3_dirs_find_the_pair_in_one_asr_folder(self):
+        asr = module("ng.core.asr")
+        listing = lambda folder: ["Qwen3-ASR-0.6B-hf", "Qwen3-ForcedAligner-0.6B-hf"] if folder == "asr" else []
+        self.assertEqual(asr.qwen3_dirs(listing), ("Qwen3-ASR-0.6B-hf", "Qwen3-ForcedAligner-0.6B-hf"))
+        self.assertEqual(asr.qwen3_dirs(lambda folder: []), (None, None))
+        self.assertEqual(asr.qwen3_dirs(None), (None, None))
+
+    def test_qwen3_factory_returns_whisper_shaped_timings_with_stubbed_transformers(self):
+        # No weights on this box: stub transformers + folders, assert the factory returns the same
+        # shape time_lyrics returns (lrc/language/lines/heard_words) from the aligner words.
+        import sys
+        import types
+        timing = module("ng.adapters.lyrics_timing")
+        asr = module("ng.core.asr")
+        heard = [("hello", 0.0, 0.5), ("world", 0.6, 1.0)]
+        stub = types.ModuleType("transformers")
+        stub.__version__ = "5.19.0"
+        class FakeModel:
+            device = "cpu"
+            def __init__(self, text=""):
+                self.text = text
+            def generate(self, **kwargs):
+                return [[0]]
+            def __call__(self, **kwargs):
+                return types.SimpleNamespace(logits=[[0.0]])
+        class FakeProcessor:
+            def apply_transcription_request(self, samples, language=None, prompt=None):
+                return {"input_features": samples}
+            def batch_decode(self, tokens, skip_special_tokens=True):
+                return ["hello world"]
+            def prepare_forced_aligner_inputs(self, part, text, lang):
+                return {"input_values": part}
+            def decode_forced_alignment(self, logits, part, text):
+                return [{"text": word, "start_time": start, "end_time": end} for word, start, end in heard]
+        stub.AutoModelForMultimodalLM = types.SimpleNamespace(from_pretrained=lambda *a, **k: FakeModel())
+        stub.AutoModelForTokenClassification = types.SimpleNamespace(from_pretrained=lambda *a, **k: FakeModel())
+        stub.AutoProcessor = types.SimpleNamespace(from_pretrained=lambda *a, **k: FakeProcessor())
+        FakeModel.generate = lambda self, **kwargs: [[0]]
+        with unittest.mock.patch.dict(sys.modules, {"transformers": stub}), \
+                unittest.mock.patch.object(timing, "_qwen3_dirs", return_value=("asr-dir", "aligner-dir")), \
+                unittest.mock.patch.object(timing, "decode_audio") as decode:
+            import numpy as np
+            import torch
+            decode.return_value = (torch.zeros(1, 16000), 16000)
+            result = timing._qwen3_transcribe("song.mp3", "[00:00.00] hello world", "cpu")
+        self.assertEqual(result["heard_words"], 2)
+        self.assertEqual(result["lines"], 1)
+        self.assertIn("hello world", result["lrc"])
+        # the stub factory is registered under both names once lyrics_timing is imported
+        self.assertIs(asr.get("qwen3")[1], timing._qwen3_transcribe)
+        self.assertIs(asr.get("qwen3-asr")[1], timing._qwen3_transcribe)
 
     def test_fallback_mux_only_fills_silence(self):
         import torch

@@ -17,12 +17,22 @@ def names(purpose):
     """The files of the purpose's folder. When ComfyUI knows the folder - its own under models/, or one registered
     through extra_model_paths.yaml - its list is used, so files on a registered extra path show up too. Whisper's,
     MoGe's and Depth Anything 3's folders are not always registered (asking folder_paths for one that is not raised
-    and the Models menu stayed empty, GUI test 2026-10-19): then the folder under models/ is read."""
+    and the Models menu stayed empty, GUI test 2026-10-19): then the folder under models/ is read.
+    A purpose with `"dirs": true` (HF model folders like Qwen3-ASR) lists directories, not files."""
     folder = MODELS[purpose]["folder"]
+    want_dirs = bool(MODELS[purpose].get("dirs"))
     if folder in folder_paths.folder_names_and_paths:
-        return folder_paths.get_filename_list(folder)
+        listed = folder_paths.get_filename_list(folder)
+        if not want_dirs:
+            return listed
+        roots = folder_paths.get_folder_paths(folder)
+        return [name for name in listed
+                if any(os.path.isdir(os.path.join(root, name)) for root in roots)]
     root = os.path.join(folder_paths.models_dir, folder)
-    return sorted(name for name in os.listdir(root) if os.path.isfile(os.path.join(root, name))) if os.path.isdir(root) else []
+    if not os.path.isdir(root):
+        return []
+    is_wanted = os.path.isdir if want_dirs else os.path.isfile
+    return sorted(name for name in os.listdir(root) if is_wanted(os.path.join(root, name)))
 
 
 def find(purpose, chosen=""):

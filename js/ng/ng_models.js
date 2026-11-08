@@ -4,7 +4,7 @@
 // an empty choice is Automatic: the official name or the first file that fits (the server decides, one place for the patterns).
 import { h } from "./h3s_dom.js";
 
-export const CARD_MODELS = { image: ["sam3", "pose_detector", "pose", "moge"], video: ["sam3", "pose_detector", "pose", "moge", "da3"], audio: ["whisper"] };
+export const CARD_MODELS = { image: ["sam3", "pose_detector", "pose", "moge"], video: ["sam3", "pose_detector", "pose", "moge", "da3"], audio: ["whisper", "qwen3_asr", "qwen3_aligner"] };
 export const STORYBOARD_MODELS = ["qwen_image", "qwen_encoder", "qwen_vae", "background_removal"];
 export const PLACE_MODELS = ["sam3", "qwen_image", "qwen_encoder", "qwen_vae"];
 

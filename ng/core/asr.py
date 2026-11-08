@@ -49,20 +49,16 @@ def transformers_version_ok(version=""):
 
 
 def qwen3_dirs(list_names=None):
-    """(asr model name, aligner model name) from an injected model-name lister.
+    """(asr model dir, aligner model dir) from an injected model-name lister.
 
     `list_names(folder)` returns the registered names of one model folder; None keeps
     the pair unavailable. The caller (lyrics_timing, which already lives in adapters)
-    passes `folder_paths.get_filename_list`."""
+    passes `folder_paths.get_filename_list`. Dirs live under models/asr (see js/ng/models.json)."""
     if list_names is None:
         return None, None
-    try:
-        asr_names = [str(name).lower() for name in (list_names("asr") or [])]
-        align_names = [str(name).lower() for name in (list_names("asr_align") or [])]
-    except Exception:
-        return None, None
-    asr = next((name for name, low in zip(list_names("asr") or [], asr_names) if "qwen3" in low), None)
-    aligner = next((name for name, low in zip(list_names("asr_align") or [], align_names) if "align" in low), None)
+    asr_names = list(list_names("asr") or [])
+    asr = next((name for name in asr_names if "qwen3" in str(name).lower() and "align" not in str(name).lower()), None)
+    aligner = next((name for name in asr_names if "align" in str(name).lower()), None)
     return asr, aligner
 
 
@@ -84,9 +80,9 @@ def _qwen3_available(list_names=None):
 def _qwen3_factory(source, text, device, chosen=""):
     """Qwen3-ASR transcript + ForcedAligner word times, in Whisper's shape.
 
-    Loads transformers lazily (keeps the import cost off the default path), reads
-    the same 16 kHz mono samples as Whisper, and returns what `time_lyrics` returns.
-    Any failure inside the optional backend raises ValueError naming it."""
+    Registered by ng.adapters.lyrics_timing (adapter layer, folder_paths OK); this stub stays so
+    `select` resolves the name before that import. Any failure inside the optional backend raises
+    ValueError naming it."""
     raise ValueError("Qwen3-ASR backend is registered but its weights are not on disk yet; "
                      "unset H3_ASR_BACKEND (or place the Qwen3-ASR + ForcedAligner folders) to use Whisper.")
 

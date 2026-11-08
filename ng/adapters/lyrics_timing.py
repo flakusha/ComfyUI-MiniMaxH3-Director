@@ -132,6 +132,96 @@ def _model_names(folder):
         return []
 
 
+def _qwen3_dirs():
+    """(asr HF dir, aligner HF dir) under models/asr, chosen dir or first match."""
+    from ..core import asr
+    asr_dir, aligner_dir = asr.qwen3_dirs(_model_names)
+    if asr_dir is None or aligner_dir is None:
+        raise ValueError("Qwen3-ASR needs its two HF folders under models/asr (Qwen3-ASR-0.6B-hf + "
+                         "Qwen3-ForcedAligner-0.6B-hf); unset H3_ASR_BACKEND to use Whisper.")
+    roots = folder_paths.get_folder_paths("asr") if "asr" in folder_paths.folder_names_and_paths else [os.path.join(folder_paths.models_dir, "asr")]
+    def full(name):
+        return next((os.path.join(root, name) for root in roots if os.path.isdir(os.path.join(root, name))),
+                    os.path.join(folder_paths.models_dir, "asr", name))
+    return full(asr_dir), full(aligner_dir)
+
+
+def _qwen3_align_window(aligner_model, aligner_processor, part, heard_text, language, start_s):
+    """[(word, start_s, end_s)] for one aligner window (<= 5 minutes): file seconds via start_s."""
+    align_inputs = aligner_processor.prepare_forced_aligner_inputs(part, heard_text, language or "en")
+    moved = {key: value.to(aligner_model.device) if hasattr(value, "to") else value
+             for key, value in align_inputs.items()}
+    logits = aligner_model(**moved).logits
+    return [(entry["text"], float(entry["start_time"]) + start_s, float(entry["end_time"]) + start_s)
+            for entry in aligner_processor.decode_forced_alignment(logits, part, heard_text)]
+
+
+def _qwen3_words(samples, known, language, device):
+    """(words, kept_models) via Qwen3-ASR + ForcedAligner: [(word, start_s, end_s)] in file seconds.
+
+    Songs over 5 minutes are aligned per window (the aligner's cap). Raises ValueError naming the
+    backend on any failure. Models return loaded for the caller to free (same load-use-del pattern
+    as the Whisper path)."""
+    try:
+        import transformers
+    except ImportError:
+        raise ValueError("Qwen3-ASR needs transformers >= 5.13 in ComfyUI's Python.") from None
+    from ..core import asr as asr_core
+    if not asr_core.transformers_version_ok(getattr(transformers, "__version__", "")):
+        raise ValueError("Qwen3-ASR needs transformers >= 5.13 (have %s)." % getattr(transformers, "__version__", "unknown"))
+    asr_dir, aligner_dir = _qwen3_dirs()
+    where = device if str(device) != "cpu" else "cpu"
+    try:
+        asr_model = transformers.AutoModelForMultimodalLM.from_pretrained(asr_dir, dtype="auto", device_map=where)
+        asr_processor = transformers.AutoProcessor.from_pretrained(asr_dir)
+        request = asr_processor.apply_transcription_request(samples, language=language or None,
+                                                            prompt=" ".join(known) or None)
+        moved = {key: value.to(asr_model.device) if hasattr(value, "to") else value for key, value in request.items()}
+        transcript = asr_model.generate(**moved)
+        heard_text = asr_processor.batch_decode(transcript, skip_special_tokens=True)[0]
+        aligner_model = transformers.AutoModelForTokenClassification.from_pretrained(aligner_dir, dtype="auto",
+                                                                                     device_map=asr_model.device)
+        aligner_processor = transformers.AutoProcessor.from_pretrained(aligner_dir)
+        words, span, window = [], 0, 5 * 60 * asr_core.SAMPLE_RATE
+        while span < len(samples):
+            part, start_s = samples[span:span + window], span / asr_core.SAMPLE_RATE
+            words += _qwen3_align_window(aligner_model, aligner_processor, part, heard_text, language, start_s)
+            span += window
+    except ValueError:
+        raise
+    except Exception as error:
+        raise ValueError("Qwen3-ASR failed (%s); unset H3_ASR_BACKEND to use Whisper." % error) from error
+    return words, (asr_model, aligner_model)
+
+
+def _qwen3_transcribe(source, text, device, chosen=""):
+    """Qwen3-ASR transcript + ForcedAligner word times, in Whisper's shape.
+
+    Loads transformers lazily (keeps the import cost off the default path), reads the same 16 kHz mono
+    samples as Whisper, and returns what `time_lyrics` returns."""
+    from ..core import asr as asr_core
+    wave, _ = decode_audio(source, rate=asr_core.SAMPLE_RATE, layout="mono")
+    samples = wave.reshape(-1).numpy().astype(np.float32)
+    known = lyrics.plain_lines(text)
+    language, _ = lyrics.parse(text)
+    words, models = _qwen3_words(samples, known, language, device)
+    try:
+        if known:
+            lines = lyrics.align(known, words, len(samples) / float(asr_core.SAMPLE_RATE))
+        else:
+            lines = tuple(lyrics.LyricLine(round(start, 2), round(end, 2), word.strip())
+                          for word, start, end in words if word.strip())
+    finally:
+        del models
+    language = language or "English"
+    return {"lrc": lyrics.to_lrc(language, lines), "language": language, "lines": len(lines), "heard_words": len(words)}
+
+
+from ..core import asr as _asr_registry
+_asr_registry.register("qwen3", _asr_registry._qwen3_available, _qwen3_transcribe)
+_asr_registry.register("qwen3-asr", _asr_registry._qwen3_available, _qwen3_transcribe)
+
+
 def _samples(source):
     """Moved inline into time_lyrics (R5); this alias stays for old callers."""
     wave, _ = decode_audio(source, rate=16000, layout="mono")

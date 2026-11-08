@@ -57,10 +57,17 @@ Depth Anything 3 is optional and needs the **ComfyUI-DepthAnythingV3** nodes, wh
 | What | File (click to download) | Folder | Size |
 |---|---|---|---|
 | Whisper | [small.pt](https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt) | `models/whisper` | 0.5 GB |
+| Qwen3-ASR | [Qwen3-ASR-0.6B-hf](https://huggingface.co/Qwen/Qwen3-ASR-0.6B-hf) | `models/asr` | 1.2 GB |
+| Qwen3 ForcedAligner | [Qwen3-ForcedAligner-0.6B-hf](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B-hf) | `models/asr` | 1.2 GB |
 
 Whisper needs the `openai-whisper` package in ComfyUI's Python. Larger models (`medium.pt`, `large-v3.pt`) hear sung words
 better. HuggingFace safetensors checkpoints (from `openai/whisper-*`) load as well, whatever the file is called; the
 folder may sit anywhere ComfyUI knows it, for example through `extra_model_paths.yaml`.
+
+Qwen3-ASR is the alternative hearer: `Qwen3-ASR-0.6B-hf` hears the words (trained on songs) and
+`Qwen3-ForcedAligner-0.6B-hf` times them, both as HF folders under `models/asr`. Opt in with
+`H3_ASR_BACKEND=qwen3`; without it (or without the folders) the card stays on Whisper. Needs
+`transformers >= 5.13` in ComfyUI's Python.
 
 ## Example files
 

@@ -13,7 +13,7 @@ const { qwenSetup } = await import("../../../js/ng/h3b_queue.js");
 for (const [purpose, entry] of Object.entries(TABLE)) {
   assert.ok(entry.label && entry.use && entry.folder && entry.file && entry.size, purpose);
   assert.ok(entry.patterns.some((pattern) => new RegExp(pattern, "i").test(entry.file)), `${purpose}: the patterns find ${entry.file}`);
-  if (purpose !== "da3") assert.match(entry.url, /^https:\/\/(huggingface\.co\/(Comfy-Org|Kijai\/MiniMax-H3-TAE)|openaipublic\.azureedge\.net)\//, purpose);
+  if (purpose !== "da3") assert.match(entry.url, /^https:\/\/(huggingface\.co\/(Comfy-Org|Kijai\/MiniMax-H3-TAE|Qwen)|openaipublic\.azureedge\.net)\//, purpose);
   assert.ok(models.MODEL_GROUPS.some(([group]) => group === entry.group), `${purpose}: its group is listed`);
 }
 

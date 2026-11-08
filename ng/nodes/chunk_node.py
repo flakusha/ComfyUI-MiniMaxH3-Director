@@ -206,4 +206,46 @@ def _decode_video(vae, video):
     return frames.reshape(-1, *frames.shape[-3:]) if frames.ndim == 5 else frames
 
 
-NODES = [NGChunkConditioning, NGCollect, NGCollectVideo]
+class NGSaveCaptions(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="NGSaveCaptions", display_name="NG Save Captions", category=CATEGORY + "/Custom loop",
+            description="Write the Director's timed words next to the saved video: an .srt file (and optionally "
+                        ".lrc) under the same name. Wire the Audio card's captions output and the same filename "
+                        "prefix as SaveVideo; both claim the next free counter, so one queue lands video and "
+                        "sidecar under one name.",
+            inputs=[io.String.Input("captions", force_input=True,
+                                     tooltip="The Audio card's captions output (story-time LRC). Empty writes nothing."),
+                    io.String.Input("filename_prefix", default="H3/captions",
+                                    tooltip="Same prefix as the SaveVideo node: the sidecar lands beside the video under one name."),
+                    io.Combo.Input("format", options=["srt", "lrc", "both"], default="srt",
+                                   tooltip="Which sidecar to write; both writes the two files under one name.")],
+            outputs=[io.String.Output(display_name="saved",
+                                      tooltip="The sidecar file name(s) written to the output folder, one per line.")],
+            is_output_node=True,
+        )
+
+    @classmethod
+    def execute(cls, captions, filename_prefix, format="srt"):
+        from ..core import lyrics
+        text = str(captions or "").strip()
+        if not text:
+            return io.NodeOutput("")
+        language, lines = lyrics.parse(text)
+        if not lines:
+            return io.NodeOutput("")
+        full_output_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(
+            str(filename_prefix or "H3/captions"), folder_paths.get_output_directory(), 0, 0)
+        wanted = ("srt", "lrc") if str(format) == "both" else (str(format) if str(format) == "lrc" else "srt",)
+        saved = []
+        for ext in wanted:
+            body = lyrics.to_lrc(language, lines) if ext == "lrc" else lyrics.to_srt(lines)
+            file = "%s_%05d_.%s" % (filename, counter, ext)
+            with open(os.path.join(full_output_folder, file), "w", encoding="utf-8") as handle:
+                handle.write(body + ("" if body.endswith("\n") else "\n"))
+            saved.append(file if not subfolder else subfolder + "/" + file)
+        return io.NodeOutput("\n".join(saved))
+
+
+NODES = [NGChunkConditioning, NGCollect, NGCollectVideo, NGSaveCaptions]

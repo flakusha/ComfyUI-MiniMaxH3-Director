@@ -1,10 +1,9 @@
 """External typed inputs (audio_in/video_in/image_in/text_in): the connection owns the card's file.
 
 The frontend mirrors the origin's file into the card's media widget; these tests pin the backend half: the
-ports exist as plain sockets (no widgets_values shift), a linked input with no file behind it is refused by
-validate_inputs and execute alike - except audio, whose payload materializes to input/h3-external/ at execute,
-so its pre-flight passes and only an unreadable payload stops the run -, the audio length comes from the
-payload, and a linked text is the note."""
+ports exist as plain sockets (no widgets_values shift), a linked input with no file behind it materializes
+its payload to input/h3-external/ at execute, so pre-flight passes and only an unreadable payload stops
+the run -, the audio length comes from the payload, and a linked text is the note."""
 import asyncio
 import importlib
 import sys
@@ -141,9 +140,9 @@ class ExternalContextInputs(unittest.TestCase):
         self.assertTrue(node.validate_inputs(audio="", audio_in=None), "unlinked stays the card's own business")
         for kind, port, media in (("NGContextImage", "image_in", "image"), ("NGContextVideo", "video_in", "video")):
             other = self.node(kind)
-            self.assertIn("no file behind it", other.validate_inputs(**{media: "", port: object()}))
+            self.assertTrue(other.validate_inputs(**{media: "", port: object()}), "a linked payload materializes at execute")
             self.assertTrue(other.validate_inputs(**{media: "a.png", port: object()}))
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "no readable picture|no file behind it"):
                 other.execute(**{media: "", port: object()}, **dict(name="", description="", preserve="high",
                               content=ROLES[media][0], usage=ROLES[media][1]))
 
@@ -209,7 +208,6 @@ class ExternalContextInputs(unittest.TestCase):
     def test_a_malformed_payload_names_the_card(self):
         # A linked AUDIO payload the mirror check already passed still has to read: {} and a
         # payload without a waveform name the card instead of raising a raw KeyError.
-        import torch
         node = self.node("NGContextAudio")
         for bad in ({}, {"sample_rate": 44100}, {"waveform": None, "sample_rate": 44100}):
             with self.subTest(payload=bad):
@@ -260,9 +258,8 @@ class ExternalContextInputs(unittest.TestCase):
                                 node.fingerprint_inputs(video="clip.mp4", context_options=base))
 
     def test_real_validation_resolves_the_link_for_validate_inputs(self):
-        """The full V3 path proves OUR override actually runs there: a resolved audio payload with no widget file
-        passes (execute materializes it), a resolved image payload with no widget file still fails, and an
-        unconnected payload stays valid."""
+        """The full V3 path proves OUR override actually runs there: resolved payloads with no widget file
+        pass (execute materializes them), and an unconnected payload stays valid."""
         from types import SimpleNamespace
         execution = importlib.import_module("execution")
         node = self.node("NGContextAudio")
@@ -288,7 +285,49 @@ class ExternalContextInputs(unittest.TestCase):
         self.assertFalse(missing)
         results = asyncio.run(execution._async_map_node_over_list("audit", "card", picture, values,
                                                                  "validate_inputs", v3_data=v3))
-        self.assertIn("no file behind it", str(results[0]), "the override really runs inside the queue's validation")
+        self.assertEqual(results, [True], "a linked picture materializes at execute, so pre-flight passes")
+
+    def test_a_composited_picture_is_materialized_to_h3_external(self):
+        # A composited IMAGE tensor has no file to mirror: execute writes its first frame to
+        # input/h3-external/ so the linked card runs headlessly; the same picture reuses its file.
+        import torch
+        node = self.node("NGContextImage")
+        payload = torch.zeros(1, 4, 6, 3)
+        item = node.execute(image="", name="", description="", content="character", usage="reference",
+                            preserve="high", context_id="ctx", color="", image_in=payload).args[0]
+        self.assertTrue(item.source.startswith("h3-external/") and item.source.endswith(".png"), item.source)
+        again = node.execute(image="", name="", description="", content="character", usage="reference",
+                             preserve="high", context_id="ctx", color="", image_in=payload).args[0]
+        self.assertEqual(again.source, item.source, "the same picture reuses its file")
+        probe = importlib.import_module(self.pack.__name__ + ".ng.adapters.probe")
+        self.assertEqual(probe.image_size(item.source), (6, 4))
+        with self.assertRaisesRegex(ValueError, "no readable picture"):
+            node.execute(image="", name="", description="", content="character", usage="reference",
+                         preserve="high", context_id="ctx", color="", image_in=object())
+
+    def test_a_file_backed_video_link_keeps_its_path(self):
+        # LoadVideo hands a VideoFromFile whose stream source is the file itself: nothing is copied,
+        # the card reads the input-relative reference. A foreign path still stops the run naming the card.
+        from unittest.mock import MagicMock
+        node = self.node("NGContextVideo")
+        video_in = MagicMock()
+        linked = importlib.import_module(self.pack.__name__ + ".ng.adapters.linked_audio")
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as input_dir:
+            clip = os.path.join(input_dir, "clip.mp4")
+            with open(clip, "wb") as handle:
+                handle.write(b"x")
+            with patch.object(self.module.probe, "duration_seconds", return_value=3.0), \
+                    patch.object(linked.folder_paths, "get_input_directory", return_value=input_dir):
+                with patch.object(linked, "_video_file_source", return_value=clip):
+                    item = node.execute(video="", name="", description="", content="motion", usage="motion",
+                                        preserve="high", context_id="ctx", color="", video_in=video_in).args[0]
+                    self.assertEqual(item.source, "clip.mp4")
+            with patch.object(linked, "_video_file_source", return_value="/tmp/elsewhere.mp4"):
+                with self.assertRaisesRegex(ValueError, "no file behind it"):
+                    node.execute(video="", name="", description="", content="motion", usage="motion",
+                                 preserve="high", context_id="ctx", color="", video_in=video_in)
 
 
 if __name__ == "__main__":

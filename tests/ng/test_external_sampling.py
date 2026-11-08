@@ -257,6 +257,29 @@ class ExternalSampling(unittest.TestCase):
             self.chunk_module.collect.collect_chunks(returned, plan, lambda v: torch.zeros(plan.chunks[0].sampled_frames, 4, 4, 3),
                                                      lambda a: {"waveform": torch.zeros(1, 2, 200000), "sample_rate": 32000})
 
+    def test_sidecar_captions_land_beside_the_video_under_one_name(self):
+        # U1: the captions string becomes .srt (+ optional .lrc) through the same counter naming
+        # SaveVideo uses, so one queue lands video and sidecar under one name. Empty writes nothing.
+        import os
+        import tempfile
+        node = self.nodes["NGSaveCaptions"]
+        body = "[la:English]\n[00:01.00] My master\n[00:05.00] I still wait\n"
+        with tempfile.TemporaryDirectory() as output:
+            with patch.object(self.chunk_module.folder_paths, "get_output_directory", return_value=output), \
+                    patch.object(self.chunk_module.folder_paths, "get_save_image_path",
+                                 side_effect=lambda prefix, directory, w, h: (output, "captions", 1, "", prefix)):
+                out = node.execute(body, "H3/captions", "both").args[0]
+                self.assertEqual(out.splitlines(), ["captions_00001_.srt", "captions_00001_.lrc"])
+                srt_path = os.path.join(output, "captions_00001_.srt")
+                lrc_path = os.path.join(output, "captions_00001_.lrc")
+                with open(srt_path, encoding="utf-8") as handle:
+                    srt = handle.read()
+                self.assertTrue(srt.startswith("1\n00:00:01,000 --> 00:00:05,000\nMy master"), srt)
+                with open(lrc_path, encoding="utf-8") as handle:
+                    lrc = handle.read()
+                self.assertIn("[00:01.00] My master", lrc)
+                self.assertEqual(node.execute("", "H3/captions", "srt").args[0], "")
+
     def test_direct_pin_rejects_changed_canvas_with_an_actionable_message(self):
         with self.assertRaisesRegex(ValueError, "same-resolution continuity"):
             self.chunk_module.latents.check_same_canvas(torch.zeros(1, 24, 37, 4, 4), torch.zeros(1, 24, 37, 8, 8))

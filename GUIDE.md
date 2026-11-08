@@ -1019,9 +1019,11 @@ Every card has one extra input socket on its left: **image**, **video**, **audio
 **Load Video**, **Load Audio** — or another card — and the linked file becomes the card's file: the card shows it, the
 waveform follows it, and the renders use it. While linked, **Upload** and the file picker are locked and a *Linked*
 chip names the origin. Change the file on the origin and the card follows; remove the link and the card's previous
-file comes back. The Text card shows the linked text read-only instead of its own note. A link whose origin carries
-no file (a generated or recorded sound, for example) shows a warning and a run stops until a file is picked on the
-origin; the card's own range, name and description stay editable either way.
+file comes back. The Text card shows the linked text read-only instead of its own note. A linked sound,
+picture or clip with no file behind it (decoded audio, a composited picture, a generated clip) is saved
+into the `input` folder (`h3-external/`) when the card runs, so the run works headlessly; only a payload
+with nothing readable stops the run naming the card. The card's own range, name and description stay
+editable either way.
 
 ### Image
 
@@ -1170,6 +1172,9 @@ parts. Click the clip to choose how H3 uses it:
    stay until you **Use as lyrics** or **Keep both**); **⟳ Time with Whisper** finds when each line is sung (it needs
    the Whisper model, chapter 2); **Stamp line** sets the selected line's time by ear while the song plays. Each render
    part then gets only the lines sung in it, so the lips match.
+4. **Sidecar captions** (optional): wire the card's **captions** output into **NG Save Captions** with the
+   same filename prefix as SaveVideo — the finished video gets an `.srt` file (and optionally `.lrc`) under
+   one name, timed in seconds of the video.
 
 Transcribing and analyzing sound needs an audio-capable model: set the AI Loader's **Audio model** to one that hears
 (audio input), and make sure that model loads with its audio projector (llama.cpp/mmproj — without it the server

@@ -370,6 +370,9 @@ or larger; while a render runs it stays on the CPU). Without lines it writes dow
 selected line's time by ear while the song plays. Where the card plays exactly (Lock or Copy, on an audio lane, a shot or the
 whole project), each render part gets only the lines sung in it, as `<Subject 1> (S1) sings, <d>[English] …</d>` in the
 shot where they are sung. Measured on the 27 s elf song: Whisper small heard all eight lines in 7 s.
+The card's **captions** output carries the same words as story-time LRC (seconds in the video the card
+plays, not the file); **NG Save Captions** writes them next to the saved video as `.srt` (and optionally
+`.lrc`) under one name — wire it with the same filename prefix as SaveVideo.
 
 **Text:** a note in any language, with **Quick insert** brackets, templates and the role. As **Scene / story** it is story:
 the AI split reads it like the Prompt, and with shots it is not pasted into every part. In every other role (style, rule,

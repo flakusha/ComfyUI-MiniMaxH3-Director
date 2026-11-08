@@ -21,9 +21,11 @@ Every card has one extra input socket on its left: **image**, **video**, **audio
 **Load Video**, **Load Audio** — or another card — and the linked file becomes the card's file: the card shows it, the
 waveform follows it, and the renders use it. While linked, **Upload** and the file picker are locked and a *Linked*
 chip names the origin. Change the file on the origin and the card follows; remove the link and the card's previous
-file comes back. The Text card shows the linked text read-only instead of its own note. A link whose origin carries
-no file (a generated or recorded sound, for example) shows a warning and a run stops until a file is picked on the
-origin; the card's own range, name and description stay editable either way.
+file comes back. The Text card shows the linked text read-only instead of its own note. A linked sound,
+picture or clip with no file behind it (decoded audio, a composited picture, a generated clip) is saved
+into the `input` folder (`h3-external/`) when the card runs, so the run works headlessly; only a payload
+with nothing readable stops the run naming the card. The card's own range, name and description stay
+editable either way.
 
 ## Image
 

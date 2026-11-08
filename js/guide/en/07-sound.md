@@ -43,6 +43,9 @@ parts. Click the clip to choose how H3 uses it:
    stay until you **Use as lyrics** or **Keep both**); **⟳ Time with Whisper** finds when each line is sung (it needs
    the Whisper model, chapter 2); **Stamp line** sets the selected line's time by ear while the song plays. Each render
    part then gets only the lines sung in it, so the lips match.
+4. **Sidecar captions** (optional): wire the card's **captions** output into **NG Save Captions** with the
+   same filename prefix as SaveVideo — the finished video gets an `.srt` file (and optionally `.lrc`) under
+   one name, timed in seconds of the video.
 
 Transcribing and analyzing sound needs an audio-capable model: set the AI Loader's **Audio model** to one that hears
 (audio input), and make sure that model loads with its audio projector (llama.cpp/mmproj — without it the server

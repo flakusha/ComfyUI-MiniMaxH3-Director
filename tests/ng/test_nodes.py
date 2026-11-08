@@ -39,7 +39,7 @@ class Registration(unittest.TestCase):
         # into them, saved workflows load them) but ComfyUI does not list them; the blocks of an own loop have their group.
         internal = ("NGChunkConditioning", "NGChunkNoise", "NGChunkSampling", "NGResumeChunk", "NGControlChunk", "NGProjectChunks",
                     "NGTurboLora", "NGAIRequest", "NGAICheckEncoder", "NGAIReadMedia", "NGAIResult")
-        loop = ("NGCollect", "NGCollectVideo", "NGControlVideo", "NGDirector", "NGDirectorStudio", "NGRenderSequence", "MiniMaxH3PreviewOverrideCS")
+        loop = ("NGCollect", "NGCollectVideo", "NGSaveCaptions", "NGControlVideo", "NGDirector", "NGDirectorStudio", "NGRenderSequence", "MiniMaxH3PreviewOverrideCS")
         for node_id in internal:
             schema = self.pack.NODE_CLASS_MAPPINGS[node_id].GET_SCHEMA()
             self.assertEqual((schema.category, schema.is_dev_only), ("MiniMax H3/NG/Technical", True), node_id)

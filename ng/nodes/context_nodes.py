@@ -84,22 +84,30 @@ def _no_file_error(media):
 
 def _linked_file(widget_value, media, linked=None):
     """A connected external input reaches the render only through the card's media widget: the frontend mirrors the
-    origin's file into it. A non-file-backed audio payload (decoded or recorded sound, nothing to mirror) is
+    origin's file into it. A non-file-backed payload (decoded sound, composited picture or clip, nothing to mirror) is
     materialized to input/h3-external/ instead, so linked cards execute headlessly; the card-naming error stays
-    for a payload with no readable sound at all."""
+    for a payload with nothing readable at all."""
     if str(widget_value or "").strip():
         return str(widget_value)
-    if media == "audio" and linked is not None:
-        from ..adapters.linked_audio import materialize
-        return materialize(linked)
+    if linked is not None:
+        from ..adapters import linked_audio
+        if media == "audio":
+            return linked_audio.materialize(linked)
+        if media == "image":
+            return linked_audio.materialize_image(linked)
+        if media == "video":
+            name = linked_audio.materialize_video(linked)
+            if name is not None:
+                return name
     raise ValueError(_no_file_error(media))
 
 
 def _validate_linked_file(linked, widget_value, media):
     """Queue pre-flight: the same rule as execute, returned as the validation message before a run starts.
-    A linked audio passes with no mirror file: execute materializes its payload to input/h3-external/,
-    and a payload with no readable sound still stops the run naming the card."""
-    if linked is None or str(widget_value or "").strip() or media == "audio":
+    A linked payload with no mirror file passes: execute materializes it to input/h3-external/,
+    and an unreadable payload still stops the run naming the card. Video can only tell file-backed
+    from composited at run time, so its pre-flight passes the same way audio's always has."""
+    if linked is None or str(widget_value or "").strip() or media in ("audio", "image", "video"):
         return True
     return _no_file_error(media)
 
@@ -156,7 +164,7 @@ class NGContextImage(io.ComfyNode):
     @classmethod
     def execute(cls, image, name, description, content, usage, preserve, context_id="", color="", image_in=None, **extras):
         if image_in is not None:
-            _linked_file(image, "image")
+            image = _linked_file(image, "image", image_in)
         return io.NodeOutput(item_from_widgets("image", dict(image=image, name=name, description=description, content=content,
                                                             usage=usage, preserve=preserve, context_id=context_id, color=color, **_widget_extras(extras))))
 
@@ -185,7 +193,7 @@ class NGContextVideo(io.ComfyNode):
     @classmethod
     def execute(cls, video, name, description, content, usage, preserve, context_id="", color="", video_in=None, **extras):
         if video_in is not None:
-            _linked_file(video, "video")
+            video = _linked_file(video, "video", video_in)
         widgets = dict(video=video, name=name, description=description, content=content, usage=usage, preserve=preserve,
                        context_id=context_id, color=color, **_widget_extras(extras))
         return io.NodeOutput(item_from_widgets("video", widgets, probe.duration_seconds(video.replace(" [input]", ""))))

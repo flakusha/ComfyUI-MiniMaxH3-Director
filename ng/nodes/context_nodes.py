@@ -146,6 +146,23 @@ def _trim_is_set(value):
     return isinstance(value, (int, float)) and value > 0
 
 
+def _card_lrc(stored, start_s=0.0, end_s=0.0):
+    """This card's timed words as story-time LRC (P1.1: the caption export, data-first).
+
+    The stored text stays file-time; the stamps are shifted into the card's own trim window
+    (lyrics.story_stamps), so the string reads seconds in the video the card plays. Empty when
+    the card carries no timed words."""
+    if not isinstance(stored, str) or not stored.strip():
+        return ""
+    from ..core import lyrics
+    language, _ = lyrics.parse(stored)
+    lines = lyrics.story_stamps(lyrics.stamped_lines(stored), float(start_s or 0.0), float(end_s or 0.0))
+    if not lines:
+        return ""
+    out = ["[la:%s]" % language] if language else []
+    return "\n".join(out + lines)
+
+
 def _subject_inputs():
     return [io.String.Input("subject_ids", default="", optional=True, advanced=True,
                             tooltip="JSON list of owning Subject context IDs; edited by the card's Subject assignment list.")]
@@ -223,7 +240,9 @@ class NGContextAudio(io.ComfyNode):
                                                   tooltip="The selected range as sound, in the file's own rate and channels; wire it into "
                                                           "CreateVideo's audio when no generated soundtrack is used."),
                                   io.Float.Output(display_name="max duration",
-                                                  tooltip="Seconds the selected range can play: the number to keep project_seconds under.")],
+                                                  tooltip="Seconds the selected range can play: the number to keep project_seconds under."),
+                                  io.String.Output(display_name="captions",
+                                                   tooltip="This card's timed words as story-time LRC (seconds in the video the card plays, not the file).")],
                          hidden=[io.Hidden.unique_id])
 
     @classmethod
@@ -272,8 +291,9 @@ class NGContextAudio(io.ComfyNode):
         cut_start, cut_end = trim_window.check_window(start_s, end_s, length_s)
         options["start_s"], options["end_s"] = start_s, end_s      # 0 stays 0: the file end, not today's length
         widgets["context_options"] = json.dumps(options)
+        window = trim_window.max_duration(start_s, end_s, length_s)
         return io.NodeOutput(item_from_widgets("audio", widgets, length_s),
-                             trimmed_audio(audio, cut_start, cut_end), trim_window.max_duration(start_s, end_s, length_s))
+                             trimmed_audio(audio, cut_start, cut_end), window, _card_lrc(options.get("lyrics", ""), start_s, end_s))
 
 
 class NGContextText(io.ComfyNode):

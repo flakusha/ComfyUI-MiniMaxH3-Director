@@ -205,10 +205,12 @@ test("A linked video locks the mask box: picking a mask would silently unmirror 
 
 test("A trim-era save repairs non-JSON role/options fields on configure", async (t) => {
   await t.test("mid-length values holding filenames reset by name, valid JSON survives", async () => {
+    // Thirteen junk values: not a pre-trim layout (12) and not a pre-roles one (9), so the pre-trim
+    // re-seat stays out and only the name-based JSON repair runs.
     const card = makeCard({ ...AUDIO_WIDGETS, content_roles: "voice.wav", usage_roles: "[\"voice\"]",
       context_options: "song.mp3", subject_ids: "" });
     extension.nodeCreated(card.card);
-    card.card.onConfigure({ widgets_values: Array(12).fill("junk") });
+    card.card.onConfigure({ widgets_values: Array(13).fill("junk") });
     const byName = Object.fromEntries(card.card.widgets.map((widget) => [widget.name, widget.value]));
     assert.equal(byName.content_roles, "", "a filename in a JSON field resets");
     assert.equal(byName.context_options, "", "a filename in the options field resets");
@@ -245,6 +247,40 @@ test("A run that saves a linked sound pushes its name into the card's empty widg
     emit("minimax_h3_ng_audio", { node_id: 4, audio: "h3-external/def456.flac" });
     await settle();
     assert.equal(values(bare.card).audio, "h3-external/abc123.flac");
+  });
+});
+
+test("A pre-trim save re-seats shifted widgets on configure", async (t) => {
+  // A workflow saved before Trim start/end existed restores its 12 values positionally: the Context ID lands in
+  // Trim start, the colour in Trim end, and the JSON fields shift along. onConfigure re-seats them by name, so the
+  // ID never reaches the node's float conversion (queue refused it as "could not convert string to float").
+  const preTrim = ["voice.wav", "Voice", "", "voice", "voice", "high", "", "ctx_voice", "#b1cbe3",
+    "", "", ""];
+  await t.test("shifted values return to their widgets", async () => {
+    const { card } = makeCard({ ...AUDIO_WIDGETS, trim_start: "ctx_voice", trim_end: "#b1cbe3",
+      context_id: "", color: "" });
+    extension.nodeCreated(card);
+    card.onConfigure({ widgets_values: [...preTrim] });
+    await settle();
+    assert.equal(values(card).trim_start, 0, "the ID leaves the float widget");
+    assert.equal(values(card).trim_end, 0, "the colour leaves the float widget");
+    assert.equal(values(card).context_id, "ctx_voice", "the ID is back on its widget");
+    assert.equal(values(card).color, "#b1cbe3", "the colour is back on its widget");
+    assert.equal(values(card).audio, "voice.wav");
+    assert.equal(values(card).speaker, "");
+  });
+
+  await t.test("a save the frontend restored by name is left alone, trims included", async () => {
+    const { card } = makeCard({ ...AUDIO_WIDGETS, trim_start: 2.5, trim_end: 6.0 });
+    extension.nodeCreated(card);
+    const full = ["voice.wav", "Voice", "", "voice", "voice", "high", "", 2.5, 6.0, "ctx_voice", "",
+      "", "", ""];
+    card.onConfigure({ widgets_values: [...full],
+      widgets_values_named: { ...AUDIO_WIDGETS, trim_start: 2.5, trim_end: 6.0 } });
+    await settle();
+    assert.equal(values(card).trim_start, 2.5, "a real range survives configure");
+    assert.equal(values(card).trim_end, 6.0);
+    assert.equal(values(card).context_id, "ctx_voice");
   });
 });
 

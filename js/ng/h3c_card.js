@@ -21,7 +21,7 @@ import { subjectChoices } from "./ng_subjects.js";
 import { followNoteRenames, knownNames } from "./ng_references.js";
 import { noteGrowth, followDraggedHeight, pushOnGrowth } from "./ng_layout.js";
 import { dropTarget } from "./ng_drop.js";
-import { controlGraph, controlSetup } from "./h3c_control_graph.js";
+import { controlGraph, controlSetup, reseatPreTrim } from "./h3c_control_graph.js";
 import { layout, WIDTH } from "./h3c_layout.js";
 import { runJob } from "./h3b_queue.js";
 import { uploadMask } from "./h3c_mask.js";
@@ -449,11 +449,11 @@ function attach(node, media) {
     repairNullableText(node);
     restoreAssetWidget(node);
     // Old workflows end after ID/colour; browser upload widgets must not fill newly added JSON fields.
-    // Name-based repair: any of the JSON fields holding a non-empty non-JSON value was filled by a
-    // browser upload widget from a trim-era save, so it resets regardless of the saved length.
+    // A pre-trim save restores positionally (Context ID in Trim start); re-seat by name.
     const saved = args[0]?.widgets_values;
     if (Array.isArray(saved) && saved.length <= (media === "audio" ? 9 : 8))
       for (const widget of node.widgets || []) if (["content_roles", "usage_roles", "context_options"].includes(widget.name)) widget.value = "";
+    if (media === "audio") reseatPreTrim(node, args[0]);
     for (const widget of node.widgets || []) {
       if (!["content_roles", "usage_roles", "context_options", "subject_ids"].includes(widget.name)) continue;
       if (!widget.value) continue;

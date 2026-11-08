@@ -49,6 +49,25 @@ export function controlGraph(kind, source, setup, prefix) {
   return graph;
 }
 
+// Pre-trim audio save (Trim start/end added later): the Context ID lands in Trim start, the colour
+// in Trim end, the JSON fields shift along. Re-seat by name, so the ID never reaches float conversion.
+// A save the frontend restored by name maps to the same values, so this is a no-op there.
+// 12 values; 9 when the save also predates the role fields.
+export function reseatPreTrim(node, info) {
+  const saved = info?.widgets_values;
+  if (!Array.isArray(saved) || (saved.length !== 12 && saved.length !== 9)) return;
+  const named = info?.widgets_values_named;
+  const names = ["audio", "name", "description", "content", "usage", "preserve", "speaker",
+    "trim_start", "trim_end", "context_id", "color", "content_roles", "usage_roles", "context_options"];
+  if (named && typeof named === "object" && !Array.isArray(named) && names.every((name) => Object.hasOwn(named, name))) return;
+  const at = Object.fromEntries((node.widgets || []).filter((w) => w?.name).map((w) => [w.name, w]));
+  ["audio", "name", "description", "content", "usage", "preserve", "speaker"].forEach((name, i) => { if (at[name]) at[name].value = saved[i]; });
+  if (at.trim_start) at.trim_start.value = 0;
+  if (at.trim_end) at.trim_end.value = 0;
+  ["context_id", "color", "content_roles", "usage_roles", "context_options"].forEach((name, i) => { if (at[name] && saved[7 + i] !== undefined) at[name].value = saved[7 + i]; });
+  if (saved.length === 9) for (const name of ["content_roles", "usage_roles", "context_options"]) if (at[name]) at[name].value = "";
+}
+
 function maskGraph(source, setup, prefix) {
   const node = (class_type, inputs) => ({ class_type, inputs });
   if (!setup.prompt?.trim()) throw new Error("Describe what to mask, e.g. person or red ball.");

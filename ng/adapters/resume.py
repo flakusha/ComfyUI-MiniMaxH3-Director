@@ -42,7 +42,9 @@ def _file(source):
 
 
 def _place(job, context_id):
-    place = next(p for p in job.project.places if p.context_id == context_id)
+    place = next((p for p in job.project.places if p.context_id == context_id), None)
+    if place is None:
+        raise ValueError("Place picture %r is not in this plan; re-render its Place card first." % (context_id,))
     return ["rendered", place.kind, place.view]
 
 
@@ -50,6 +52,10 @@ def _own(job, settings):
     compiled, chunk, context = job.compiled, job.chunk, job.project.context
     own = {"chunk": chunk.to_dict(), "mode": compiled.mode, "prompt": compiled.prompt, "size": [context.width, context.height],
             "continuity": job.project.plan.continuity.mode,
+            # The Models-menu choice, explicit (not only via the settings chain): a swap re-renders from
+            # the first part, like a seed change. A place picture's file stamp stays out - it is written
+            # anew by every render, and the earlier part it comes from is already in the chain.
+            "models": settings.get("models", ""),
             # a Place picture is written anew by every render (adapters/places.py); the earlier part it comes from is in the chain
             "refs": [[r.kind, r.ctx_id, r.source, r.start_f, r.length_f, r.trim_start_f,
                       _place(job, r.ctx_id) if is_place(r.ctx_id) else _file(r.source)] for r in compiled.refs]}

@@ -54,3 +54,18 @@ def read_waveform(audio_in):
     if rate <= 0 or frames <= 0 or channels <= 0:
         raise ValueError("The connected audio has no readable sound - reconnect its source, or pick a file on the card.")
     return wave, rate
+
+
+def notify_materialized(node_cls, name):
+    """Tell the owning card its linked sound now has a file: the name is content-hashed, so the card cannot
+    learn it any other way, and without it Time with Whisper keeps asking for a run. A failed push stays
+    silent - the run itself already succeeded, and the next run pushes again."""
+    try:
+        from server import PromptServer
+        node_id = str(getattr(getattr(node_cls, "hidden", None), "unique_id", None) or "")
+        if not node_id:
+            return
+        client_id = getattr(PromptServer.instance, "client_id", None)
+        PromptServer.instance.send_sync("minimax_h3_ng_audio", {"node_id": node_id, "audio": name}, client_id)
+    except (AttributeError, OSError, RuntimeError):
+        pass

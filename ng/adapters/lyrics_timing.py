@@ -133,9 +133,7 @@ def _model_names(folder):
 
 
 def _samples(source):
-    """The song as Whisper reads it, 16 kHz mono float, decoded through the shared decoder (adapters/audio_decode).
-    The card-relative name goes in unresolved: the decoder resolves it itself, and a resolved path fed back in
-    fails its input-folder check, so every file timed out as missing."""
+    """Moved inline into time_lyrics (R5); this alias stays for old callers."""
     wave, _ = decode_audio(source, rate=16000, layout="mono")
     return wave.reshape(-1).numpy().astype(np.float32)
 
@@ -154,7 +152,10 @@ def time_lyrics(source, text, device, chosen="", engine=None):
         return factory(source, text, device, chosen=chosen)
     if whisper is None:
         raise ValueError("Timing lyrics needs the openai-whisper package in ComfyUI's Python.")
-    samples = _samples(source)
+    samples, _ = decode_audio(source, rate=16000, layout="mono")
+    # The card-relative name goes in unresolved: the decoder resolves it itself, and a resolved path fed back
+    # in fails its input-folder check, so every file timed out as missing.
+    samples = samples.reshape(-1).numpy().astype(np.float32)
     known = lyrics.plain_lines(text)
     language, _ = lyrics.parse(text)
     model = _load_model(model_file(chosen), device=device)

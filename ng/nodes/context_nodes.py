@@ -112,18 +112,9 @@ def _linked_length(audio_in):
 
 
 def _notify_materialized(node_cls, name):
-    """Tell the owning card its linked sound now has a file: the name is content-hashed, so the card cannot
-    learn it any other way, and without it Time with Whisper keeps asking for a run. A failed push stays
-    silent - the run itself already succeeded, and the next run pushes again."""
-    try:
-        from server import PromptServer
-        node_id = str(getattr(getattr(node_cls, "hidden", None), "unique_id", None) or "")
-        if not node_id:
-            return
-        client_id = getattr(PromptServer.instance, "client_id", None)
-        PromptServer.instance.send_sync("minimax_h3_ng_audio", {"node_id": node_id, "audio": name}, client_id)
-    except (AttributeError, OSError, RuntimeError):
-        pass
+    """Moved to ng.adapters.linked_audio.notify_materialized (node layer stays queue-clean); alias for old callers."""
+    from ..adapters.linked_audio import notify_materialized
+    notify_materialized(node_cls, name)
 
 
 def _linked_float(value):
@@ -267,6 +258,9 @@ class NGContextAudio(io.ComfyNode):
         options["start_s"], options["end_s"] = start_s, end_s      # 0 stays 0: the file end, not today's length
         widgets["context_options"] = json.dumps(options)
         window = trim_window.max_duration(start_s, end_s, length_s)
+        # NOTE (U3 revisit): the max duration output is for user wiring only today. A future pass could
+        # drive a project_seconds auto-limit/warn from it; the general song-ends-before-project warning
+        # (audio_shorter_than_project) already covers the whole-project Lock/Copy shape.
         return io.NodeOutput(item_from_widgets("audio", widgets, length_s),
                              trimmed_audio(audio, cut_start, cut_end), window, card_lrc(options.get("lyrics", ""), start_s, end_s))
 

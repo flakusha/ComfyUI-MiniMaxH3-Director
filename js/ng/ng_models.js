@@ -8,8 +8,21 @@ export const CARD_MODELS = { image: ["sam3", "pose_detector", "pose", "moge"], v
 export const STORYBOARD_MODELS = ["qwen_image", "qwen_encoder", "qwen_vae", "background_removal"];
 export const PLACE_MODELS = ["sam3", "qwen_image", "qwen_encoder", "qwen_vae"];
 
+// One fetch per purpose-set per API for the session: the files on disk rarely change while cards
+// are open. A failed fetch is not cached, so the next open tries again; a newly installed model
+// needs a refresh of the Models menu (re-open) to be listed. Keyed by API handle: Studio and canvas
+// cards share one session, so one probe serves both.
+const modelStateCaches = new WeakMap();
 export async function modelState(api, purposes) {
-  return (await api.fetchApi(`/ng/models?purposes=${purposes.join(",")}`)).json();
+  let cache = modelStateCaches.get(api);
+  if (!cache) { cache = new Map(); modelStateCaches.set(api, cache); }
+  const key = [...purposes].sort().join(",");
+  if (!cache.has(key)) {
+    const pending = api.fetchApi(`/ng/models?purposes=${purposes.join(",")}`).then((r) => r.json());
+    pending.catch(() => cache.delete(key));
+    cache.set(key, pending);
+  }
+  return cache.get(key);
 }
 
 // The file a job uses: the chosen one while it is there, else the automatic one (null when the model is missing).
@@ -21,6 +34,20 @@ export function resolveModel(state, purpose, chosen) {
 
 export async function findModel(api, purpose, chosen) {
   return resolveModel(await modelState(api, [purpose]), purpose, chosen);
+}
+
+// Whether the Depth Anything 3 node pack is installed: one /object_info probe per API for the
+// session, next to the modelState cache above. Video cards ask on attach; without the pack the
+// Depth menu offers MoGe only.
+const da3Probes = new WeakMap();
+export function da3Available(api) {
+  if (!da3Probes.has(api)) {
+    const pending = api.fetchApi("/object_info/DepthAnything_V3").then((r) => r.json())
+      .then((info) => Boolean(info.DepthAnything_V3)).catch(() => false);
+    pending.catch(() => da3Probes.delete(api));
+    da3Probes.set(api, pending);
+  }
+  return da3Probes.get(api);
 }
 
 export function missingText(entry) {

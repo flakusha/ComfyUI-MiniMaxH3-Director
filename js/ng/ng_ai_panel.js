@@ -1,11 +1,11 @@
 // Each AI source has a real execution path; native sources use ComfyUI's queue and loaders.
-import { draggedByUser } from "./ng_layout.js";
 import { element, values, applyValues, request, nativeAIFingerprint, clearedAddress } from "./ng_widgets.js";
 import { control, hideNative, section, actionButton, secretControl } from "./ng_editor_fields.js";
 import { icon } from "./ng_icons.js";
 import { upstreamNode } from "./ng_read.js";
 import { accepts, fieldHelp, wantsKey, wireName } from "./ng_ai_capabilities.js";
 import { modelOverrides } from "./ng_model_overrides.js";
+import { watchPanel } from "./ng_ai_fit.js";
 import { SOURCES, providerEntry, registryLoaded, sourceOf, sourceCard, loadRegistry } from "./ng_ai_registry.js";
 
 const { app } = window.comfyAPI.app;
@@ -405,36 +405,11 @@ export function buildPanel(node, root, header, widget) {
                      "min_p", "frequency_penalty", "presence_penalty", "seed", "fixed_seed",
                      "local_model", "local_type", "model_text", "model_caption", "model_audio"]);
 
-  // Below this width the three source tiles and the provider / model pair no longer fit: at 210 the Model field was cut
-  // off with a scrollbar under it (GUI test 2026-10-19). The Context cards and the Director snap back to theirs the same way.
-  const MIN_HEIGHT = 240, MIN_WIDTH = 440;
-  function panelHeight() {
-    const content=Array.from(body.children).filter((child)=>!child.hidden).reduce((height,child)=>{
-      const style=getComputedStyle(child);
-      return height+child.offsetHeight+(parseFloat(style.marginTop)||0)+(parseFloat(style.marginBottom)||0);
-    },0);
-    return Math.max(MIN_HEIGHT,Math.ceil(content+header.offsetHeight)+32);
-  }
-  // The Loader is as tall as its panel, like the Context cards: nothing in it can use more height, and a taller node only
-  // showed an empty area under the panel (user 2026-10-19: "wrong sizes, height and width").
-  widget.computeSize = undefined;
-  widget.computeLayoutSize = () => ({ minHeight: panelHeight(), maxHeight: panelHeight(), minWidth: MIN_WIDTH - 20 });
-  // Grow when the content needs room, but only shrink when the panel itself changed shape. Shrinking
-  // unconditionally would fight the user's drag and snap the node back while they resize it.
-  function fit(allowShrink = false) {
-    const width = Math.max(node.size[0], MIN_WIDTH), wanted = panelHeight();
-    if (width !== node.size[0] || wanted > node.size[1] || (allowShrink && wanted < node.size[1] - 2)) node.setSize([width, Math.max(wanted, allowShrink ? 0 : node.size[1])]);
-    node.setDirtyCanvas?.(true, true);
-  }
-  advanced.addEventListener("toggle", () => fit(true));
-  // After a drag the node goes back to the panel's height; during it, it follows the pointer.
-  let settling = 0;
-  const resized = node.onResize; node.onResize = function (...args) { const result = resized?.apply(this, args);
-    clearTimeout(settling); settling = setTimeout(() => fit(true), draggedByUser(node) ? 200 : 0); return result; };
-  const observer=new ResizeObserver(() => fit());observer.observe(body);
-  const changed=node.onConnectionsChange;node.onConnectionsChange=function(...args){const result=changed?.apply(this,args);queueMicrotask(sync);return result;};
-  const tested=()=>sync();document.addEventListener("ng-ai-tested",tested);
+  // The Loader is as tall as its panel, like the Context cards (sizing lives in ng_ai_fit.js).
+  const watcher = watchPanel(node, body, header, widget, advanced, sync);
+  const fit = watcher.fit;
   sync();
   fit(true);
-  return { sync, fit, dispose(){observer.disconnect();document.removeEventListener("ng-ai-tested",tested);} };
+  const watcherDispose = watcher.dispose;
+  return { sync, fit, dispose() { watcherDispose(); } };
 }

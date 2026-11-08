@@ -3,7 +3,7 @@
 import { h, keepKeys } from "./h3s_dom.js";
 import { ensureCardStyle } from "./h3c_style.js";
 import { TEMPLATES, usableFields, offerFor } from "./h3c_model.js";
-import { CARD_MODELS, modelState } from "./ng_models.js";
+import { CARD_MODELS, modelState, da3Available } from "./ng_models.js";
 import { mediaURL, wirePlayback, moveHeads } from "./h3c_media.js";
 import { stampLine, deviceNote } from "./h3c_lyrics.js";
 import { values, applyValues, newContextId, ownIdentity, analysisFingerprint, request, followNodeWidth } from "./ng_widgets.js";
@@ -73,7 +73,7 @@ function attach(node, media) {
     S.els.video = h("video", { controls: true, preload: "metadata", muted: false }); S.els.video.onloadedmetadata = () => schedule();
     S.els.original = h("video", { controls: true, preload: "metadata", muted: true });
     S.els.mask = h("video", { controls: true, preload: "metadata", muted: true });
-    api.fetchApi("/object_info/DepthAnything_V3").then((r) => r.json()).then((info) => { S.da3 = Boolean(info.DepthAnything_V3); schedule(); }).catch(() => {});
+    da3Available(api).then((available) => { S.da3 = available; schedule(); });
   }
   if (media === "audio") { S.els.audio = h("audio", { preload: "metadata" }); wirePlayback(S, () => schedule(), S.els.audio, () => moveHeads(root, S.els.audio)); }
   if (media === "video") wirePlayback(S, () => {}, S.els.video, () => moveHeads(root, S.els.video));

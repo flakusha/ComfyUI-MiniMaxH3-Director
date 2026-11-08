@@ -126,8 +126,24 @@ def _notify_materialized(node_cls, name):
 
 
 def _linked_float(value):
-    """A linked trim arrives as None when the upstream is not a constant; that means unset, not 0."""
-    return float(value or 0.0)
+    """A linked trim arrives as None when the upstream is not a constant; that means unset, not 0.
+
+    A workflow saved before Trim start/end existed restores positionally, so the Context ID can sit
+    where seconds belong: name it instead of raising the bare float() error."""
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        raise ValueError("A Trim value must be seconds, got %r; a workflow saved before Trim start/end "
+                         "existed restores the Context ID here - reload it with the current version." % (value,)) from None
+
+
+def _trim_is_set(value):
+    """A linked trim drives the card only when it is a positive number.
+
+    A workflow saved before Trim start/end existed restores the Context ID (a string) where seconds
+    belong: the string is truthy, so a truthiness guard would compare `str > int` and raise TypeError
+    before _linked_float is reached. Non-numbers fall back to the stored options range."""
+    return isinstance(value, (int, float)) and value > 0
 
 
 def _subject_inputs():
@@ -217,13 +233,18 @@ class NGContextAudio(io.ComfyNode):
         # A linked trim value is authoritative and the stored options range is the fallback, exactly as in
         # execute: a preset-loaded range alone must bust the key, or a stale cached item is reused.
         options = ContextOptions.from_json(context_options)
-        start_s = _linked_float(trim_start) if (trim_start or 0.0) > 0 else options.start_s
-        end_s = _linked_float(trim_end) if (trim_end or 0.0) > 0 else options.end_s
+        start_s = _linked_float(trim_start) if _trim_is_set(trim_start) else options.start_s
+        end_s = _linked_float(trim_end) if _trim_is_set(trim_end) else options.end_s
         return trim_window.fingerprint(probe.file_stamp(audio), start_s, end_s)
 
     @classmethod
     def validate_inputs(cls, audio, trim_start=0.0, trim_end=0.0, audio_in=None, **_):
-        start_s, end_s = _linked_float(trim_start), _linked_float(trim_end)
+        # A validator must return its message, never raise: a raise escapes into the downstream node's
+        # inner-validation handler and is misreported there, hiding this node's own error.
+        try:
+            start_s, end_s = _linked_float(trim_start), _linked_float(trim_end)
+        except ValueError as error:
+            return str(error)
         if start_s > 0 and end_s > 0 and end_s <= start_s:
             return "Trim end (%s) must be past Trim start (%s)." % (end_s, start_s)
         return _validate_linked_file(audio_in, audio, "audio")
@@ -235,8 +256,8 @@ class NGContextAudio(io.ComfyNode):
                        context_id=context_id, color=color, **_widget_extras(extras))
         options = ContextOptions.from_json(widgets.get("context_options", "")).to_dict()
         # a connected trim value is authoritative; the card's own widgets stay the fallback (0 = the stored range)
-        start_s = _linked_float(trim_start) if (trim_start or 0.0) > 0 else options["start_s"]
-        end_s = _linked_float(trim_end) if (trim_end or 0.0) > 0 else options["end_s"]
+        start_s = _linked_float(trim_start) if _trim_is_set(trim_start) else options["start_s"]
+        end_s = _linked_float(trim_end) if _trim_is_set(trim_end) else options["end_s"]
         # a linked audio gives the exact length from its payload; the file header probe stays the unlinked path.
         # The trims stay independent of the link: they cut the mirrored file whatever card it came from.
         if audio_in is not None:

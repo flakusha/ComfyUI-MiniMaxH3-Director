@@ -18,6 +18,9 @@ from regressions.bug_090_whisper_models_not_listed import WhisperRegisteredFolde
 from regressions.bug_094_audio_card_lyrics_reach_shot_planning import Meanings as Lyrics094Meanings
 from regressions.bug_094_audio_card_lyrics_reach_shot_planning import WidgetLyrics as Lyrics094WidgetLyrics
 from regressions.bug_095_lyric_stamps_reach_planning_prompts import ShiftedIntoTheWindow, StampsVerbatim, Untouched
+# User report, 2026-11-08: a pre-trim save shifted the Context ID into Trim start and the queue
+# refused it as "could not convert string to float", misattributed as an inner-node exception.
+from regressions.audio_trim_context_id_instead_of_seconds import TrimContextIdInsteadOfSeconds
 from regressions.prompt_stamps_shift_with_the_trim_window import StorageStaysFileTime, StoryStamps, ThePromptsSeeTheShift
 
 NODE = shutil.which("node")

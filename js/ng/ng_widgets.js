@@ -79,6 +79,25 @@ export function applyValues(node, changes) {
 // An AI Loader address that is no HTTP(S) URL (left over or shifted in an older workflow) is cleared, so the provider's own address is used.
 export const clearedAddress = (address) => (address && !/^https?:\/\/[^\s/?#]+/i.test(String(address)) ? { base_url: "" } : {});
 
+// A workflow saved before Trim start/end existed restores positionally: the Context ID lands in Trim start,
+// the colour in Trim end, and the JSON fields shift along after them (12 values; 9 when it also predates the
+// role fields). Re-seat by name, so the ID never reaches the node's float conversion. A save the frontend
+// already restored by name maps to the same values, so this is a no-op there (h3s_node.js guards the same way).
+export function reseatPreTrimAudio(node, info) {
+  const saved = info?.widgets_values;
+  if (!Array.isArray(saved) || (saved.length !== 12 && saved.length !== 9)) return;
+  const named = info?.widgets_values_named;
+  const names = ["audio", "name", "description", "content", "usage", "preserve", "speaker",
+    "trim_start", "trim_end", "context_id", "color", "content_roles", "usage_roles", "context_options"];
+  if (named && typeof named === "object" && !Array.isArray(named) && names.every((name) => Object.hasOwn(named, name))) return;
+  const at = Object.fromEntries((node.widgets || []).filter((w) => w?.name).map((w) => [w.name, w]));
+  ["audio", "name", "description", "content", "usage", "preserve", "speaker"].forEach((name, i) => { if (at[name]) at[name].value = saved[i]; });
+  if (at.trim_start) at.trim_start.value = 0;
+  if (at.trim_end) at.trim_end.value = 0;
+  ["context_id", "color", "content_roles", "usage_roles", "context_options"].forEach((name, i) => { if (at[name] && saved[7 + i] !== undefined) at[name].value = saved[7 + i]; });
+  if (saved.length === 9) for (const name of ["content_roles", "usage_roles", "context_options"]) if (at[name]) at[name].value = "";
+}
+
 export function element(tag, className = "", text) {
   const node = document.createElement(tag);
   node.className = className;

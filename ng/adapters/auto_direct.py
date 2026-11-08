@@ -3,6 +3,7 @@ from ... import minimax_media as legacy
 from ..core.analysis import ProviderConfig
 from ..core.auto_direct import direct_tokens, direction_prompt, parse_direction, timing_hints
 from ..core.fields import need_dict, read_number, read_list, read_str
+from ..core.system_prompts import framed, for_node
 from . import probe
 from .analysis import endpoint, wire
 
@@ -22,6 +23,7 @@ async def direct(payload, *, api_key=None):
         # The provider registry owns address, model and auth; _PROVIDER_DEFAULTS knows only the local three.
         entry, url, model = endpoint(config, "text")
         answer = await legacy.vlm_generate([], prompt, config.provider, url, model, api_key=key, auth=entry.auth,
+                                          system_prompt=framed(for_node("director")),
                                           **{**wire(config), "max_tokens": direct_tokens(config.max_tokens)})
         return parse_direction(answer, seconds, contexts, current, read_str(payload, "keep", "request", ""), sung)
     except (ValueError, legacy.VLMError) as error:

@@ -89,6 +89,15 @@ class Align(unittest.TestCase):
         lines = lyrics.align(["My master, where did your footsteps fade?", "Come back to me", "through fire and rain"], self.WORDS[:7], 60.0)
         self.assertEqual([(l.start, l.end) for l in lines[1:]], [(3.2, 31.6), (31.6, 60.0)])
 
+    def test_an_unintelligible_line_is_placed_between_its_neighbours(self):
+        # The transcribe role emits [unintelligible] for words it cannot hear; the brackets strip to no
+        # token, so the line takes interpolated timing without moving its neighbours (S5).
+        lines = lyrics.align(["My master, where did your footsteps fade?", "[unintelligible]", "I still wait where your shadow stayed."],
+                             self.WORDS)
+        self.assertEqual([(l.start, l.end) for l in lines[::2]], [(0.0, 3.2), (3.48, 6.4)])
+        self.assertEqual((lines[1].start, lines[1].end), (3.2, 3.48))
+        self.assertEqual(lines[1].text, "[unintelligible]")
+
     def test_plain_lines_drop_stamps_language_and_blank_lines(self):
         self.assertEqual(lyrics.plain_lines(SONG)[:2], ["My master, where did your footsteps fade?", "I still wait where your shadow stayed."])
         self.assertEqual(len(lyrics.plain_lines(SONG)), 5)

@@ -1,5 +1,6 @@
 import json
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from _pack import module
 
@@ -181,6 +182,34 @@ class SceneSuggestion(unittest.TestCase):
         # The Studio sends its lanes along so the plan knows when the song sings; that is not an existing shot list.
         lanes = json.dumps({"format": "h3-director-shots", "schema_version": 1, "shots": [], "audio": [], "audio_lanes": ["l1"]})
         self.assertIn('"look"', direction.direction_prompt("She sings.", 8, [], lanes))
+
+
+class DirectRole(unittest.IsolatedAsyncioTestCase):
+    async def test_http_auto_direct_sends_the_framed_director_role(self):
+        # HTTP Auto Direct once sent no system prompt while the native path framed the director role (S1).
+        auto_direct = module("ng.adapters.auto_direct")
+        core = module("ng.core.analysis")
+        prompts = module("ng.core.system_prompts")
+        answer = json.dumps({"shots": [{"start_s": 0, "end_s": 8, "action": "Alice walks.", "camera": "Static"}],
+                             "soundscape": "wind", "music": "N/A"})
+        payload = {"provider": core.ProviderConfig().to_dict(), "contexts": [],
+                   "director": {"idea": "Alice walks.", "project_seconds": 8}}
+        with patch.object(auto_direct.legacy, "vlm_generate", new=AsyncMock(return_value=answer)) as generate, \
+                patch.object(auto_direct.legacy, "resolve_api_key", return_value=""):
+            await auto_direct.direct(payload)
+        system = generate.call_args.kwargs["system_prompt"]
+        self.assertEqual(system, prompts.framed(prompts.for_node("director")))
+        self.assertIn(prompts.for_node("director"), system)
+        self.assertIn(prompts.SCHEMA_FRAMING, system)
+
+    def test_the_director_role_names_speakers_by_content_name(self):
+        # The split contract wants the exact Content name or an empty narrator; an invented id matches
+        # no card, so the role must not ask for one (S2).
+        prompts = module("ng.core.system_prompts")
+        role = prompts.for_node("director")
+        self.assertIn("exact Content name", role)
+        self.assertIn("never invent speaker ids", role)
+        self.assertNotIn("stable speaker id", role)
 
 
 if __name__ == "__main__":

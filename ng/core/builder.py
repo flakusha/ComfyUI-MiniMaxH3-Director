@@ -2,7 +2,6 @@
 import json
 import re
 
-from . import fields
 from .ai_json import read_object
 from .auto_direct import story
 from .context_build import card_id, card_words, widget_text

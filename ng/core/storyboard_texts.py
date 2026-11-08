@@ -11,7 +11,7 @@ from .ai_json import read_object
 from .context_build import widget_text
 from .shot_draft import plain_mentions
 from .shot_share import beat_marks
-from .split import CAMERA_RULE, _seconds
+from .split import _seconds
 from .storyboard import panel_times
 
 SYSTEM = ("Write the panel texts for a storyboard targeting MiniMax H3, which produces "

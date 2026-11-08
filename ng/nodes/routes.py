@@ -18,7 +18,6 @@ async def plan_endpoint(request):
 def _caption_project(payload):
     """DirectorContext for captioning from a plan payload (same fields as the preview endpoint)."""
     from ..core.context import DirectorContext
-    from ..core.context_build import item_from_widgets
     from ..core.preview import DIRECTOR_DEFAULTS, _items
     director = dict(payload.get("director", {}))
     values = {**DIRECTOR_DEFAULTS, **director}

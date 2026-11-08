@@ -58,7 +58,7 @@ class NGStillCollect(io.ComfyNode):
             raise ValueError("Pictures: write an idea or a shot; each shot becomes one picture.")
         pictures, saved = [], []
         for latent, job in zip(latents, chunks):
-            still, context = _still(job), job.project.context
+            still = _still(job)
             image = stills.decode(vae, latent)
             if still.source and still.mask:
                 image = stills.paste_back(image, stills.load_source(still),

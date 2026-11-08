@@ -15,7 +15,7 @@ from .shot_share import effect_tokens, keep_effects, lines_here
 from .media_labels import resolve_media_mentions, resolve_guide_mentions, resolve_lock_mentions, prompt_labels, read_prompt_labels
 from .asset_prompt import apply_asset_relations
 from .shot_bindings import scoped_context
-from .media_ref import KINDS, MediaRef
+from .media_ref import MediaRef
 from .guide_timing import plan_guides
 from .fl2va_refs import add_references
 from .part_prompt import prompt_key

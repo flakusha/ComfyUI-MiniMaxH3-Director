@@ -21,3 +21,7 @@ DisplayName = "MiniMax H3 Director"
 Icon = ""
 # NG depends on native List loops; this release is validated against ComfyUI 0.37.0.
 requires-comfyui = ">=0.37.0"
+
+[tool.ruff.lint]
+select = ["F"]
+# asr.py:34 precedent — optional-backend probes keep their noqa with reason.

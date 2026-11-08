@@ -22,6 +22,20 @@ CONDITIONING_ONLY = ("This CLIP is MiniMax H3's conditioning encoder (Qwen3-VL-3
                      "It cannot write text. Connect a generative model to the AI Loader instead, e.g. Load CLIP with "
                      "qwen3vl_4b or qwen3vl_8b (type stable_diffusion), or switch the AI Loader to Local (Ollama).")
 
+# One row per action: the system prompt the job carries and the token floor it needs. The role comes
+# from system_prompts.py and the schema framing from there too, so the two cannot be edited apart.
+# Auto Direct plans, an Analyze describes: the same framing with the wrong role produced answers that
+# read as the wrong task. "write" is the exception and carries no schema framing: its answer is the
+# prose of a render part's prompt, labelled fields rather than JSON.
+ACTIONS = {
+    "direct": (framed(for_node("director")), direct_tokens),
+    "write": (WRITE_SYSTEM, write_tokens),
+    "build": (BUILD_SYSTEM, plan_tokens),
+    "storyboard": (STORYBOARD_SYSTEM, texts_tokens),
+    "caption": (STORYBOARD_SYSTEM, texts_tokens),
+    "analyze": (None, None),  # per-medium framed role below; provider max_tokens unchanged
+}
+
 
 def conditioning_only(clip):
     """True for a loaded CLIP that is H3's conditioning encoder."""
@@ -117,22 +131,16 @@ def native_request(provider, action, request_json):
             clip = graph.node("CLIPLoader", clip_name=provider.local_model, type=provider.local_type, device="default").out(0)
     # A connected clip is only a link here; whether it is the conditioning encoder is known once it is loaded.
     clip = graph.node("NGAICheckEncoder", clip=clip).out(0)
-    max_length = (direct_tokens(provider.config.max_tokens) if action == "direct"
-                  else write_tokens(provider.config.max_tokens) if action == "write"
-                  else plan_tokens(provider.config.max_tokens) if action == "build"
-                  else texts_tokens(provider.config.max_tokens) if action in ("storyboard", "caption") else provider.config.max_tokens)
+    # request_prompt already refused unknown actions, so the row always exists.
+    system, tokens = ACTIONS[action]
+    if action == "analyze":
+        # The card's medium, not `media` (which only says what is sent along and is None for a
+        # text note): with None a Text card got the generic role and Qwen3-VL 4B lost the JSON.
+        system = framed(for_node("context", payload.get("media")))
+    max_length = tokens(provider.config.max_tokens) if tokens else provider.config.max_tokens
     inputs = dict(clip=clip, prompt=prompt, max_length=max_length,
                   sampling_mode="off", thinking=False, use_default_template=True,
-                  # The role comes from system_prompts.py and the schema framing from there too, so
-                  # the two cannot be edited apart. Auto Direct plans, an Analyze describes: the same
-                  # framing with the wrong role produced answers that read as the wrong task.
-                  # "write" is the exception and carries no schema framing: its answer is the prose of a
-                  # render part's prompt, labelled fields rather than JSON.
-                  system_prompt=(WRITE_SYSTEM if action == "write" else BUILD_SYSTEM if action == "build"
-                                 else STORYBOARD_SYSTEM if action in ("storyboard", "caption")
-                                 # The card's medium, not `media` (which only says what is sent along and is None for a
-                                 # text note): with None a Text card got the generic role and Qwen3-VL 4B lost the JSON.
-                                 else framed(for_node("director" if action == "direct" else "context", payload.get("media")))))
+                  system_prompt=system)
     if media:
         source = (pictures(payload["contexts"])[0][0]["widgets"]["image"] if action == "build"
                   else payload["widgets"].get(media, ""))

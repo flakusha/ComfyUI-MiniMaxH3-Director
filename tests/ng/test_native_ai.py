@@ -144,6 +144,17 @@ class NativeAI(unittest.TestCase):
         self.assertIsNone(media)
         self.assertIn("Context text:", prompt)
 
+    def test_native_system_roles_keep_the_raw_framed_split(self):
+        # Raw-system invariant (prompt-wiring): write/build/storyboard send raw systems (no framed()),
+        # while direct/analyze send framed roles. R3 must preserve this split.
+        native = self.adapter
+        for raw in (native.WRITE_SYSTEM, native.BUILD_SYSTEM, native.STORYBOARD_SYSTEM):
+            self.assertNotIn("code fence.", raw, "raw systems carry no schema framing")
+        role = native.framed(native.for_node("context", "image"))
+        self.assertTrue(role.endswith("code fence."), "analyze roles are framed")
+        director = native.framed(native.for_node("director"))
+        self.assertTrue(director.endswith("code fence."), "direct role is framed")
+
     def test_media_capabilities_and_response_validation_are_enforced(self):
         for media, options in (("image", {"vision": False}), ("audio", {"audio": False})):
             with self.subTest(media=media), self.assertRaisesRegex(ValueError, "is off on the H3 AI Loader"):

@@ -109,12 +109,12 @@ class NGCollect(io.ComfyNode):
             description="After the loop: decode every chunk, cut off the pinned heads and join picture and sound into one video.",
             inputs=[io.Latent.Input("latents", tooltip="End Loop output (accumulate on)."), NGChunk.Input("chunks", tooltip="The Director's chunks."),
                     io.Vae.Input("vae"), io.Vae.Input("audio_vae"),
-                    io.Audio.Input("fallback_audio", optional=True,
-                                   tooltip="Opt-in soundtrack for chunks that sampled no audio at all (audio-less renders): silent chunks take these samples, generated or locked sound is untouched. Unconnected = unchanged."),
                     io.String.Input("resume_settings", optional=True, advanced=True,
                                     tooltip="Set by Render Sequence when the kept render parts are deleted once the video is put together."),
                     io.Boolean.Input("smooth_source_join", default=True, optional=True, advanced=True,
-                                     tooltip="Ease the source/VAE picture difference over the first six new frames of Continue. Sound is unchanged.")],
+                                     tooltip="Ease the source/VAE picture difference over the first six new frames of Continue. Sound is unchanged."),
+                    io.Audio.Input("fallback_audio", optional=True,
+                                   tooltip="Opt-in soundtrack for chunks that sampled no audio at all (audio-less renders): silent chunks take these samples, generated or locked sound is untouched. Unconnected = unchanged. Last, so older saves keep their link slots.")],
             outputs=[io.Image.Output(display_name="images"), io.Audio.Output(display_name="audio"), io.String.Output(display_name="warnings"),
                      io.Float.Output(display_name="fps", tooltip="24, for CreateVideo. Outside the loop, unlike Director Output's fps."),
                      io.String.Output(display_name="chapters",
@@ -122,7 +122,7 @@ class NGCollect(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, latents, chunks, vae, audio_vae, fallback_audio=None, resume_settings=None, smooth_source_join=None):
+    def execute(cls, latents, chunks, vae, audio_vae, resume_settings=None, smooth_source_join=None, fallback_audio=None):
         project = _jobs_of(chunks)
         decode_audio = audio_nodes().vae_decode_audio
         fallback = fallback_audio[0] if fallback_audio else None
@@ -174,15 +174,17 @@ class NGCollectVideo(io.ComfyNode):
                         "file, so the frames never have to fit in memory at once. Connect SaveVideo.",
             inputs=[io.Latent.Input("latents", tooltip="End Loop output (accumulate on)."), NGChunk.Input("chunks", tooltip="The Director's chunks."),
                     io.Vae.Input("vae"), io.Vae.Input("audio_vae"),
-                    io.Audio.Input("fallback_audio", optional=True,
-                                   tooltip="Opt-in soundtrack for chunks that sampled no audio at all: silent chunks take these samples, generated or locked sound is untouched. Unconnected = unchanged."),
                     io.Boolean.Input("smooth_source_join", default=True, optional=True, advanced=True,
-                                     tooltip="Ease the source/VAE picture difference over the first six new frames of Continue. Sound is unchanged.")],
+                                     tooltip="Ease the source/VAE picture difference over the first six new frames of Continue. Sound is unchanged."),
+                    io.String.Input("resume_settings", optional=True, advanced=True,
+                                    tooltip="Deletes the kept render parts once the video is put together; set by hand here (Render Sequence drives it for NG Collect)."),
+                    io.Audio.Input("fallback_audio", optional=True,
+                                   tooltip="Opt-in soundtrack for chunks that sampled no audio at all: silent chunks take these samples, generated or locked sound is untouched. Unconnected = unchanged. Last, so older saves keep their link slots.")],
             outputs=[io.Video.Output(display_name="video"), io.String.Output(display_name="warnings")],
         )
 
     @classmethod
-    def execute(cls, latents, chunks, vae, audio_vae, fallback_audio=None, smooth_source_join=None):
+    def execute(cls, latents, chunks, vae, audio_vae, smooth_source_join=None, resume_settings=None, fallback_audio=None):
         project = _jobs_of(chunks)
         decode_audio = audio_nodes().vae_decode_audio
         fallback = fallback_audio[0] if fallback_audio else None
@@ -193,6 +195,9 @@ class NGCollectVideo(io.ComfyNode):
                                      restore_audio=lambda index, wave, rate: audio_locks.restore_waveform(chunks[index], wave, rate, fallback=fallback),
                                      restore_picture=_picture_restorer(chunks, smooth_source_join),
                                      lock_spans=collect.lock_spans_of(chunks))
+        # A list input: an empty field in a hand-built loop arrives as [""] (2026-10-18: Collect failed with JSONDecodeError).
+        if resume_settings and resume_settings[0]:
+            resume.forget(chunks, json.loads(resume_settings[0]))
         return io.NodeOutput(InputImpl.VideoFromFile(path), "\n".join(str(i) for i in issues))
 
 

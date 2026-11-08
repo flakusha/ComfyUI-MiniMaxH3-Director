@@ -202,6 +202,17 @@ class ExternalSampling(unittest.TestCase):
             self.assertTrue(forget.called, "Render Sequence's settings still delete them")
         self.assertEqual(out.args[3], 24.0)
 
+    def test_fallback_audio_is_last_so_old_saves_keep_their_slots(self):
+        # 2026-11-08: fallback_audio was added before resume_settings/smooth_source_join; old linked
+        # saves rewire by slot, so the opt-in soundtrack now sits after both.
+        for name in ("NGCollect", "NGCollectVideo"):
+            ids = [i.id for i in self.nodes[name].GET_SCHEMA().inputs]
+            self.assertEqual(ids[-1], "fallback_audio", name)
+        jobs = self.jobs(self.result())
+        with patch.object(self.chunk_module.collect, "write_video", return_value=()),              patch.object(self.chunk_module, "audio_nodes"), patch.object(self.chunk_module.resume, "forget") as forget:
+            self.nodes["NGCollectVideo"].execute([], jobs, [object()], [object()], resume_settings=['{"seed": 1}'])
+            self.assertTrue(forget.called, "the streaming collector deletes the kept parts too")
+
     def test_both_collectors_expose_and_honor_source_join_switch(self):
         jobs = self.jobs(self.result())
         for name in ("NGCollect", "NGCollectVideo"):

@@ -10,7 +10,7 @@ export function timelineEditor(S, { actions, write, plan, render, reload }) {
     const value = back ? history.undo() : history.redo();
     if (!value) return;
     write(value); S.node.graph?.change?.(); reload();
-    S.ghosts = []; S.suggestions = {}; S.partDrafts = {}; S.notice = null;
+    S.ghosts = []; S.suggestions = {}; S.partDrafts = {}; S.shareEdit = null; S.notice = null;
     // An undone deletion may bring a selected item back; a redone deletion clears its selection.
     const list = S.selected?.kind === "shot" ? S.shots : S.selected?.kind === "control" ? S.control : S.audio;
     if (!list.some((item) => item.id === S.selected?.id)) S.selected = null;

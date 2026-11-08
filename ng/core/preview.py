@@ -5,6 +5,10 @@ from .context import DirectorContext
 from .context_build import distinct, item_from_widgets
 from .issues import SchemaError
 from .limits import DEFAULT_SOUNDSCAPE, PIN_AUDIO_DEFAULT, FPS
+from .legacy_bridge import decide_mode
+from .shot_bindings import scoped_context
+from .shot_document import read_shot_prompts
+from .shot_share import share_inputs, share_key
 from .project import plan_project
 from .stills import plan_stills
 
@@ -28,6 +32,24 @@ def _name(context, ref):
     return found.name if found else ref.source
 
 
+def _shares_view(context, chunk):
+    """[{shot_id, basis, source}] per ChunkShot, recomputed server-side on the scoped compile path."""
+    newest = {}
+    for entry in read_shot_prompts(context.shots_text):
+        newest[entry["shot_id"]] = entry
+    scoped, _ = scoped_context(context, chunk)
+    inputs = share_inputs(scoped, chunk, decide_mode(scoped))
+    out = []
+    for position, shot in enumerate(chunk.shots):
+        entry = newest.get(shot.shot_id)
+        if entry is not None and entry["basis"] == share_key(inputs[position]) and entry["text"].strip():
+            source = entry["by"]
+        else:
+            source = "compiled"
+        out.append({"shot_id": shot.shot_id, "basis": share_key(inputs[position]), "source": source})
+    return out
+
+
 def _chunk_view(chunk, compiled, context, picture=False):
     return {"index": chunk.index, "picture": picture, "start_s": round(frames.frames_to_seconds(chunk.story_start_f), 3),
             "end_s": round(frames.frames_to_seconds(chunk.story_end_f), 3), "delivered_frames": chunk.delivered_frames,
@@ -35,7 +57,8 @@ def _chunk_view(chunk, compiled, context, picture=False):
             "sampled_frames": chunk.sampled_frames, "head_frames": chunk.head_frames, "mode": compiled.mode, "prompt": compiled.prompt,
             "prompt_key": compiled.key, "prompt_source": compiled.source,
             "refs": [{"kind": r.kind, "ctx_id": r.ctx_id, "name": _name(context, r)} for r in compiled.refs],
-            "prompt_labels": dict(compiled.prompt_labels), "shots": [s.to_dict() for s in chunk.shots], "sources": list(compiled.sources)}
+            "prompt_labels": dict(compiled.prompt_labels), "shots": [s.to_dict() for s in chunk.shots], "sources": list(compiled.sources),
+            "shares": _shares_view(context, chunk)}
 
 
 def plan_preview(payload, probe=None, image_size=None):

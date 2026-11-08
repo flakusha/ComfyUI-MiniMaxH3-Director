@@ -142,6 +142,39 @@ def read_part_prompts(text):
     return out
 
 
+def read_shot_prompts(text):
+    """[{shot_id, text, by, basis, chunk}]: one shot's own share. Resolve matches `shot_id` + `basis` (`chunk`
+    is a write-time hint only), so a re-time that keeps the shot keeps its prose."""
+    data = _load(text)
+    out = []
+    for index, entry in enumerate(fields.read_list(data or {}, "shot_prompts", "shots")):
+        path = "shots.shot_prompts[%d]" % index
+        fields.need_dict(entry, path)
+        out.append({"shot_id": fields.read_str(entry, "shot_id", path), "text": fields.read_str(entry, "text", path),
+                    "by": fields.read_choice(entry, "by", path, PROMPT_SOURCES, "user"),
+                    "basis": fields.read_str(entry, "basis", path),
+                    "chunk": int(fields.read_number(entry, "chunk", path, minimum=0))})
+    return out
+
+
+def prune_shot_prompts(text):
+    """The shots document without entries whose `shot_id` no longer exists (stale bases stay for Rewrite)."""
+    data = _load(text)
+    if data is None:
+        return text
+    records = fields.read_list(data, "shots", "shots")
+    live = {record.get("id") for record in records if isinstance(record, dict)}
+    kept = [entry for entry in fields.read_list(data, "shot_prompts", "shots")
+            if isinstance(entry, dict) and entry.get("shot_id") in live]
+    if kept == list(fields.read_list(data, "shot_prompts", "shots")):
+        return text
+    if kept:
+        data["shot_prompts"] = kept
+    else:
+        data.pop("shot_prompts", None)
+    return json.dumps(data)
+
+
 def has_shots(text):
     """Whether the user wrote Shots. A document that only holds audio clips leaves the Prompt to carry the video."""
     data = _load(text)

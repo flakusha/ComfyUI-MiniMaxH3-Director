@@ -365,16 +365,18 @@ def _global_prompt(context):
     return " ".join(p for p in parts if p)
 
 
-def build_timeline(context: DirectorContext, chunk: Chunk, mode: str, guides):
+def build_timeline(context: DirectorContext, chunk: Chunk, mode: str, guides, share_texts=None):
     """Return (timeline_data dict, Mapping, voice_notes) for one chunk."""
     groups = subject_groups(context)
     subjects = [group.root for group in groups]
     voices, extra_voices = _voices_by_speaker(context)
     heard = voices_heard(voices, context, chunk)      # the slots; every voice card is kept out of the general audio
     substitute = _tag_substitutor([s.id for s in subjects], context) if mode == "ref2va" else _plain_substitutor(subjects, context)
-    segments = [{"type": "text", "start": s.local_start_f, "length": s.local_end_f - s.local_start_f,
-                 "prompt": _shot_text(s, substitute, automatic=not has_shots(context.shots_text), context=context, chunk=chunk)}
-                for s in chunk.shots]
+    inputs = shot_share.share_inputs(context, chunk, mode)
+    if share_texts:
+        inputs = [share_texts.get(n, text) for n, text in enumerate(inputs)]
+    segments = [{"type": "text", "start": s.local_start_f, "length": s.local_end_f - s.local_start_f, "prompt": text}
+                for s, text in zip(chunk.shots, inputs)]
     _add_sung_lines(segments, context, chunk, groups, substitute)
     ref_on = mode == "ref2va"
     texts = list(segments)
@@ -389,9 +391,8 @@ def build_timeline(context: DirectorContext, chunk: Chunk, mode: str, guides):
              "non_diegetic_music": context.music}
     by_source = {}
     for item in context.items:
-        if item.media == "text":
-            continue
-        by_source.setdefault(item.source, item.id)
+        if item.media != "text":
+            by_source.setdefault(item.source, item.id)
     voice_items = {number: heard[s.id].id for number, s in enumerate(subjects, 1) if s.id in heard}
     notes = extra_voice_issues(extra_voices, context) + [issue for shot in chunk.shots for issue in spoken_text(shot, context)[1]]
     return tdata, Mapping([s.id for s in subjects], by_source, voice_items), notes

@@ -11,7 +11,7 @@ from .chunks import Chunk, ContinuityPlan
 from .context import DirectorContext, check_item
 from .issues import Issue
 from .legacy_bridge import build_timeline, decide_mode
-from .shot_share import effect_tokens, keep_effects, lines_here
+from .shot_share import effect_tokens, keep_effects, lines_here, share_inputs, share_key
 from .media_labels import resolve_media_mentions, resolve_guide_mentions, resolve_lock_mentions, prompt_labels, read_prompt_labels
 from .asset_prompt import apply_asset_relations
 from .shot_bindings import scoped_context
@@ -19,7 +19,7 @@ from .media_ref import MediaRef
 from .guide_timing import plan_guides
 from .fl2va_refs import add_references
 from .part_prompt import prompt_key
-from .shot_document import read_part_prompts
+from .shot_document import read_part_prompts, read_shot_prompts
 from .prompt_sources import prompt_sources
 
 
@@ -32,7 +32,7 @@ class CompiledChunk:
     issues: tuple = ()
     prompt_labels: tuple = ()  # (native label, owning context ID); optional display metadata for v1 saves
     key: str = ""              # of the compiled prompt; a part's own prompt is valid only for this key
-    source: str = "compiled"   # compiled | ai | user (the part's own prompt) | manual (prompt_override)
+    source: str = "compiled"   # compiled | ai | user | mixed (some shares own) | manual (prompt_override)
     sources: tuple = ()        # what the prompt is made from (prompt_sources.py), display only
     SCHEMA_VERSION = 1
 
@@ -53,7 +53,7 @@ class CompiledChunk:
                    refs=tuple(MediaRef.from_dict(d, "%s.refs[%d]" % (path, n)) for n, d in enumerate(fields.read_list(data, "refs", path))),
                    issues=tuple(Issue.from_dict(d) for d in fields.read_list(data, "issues", path)),
                    prompt_labels=read_prompt_labels(data, path), key=fields.read_str(data, "key", path, ""),
-                   source=fields.read_choice(data, "source", path, ("compiled", "ai", "user", "manual"), "compiled"),
+                   source=fields.read_choice(data, "source", path, ("compiled", "ai", "user", "mixed", "manual"), "compiled"),
                    sources=tuple(entry for entry in data.get("sources") or () if isinstance(entry, dict)))
 
 
@@ -114,15 +114,9 @@ def _selected_audio(context, ref, seg):
     return MediaRef(ref.kind, ref.ctx_id, ref.source, ref.start_f, length, start)
 
 
-def compile_chunk(context: DirectorContext, chunk: Chunk, continuity: ContinuityPlan) -> CompiledChunk:
-    original = context
-    context, binding_issues = scoped_context(context, chunk)
-    mode = decide_mode(context)
-    guide_context = replace(original, items=tuple(original.item(item.id) for item in context.items))
-    item = context.item(chunk.continuation_id) if chunk.continuation_id else None
-    wanted = continuation.preferred_frames(replace(original, mode=mode), item) if item else limits.CONTINUE_VIDEO_FRAMES
-    guides, timing_issues = plan_guides(guide_context, chunk, mode, continue_frames=wanted)
-    tdata, mapping, voice_notes = build_timeline(context, chunk, mode, guides)
+def _assemble(context, chunk, mode, guides, share_texts=None):
+    """(compiled prompt, timeline result, mapping, notes, refs, labels, issues, segments) for this chunk."""
+    tdata, mapping, voice_notes = build_timeline(context, chunk, mode, guides, share_texts=share_texts)
     result = plan.plan_timeline(tdata, 0, chunk.sampled_frames, float(limits.FPS), use_custom_audio=True, use_custom_motion=True,
                                 prepend_text=context.prepend_text, prompt_format="minimax")
     refs = _media_refs(result, mapping, context) + list(guides)
@@ -133,24 +127,85 @@ def compile_chunk(context: DirectorContext, chunk: Chunk, continuity: Continuity
     labels = prompt_labels(result, mapping, context, refs)
     prompt, guide_issues = (prompt, ()) if context.prompt_override.strip() else resolve_guide_mentions(prompt, context, refs, labels)
     prompt, lock_issues = (prompt, ()) if context.prompt_override.strip() else resolve_lock_mentions(prompt, context, refs)
-    final, source, own_issues = _own_prompt(original, chunk, prompt)
+    return prompt, result, mapping, voice_notes, refs, labels, relation_issues + guide_issues + lock_issues, tdata["segments"]
+
+
+def compile_chunk(context: DirectorContext, chunk: Chunk, continuity: ContinuityPlan) -> CompiledChunk:
+    original = context
+    context, binding_issues = scoped_context(context, chunk)
+    mode = decide_mode(context)
+    guide_context = replace(original, items=tuple(original.item(item.id) for item in context.items))
+    item = context.item(chunk.continuation_id) if chunk.continuation_id else None
+    wanted = continuation.preferred_frames(replace(original, mode=mode), item) if item else limits.CONTINUE_VIDEO_FRAMES
+    guides, timing_issues = plan_guides(guide_context, chunk, mode, continue_frames=wanted)
+    prompt, result, mapping, voice_notes, refs, labels, assembly_issues, segments = _assemble(context, chunk, mode, guides)
+    compiled_prompt = prompt
+    fitted, source, stale_issues, legacy_text = _own_prompt(context, chunk, prompt)
+    if legacy_text is None and fitted:
+        prompt, _, _, _, refs, _, assembly_issues, _ = _assemble(
+            context, chunk, mode, guides, share_texts={n: text for n, (text, _) in fitted.items()})
+    final = legacy_text if legacy_text is not None else prompt
+    # keep_effects applies once at chunk level after all covering shares are substituted, never per share.
+    final = keep_effects(compiled_prompt, final) if final != compiled_prompt else final
     return CompiledChunk(index=chunk.index, mode=result["mode"], prompt=final, refs=tuple(refs),
-                         issues=binding_issues + timing_issues + tuple(voice_notes) + relation_issues + guide_issues + lock_issues + own_issues + tuple(_issues(context, chunk, result, continuity)),
-                         prompt_labels=labels, key=prompt_key(prompt), source=source,
-                         sources=prompt_sources(original, chunk, refs, tdata["segments"]))
+                         issues=binding_issues + timing_issues + tuple(voice_notes) + tuple(assembly_issues) + tuple(stale_issues)
+                         + tuple(_issues(context, chunk, result, continuity)),
+                         prompt_labels=labels, key=prompt_key(compiled_prompt), source=source,
+                         sources=prompt_sources(original, chunk, refs, segments))
+
+
+
+def _shot_position(chunk, shot):
+    """The shot's position in this chunk (duplicates share one entry by identity)."""
+    for position, member in enumerate(chunk.shots):
+        if member is shot or (member.shot_id == shot.shot_id and member.local_start_f == shot.local_start_f):
+            return position
+    return -1
+
+
+def _share_basis(context, chunk, shot):
+    """The basis of one share: share_key of the exact share input it was compiled from."""
+    position = _shot_position(chunk, shot)
+    mode = decide_mode(context)
+    inputs = share_inputs(context, chunk, mode)
+    return share_key(inputs[position])
+
+
+def _covered_shares(context, chunk):
+    """({position: own text}, stale shots) for matching share bases; newest entry per shot_id wins."""
+    newest = {}
+    for entry in read_shot_prompts(context.shots_text):
+        newest[entry["shot_id"]] = entry
+    fitted, stale = {}, []
+    for shot in chunk.shots:
+        entry = newest.get(shot.shot_id)
+        if entry is None:
+            continue
+        if entry["basis"] == _share_basis(context, chunk, shot) and entry["text"].strip():
+            fitted[_shot_position(chunk, shot)] = (entry["text"].strip(), entry["by"])
+        else:
+            stale.append(shot)
+    return fitted, stale
 
 
 def _own_prompt(context, chunk, compiled):
-    """The prompt that goes to the sampler: the manual one, else the part's own if it was written from this very compiled
-    prompt, else the compiled one. An own prompt from before a plan change is kept for the user but not used."""
+    """The prompt that goes to the sampler: the manual one, else ({shares to refit}, source, issues, legacy own)."""
     if context.prompt_override.strip():
-        return context.prompt_override.strip(), "manual", ()
-    own = read_part_prompts(context.shots_text).get(chunk.index)
-    if own is None:
-        return compiled, "compiled", ()
-    key, text, by = own
+        return {}, "manual", (), context.prompt_override.strip()
+    fitted, stale = _covered_shares(context, chunk)
+    issues = tuple(
+        Issue("part_prompt_outdated", "The plan changed after this shot's own share was written, so the compiled "
+                                        "prompt is used for it. Rewrite or edit it in Prompts per render part.",
+              "Shot %d" % shot.shot_index) for shot in stale)
+    if fitted:
+        by = {text_by for _, (_, text_by) in fitted.items()}
+        return fitted, "mixed" if len(by) > 1 or len(fitted) < len(chunk.shots) else next(iter(by)), issues, None
+    legacy = read_part_prompts(context.shots_text).get(chunk.index)
+    if legacy is None:
+        return {}, "compiled", issues, None
+    key, text, by = legacy
     if key == prompt_key(compiled) and text.strip():
-        return keep_effects(compiled, text.strip()), by, ()
-    return compiled, "compiled", (Issue("part_prompt_outdated", "The plan changed after this part's own prompt was written, so the "
-                                        "compiled prompt is used. Rewrite or edit it in Prompts per render part.", "Render part %d" % (chunk.index + 1)),)
+        return {}, by, issues, text.strip()
+    return {}, "compiled", issues + (Issue("part_prompt_outdated", "The plan changed after this part's own prompt was written, so the "
+                                        "compiled prompt is used. Rewrite or edit it in Prompts per render part.", "Render part %d" % (chunk.index + 1)),), None
 

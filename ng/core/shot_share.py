@@ -15,6 +15,7 @@ import math
 import re
 
 from .limits import FPS
+from .part_prompt import prompt_key
 
 HEAD_ONLY = "The shot from the preceding video ends here, without new action."
 _BEAT = re.compile(r"(\d+(?:[.,]\d+)?)\s*s?\s*[–-]\s*(\d+(?:[.,]\d+)?)\s*s(?:ec(?:onds?)?)?\s*:\s*", re.IGNORECASE)
@@ -203,6 +204,23 @@ def with_effect(text, effect, dialogue):
         lines.insert(0, "")
     lines[prose[-1]] = (lines[prose[-1]].rstrip() + " FXEMBED_%s_FXEND" % effect).strip()
     return "\n".join(lines)
+
+
+def share_key(text):
+    """The key of a shot's share input, as the writer stored it: the same hash as a whole part's prompt."""
+    return prompt_key(text)
+
+
+def share_inputs(context, chunk, mode, share_texts=None):
+    """Each shot's exact share text: the timeline's `_shot_text` outputs (before sung lines)."""
+    from .legacy_bridge import _plain_substitutor, _shot_text, _tag_substitutor
+    from .shot_document import has_shots
+    from .subjects import subject_groups
+    subjects = [group.root for group in subject_groups(context)]
+    substitute = _tag_substitutor([s.id for s in subjects], context) if mode == "ref2va" else _plain_substitutor(subjects, context)
+    automatic = not has_shots(context.shots_text)
+    inputs = [_shot_text(s, substitute, automatic=automatic, context=context, chunk=chunk) for s in chunk.shots]
+    return [share_texts.get(n, text) for n, text in enumerate(inputs)] if share_texts else inputs
 
 
 def effect_tokens(prompt):

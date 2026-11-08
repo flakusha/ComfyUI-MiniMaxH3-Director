@@ -39,7 +39,8 @@ function validClip(clip) {
 
 // shots: the Story editor's records; audio: lane clips; lanes: lane order, including empty lanes; look: what every
 // render part shares (style, place, light), sent in place of the Prompt once there are shots; partPrompts: a render
-// part's own prompt {index, key, text, by}, used while `key` is still that of the part's compiled prompt.
+// part's own prompt {index, key, text, by}, used while `key` is still that of the part's compiled prompt (legacy fallback);
+// shotPrompts: one shot's share {shot_id, text, by, basis, chunk}, used while `basis` still matches the share the plan compiled.
 // skipped: ids of audio clips that are invalid or repeat an id; they are left out, the rest stays editable.
 // Cards that are both on a shot and on an audio lane: both play (shot_bindings.py), which is easy to miss (BUG-004).
 export function boundAndLaned(shots, audio) {
@@ -49,7 +50,7 @@ export function boundAndLaned(shots, audio) {
 
 export function readProject(text) {
   const story = readStory(text || "");
-  if (story.error || !(text || "").trimStart().startsWith("{")) return { shots: story.shots, audio: [], lanes: [], control: [], look: "", partPrompts: [], skipped: [], error: story.error };
+  if (story.error || !(text || "").trimStart().startsWith("{")) return { shots: story.shots, audio: [], lanes: [], control: [], look: "", partPrompts: [], shotPrompts: [], skipped: [], error: story.error };
   const data = JSON.parse(text), audio = [], skipped = [], seen = new Set();
   for (const clip of Array.isArray(data.audio) ? data.audio : []) {
     if (validClip(clip) && !seen.has(clip.id)) { seen.add(clip.id); audio.push({ offset: 0, mode: "ref", lane: "", ...clip }); }
@@ -58,20 +59,24 @@ export function readProject(text) {
   const lanes = [...new Set([...(data.audio_lanes || []), ...audio.map((clip) => clip.lane)])].filter(Boolean);
   const partPrompts = (Array.isArray(data.part_prompts) ? data.part_prompts : [])
     .filter((entry) => Number.isInteger(entry?.index) && entry.index >= 0 && typeof entry.key === "string" && typeof entry.text === "string");
+  const shotPrompts = (Array.isArray(data.shot_prompts) ? data.shot_prompts : [])
+    .filter((entry) => typeof entry?.shot_id === "string" && typeof entry?.text === "string" && (entry.by === "ai" || entry.by === "user")
+      && typeof entry?.basis === "string" && Number.isInteger(entry?.chunk));
   const control = Array.isArray(data.control) ? data.control : [], controlIds = new Set();
   const badControl = (data.control !== undefined && !Array.isArray(data.control)) || control.some((clip) => {
     if (!validClip({ ...clip, mode: "ref" }) || controlIds.has(clip.id)) return true;
     controlIds.add(clip.id); return false;
   });
-  return { shots: story.shots, audio, lanes, control, look: typeof data.look === "string" ? data.look : "", partPrompts, skipped,
+  return { shots: story.shots, audio, lanes, control, look: typeof data.look === "string" ? data.look : "", partPrompts, shotPrompts, skipped,
     error: badControl ? "The saved control clips are invalid. Repair their timing or IDs before editing this project." : "",
     conflicts: boundAndLaned(story.shots, audio) };
 }
 
-export function writeProject({ shots, audio, lanes, control = [], look = "", partPrompts = [] }) {
-  if (!shots.length && !audio.length && !lanes.length && !control.length && !look.trim() && !partPrompts.length) return "";
+export function writeProject({ shots, audio, lanes, control = [], look = "", partPrompts = [], shotPrompts = [] }) {
+  if (!shots.length && !audio.length && !lanes.length && !control.length && !look.trim() && !partPrompts.length && !shotPrompts.length) return "";
   return JSON.stringify({ format: SHOT_FORMAT, schema_version: 1, shots, audio, audio_lanes: lanes, ...(look.trim() ? { look } : {}),
-    ...(partPrompts.length ? { part_prompts: partPrompts } : {}), ...(control.length ? { control, control_lanes: ["control"] } : {}) });
+    ...(partPrompts.length ? { part_prompts: partPrompts } : {}), ...(shotPrompts.length ? { shot_prompts: shotPrompts } : {}),
+    ...(control.length ? { control, control_lanes: ["control"] } : {}) });
 }
 
 // The Director's widgets after a Context rename: the Prompt, timed text, or the shot document's shot texts, spoken lines,
@@ -88,12 +93,14 @@ export function renamedDirector(now, rename) {
   }
   const look = rename(project.look);
   const partPrompts = project.partPrompts.map((part) => ({ ...part, text: rename(part.text) }));
+  const shotPrompts = project.shotPrompts.map((entry) => ({ ...entry, text: rename(entry.text) }));
   const shots = project.shots.map((shot) => ({ ...shot, text: rename(shot.text),
     spoken: shot.spoken.map((line) => typeof line.text === "string" ? { ...line, text: rename(line.text) } : line) }));
   const changed = look !== project.look || partPrompts.some((part, index) => part.text !== project.partPrompts[index].text)
+    || shotPrompts.some((entry, index) => entry.text !== project.shotPrompts[index].text)
     || shots.some((shot, index) => shot.text !== project.shots[index].text
       || shot.spoken.some((line, at) => line.text !== project.shots[index].spoken[at].text));
-  if (changed) changes.shots = writeProject({ ...project, shots, look, partPrompts });
+  if (changed) changes.shots = writeProject({ ...project, shots, look, partPrompts, shotPrompts });
   return changes;
 }
 
@@ -107,6 +114,13 @@ export function removeLane({ lanes, audio }, lane) {
 export function setPartPrompt(list, index, key, text, by) {
   const rest = (list || []).filter((entry) => entry.index !== index);
   return text.trim() ? [...rest, { index, key, text, by }].sort((a, b) => a.index - b.index) : rest;
+}
+
+// One shot's share replaces any earlier one of that shot; text "" removes it.
+export function setShotPrompt(list, shotId, basis, text, by, hint) {
+  const rest = (list || []).filter((entry) => entry.shot_id !== shotId);
+  return text.trim() ? [...rest, { shot_id: shotId, text, by, basis, chunk: hint }]
+    .sort((a, b) => a.chunk - b.chunk || (a.shot_id < b.shot_id ? -1 : 1)) : rest;
 }
 
 // A picture's role in one shot: its own choice, or the card's ("context"). Only pictures have a choice here.

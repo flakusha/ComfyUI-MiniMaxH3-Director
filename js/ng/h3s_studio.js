@@ -2,7 +2,7 @@
 // node's own widgets, so saving, loading and queueing stay ComfyUI's; the shot document keeps shots, clips and lanes.
 import { h, icon, keepKeys } from "./h3s_dom.js";
 import { ensureStudioStyle } from "./h3s_style.js";
-import { readProject, writeProject, newShot, newClip, newLane, placeAt, addShotAt, snapWithin, trimToDuration, growToDuration, editSpoken, addSpoken, removeSpoken, sorted, MIN_LENGTH, r1, turboProfile, fmt, setPartPrompt, clipToFit, isKeyframe, middleOf, removeLane } from "./h3s_model.js";
+import { readProject, writeProject, newShot, newClip, newLane, placeAt, addShotAt, snapWithin, trimToDuration, growToDuration, editSpoken, addSpoken, removeSpoken, sorted, MIN_LENGTH, r1, turboProfile, fmt, setPartPrompt, setShotPrompt, clipToFit, isKeyframe, middleOf, removeLane } from "./h3s_model.js";
 import { fitAspect, snap32, ASPECTS, isAuto, NATIVE_MP, pictureSize } from "./h3s_canvas.js";
 import { contentEntries, promptView, contentView, contextId } from "./h3s_content.js";
 import { timelineView } from "./h3s_timeline.js";
@@ -45,7 +45,7 @@ function load(S) {
   S.docError = project.error;
   if (project.skipped?.length) S.notice = { error: true, text: `The saved data has ${project.skipped.length} invalid audio clip(s) (${project.skipped.join(", ")}). `
     + "They are left out here and removed with your next edit; everything else is kept." };
-  Object.assign(S, { shots: project.shots, audio: project.audio, lanes: project.lanes, control: project.control, look: project.look, partPrompts: project.partPrompts,
+  Object.assign(S, { shots: project.shots, audio: project.audio, lanes: project.lanes, control: project.control, look: project.look, partPrompts: project.partPrompts, shotPrompts: project.shotPrompts,
     quick: readQuick(S.node) });
 }
 
@@ -57,7 +57,7 @@ export function openStudio(node, app, api, host = null) {
   const root = h("div", { class: full ? "h3s full" : "h3s", tabindex: "-1", role: full ? "dialog" : "region", "aria-label": "H3 Director Studio" });
   const page = h("div", { class: "h3s-page" });
   root.append(page);
-  const S = { node, root, selected: null, ghosts: [], ghostSound: null, suggestions: {}, partDrafts: {}, partEdit: null, plan: null, planError: "", promptOpen: false,
+  const S = { node, root, selected: null, ghosts: [], ghostSound: null, suggestions: {}, partDrafts: {}, partEdit: null, shareEdit: null, plan: null, planError: "", promptOpen: false,
     settingsOpen: false, busy: "", toast: "", notice: null, suggestionBase: {}, aiStarted: 0, aiTimeout: 0, dragged: null, dragging: false, pending: false, thumbs: new Map(), ratios: new Map(), lengths: new Map() };
   load(S);
   let timer = null, serial = 0, toastTimer = null, tick = null, closed = false;
@@ -73,8 +73,15 @@ export function openStudio(node, app, api, host = null) {
     return known ? { steps: known.steps, sampler_name: known.sampler_name, scheduler: known.scheduler } : {};
   }
   const labels = () => new Map(sorted(S.shots).map((shot, index) => [shot.id, `Shot ${index + 1}`]));
+  // A lazy prune: shares of shots that no longer exist drop on save; stale-basis entries stay so their badge
+  // shows outdated with Rewrite/Edit. Once a part's shares cover its shots, the legacy entry of that index goes.
   function save() {
-    const text = S.docError ? null : writeProject({ shots: S.shots, audio: S.audio, lanes: S.lanes, control: S.control, look: S.look, partPrompts: S.partPrompts });
+    const ids = new Set(S.shots.map((shot) => shot.id));
+    S.shotPrompts = (S.shotPrompts || []).filter((entry) => ids.has(entry.shot_id));
+    const covered = (index) => { const shots = S.plan?.chunks?.[index]?.shots || []; return shots.length > 0
+      && shots.every((shot) => S.shotPrompts.some((entry) => entry.shot_id === shot.shot_id)); };
+    if (S.shotPrompts.length) S.partPrompts = (S.partPrompts || []).filter((part) => !covered(part.index));
+    const text = S.docError ? null : writeProject({ shots: S.shots, audio: S.audio, lanes: S.lanes, control: S.control, look: S.look, partPrompts: S.partPrompts, shotPrompts: S.shotPrompts });
     if (text !== null && text !== (values(node).shots || "")) { write({ shots: text }); node.graph?.change?.(); }
     S.values = values(node); edits.record(); schedulePlan();
   }
@@ -342,14 +349,33 @@ export function openStudio(node, app, api, host = null) {
       S.partPrompts = setPartPrompt(S.partPrompts, index, draft.key, draft.text, "ai"); save(); render();
     },
     dropPart(index) { delete S.partDrafts[index]; render(); },
-    editPart(index, text = "") { S.partEdit = index === null ? null : { index, text }; render(); },
-    savePart(index) {
+    editPart(index, text = "") { S.partEdit = index === null ? null : { index, text }; S.shareEdit = null; render(); },
+    savePart(index, shotId) {
       const chunk = S.plan?.chunks?.[index], edit = S.partEdit;
       S.partEdit = null;
       if (!chunk || !edit) { render(); return; }
-      S.partPrompts = setPartPrompt(S.partPrompts, index, chunk.prompt_key, edit.text, "user"); save(); render();
+      if (shotId) {
+        const basis = (chunk.shares || []).find((share) => share.shot_id === shotId)?.basis;
+        S.shotPrompts = setShotPrompt(S.shotPrompts, shotId, typeof basis === "string" ? basis : chunk.prompt_key, edit.text, "user", index);
+      } else S.partPrompts = setPartPrompt(S.partPrompts, index, chunk.prompt_key, edit.text, "user");
+      save(); render();
     },
-    resetPart(index) { S.partPrompts = setPartPrompt(S.partPrompts, index, "", "", "user"); save(); render(); },
+    editShare(index, shotId, text = "") { S.shareEdit = index === null ? null : { index, shotId, text }; S.partEdit = null; render(); },
+    saveShare(index, shotId) {
+      const chunk = S.plan?.chunks?.[index], edit = S.shareEdit;
+      S.shareEdit = null;
+      if (!chunk || !edit || edit.shotId !== shotId) { render(); return; }
+      const basis = (chunk.shares || []).find((share) => share.shot_id === shotId)?.basis;
+      S.shotPrompts = setShotPrompt(S.shotPrompts, shotId, typeof basis === "string" ? basis : chunk.prompt_key, edit.text, "user", index);
+      save(); render();
+    },
+    resetShare(index, shotId) { S.shotPrompts = setShotPrompt(S.shotPrompts, shotId, "", "", "user", index); save(); render(); },
+    resetPart(index, shotId) {
+      if (shotId) return actions.resetShare(index, shotId);
+      const chunk = S.plan?.chunks?.[index], inPart = chunk?.shares || chunk?.shots || [];
+      for (const entry of inPart) S.shotPrompts = setShotPrompt(S.shotPrompts, entry.shot_id, "", "", "user", index);
+      S.partPrompts = setPartPrompt(S.partPrompts, index, "", "", "user"); save(); render();
+    },
     promptAsShot() { const shot = newShot(0, S.values.project_seconds); shot.text = S.values.idea || ""; S.ghosts = []; setItems("shot", [shot], shot.id); },
     acceptGhosts() {
       if (S.ghostBasis !== aiBasis(node, true)) { S.ghosts = []; S.ghostSound = null; S.notice = STALE; render(); return; }
@@ -357,14 +383,13 @@ export function openStudio(node, app, api, host = null) {
       const sound = S.ghostSound || {};
       for (const name of ["soundscape", "music"]) if (sound[name]?.trim()) write({ [name]: sound[name].trim() });
       if (sound.look?.trim()) S.look = sound.look.trim();
-      // New shots are a new plan: the parts' own prompts were written for the old one.
-      S.partPrompts = []; S.partDrafts = {};
+      S.partDrafts = {}; S.shareEdit = null;
       S.ghosts = []; S.ghostSound = null; setItems("shot", shots, shots[0]?.id);
     },
     setQuick(key, value) { S.quick = changeQuick(S.quick, key, value); node.properties.ng_quick = S.quick; node.graph?.change?.(); render(); },
     async buildPrompt() {
-      const before = { shots: S.shots, look: S.look, partPrompts: S.partPrompts, soundscape: S.values.soundscape, music: S.values.music, cards: [] };
-      const undo = () => { Object.assign(S, { shots: before.shots, look: before.look, partPrompts: before.partPrompts });
+      const before = { shots: S.shots, look: S.look, partPrompts: S.partPrompts, shotPrompts: S.shotPrompts, soundscape: S.values.soundscape, music: S.values.music, cards: [] };
+      const undo = () => { Object.assign(S, { shots: before.shots, look: before.look, partPrompts: before.partPrompts, shotPrompts: before.shotPrompts });
         for (const card of before.cards) applyValues(card, { description: "" });
         write({ soundscape: before.soundscape, music: before.music }); save(); render(); };
       const apply = (plan) => {
@@ -376,7 +401,7 @@ export function openStudio(node, app, api, host = null) {
         }
         S.shots = clipToFit(readProject(plan.shots || "").shots, S.values.project_seconds).map((shot) => ({ ...newShot(shot.start, shot.end, []),
           text: shot.text, media: shot.media || [], spoken: shot.spoken || [] }));
-        S.look = (plan.look || "").trim(); S.partPrompts = []; S.partDrafts = {}; S.ghosts = []; S.ghostSound = null; S.selected = null;
+        S.look = (plan.look || "").trim(); S.partDrafts = {}; S.ghosts = []; S.ghostSound = null; S.selected = null;
         write({ soundscape: (plan.soundscape || "").trim(), music: (plan.music || "").trim() });
         save(); render(); return undo;
       };

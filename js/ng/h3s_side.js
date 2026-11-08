@@ -150,6 +150,44 @@ function effectField(S, actions, shot) {
     select(options, shot.effect || "", (value) => actions.setShot(shot.id, { effect: value || undefined }), { "aria-label": "Effect of this shot" }));
 }
 
+// This shot's own texts, one per render part it runs in: the compiled share and, where the user wrote one, their own.
+// A share without a basis yet (the backend predates shares, or the shot is new) edits against the excerpt.
+function shotShares(S, actions, shot) {
+  const chunks = (S.plan?.chunks || []).filter((chunk) => (chunk.shares || chunk.shots || []).some((entry) => entry.shot_id === shot.id));
+  if (!chunks.length) return null;
+  return h("div", { style: { display: "flex", flexDirection: "column", gap: "8px" } },
+    h("span", { class: "h3s-lbl" }, "Own text per render part"),
+    chunks.map((chunk) => {
+      const share = (chunk.shares || []).find((entry) => entry.shot_id === shot.id);
+      const excerpt = ((chunk.sources || []).find((item) => item.kind === "shot" && item.id === shot.id)?.text || "").trim();
+      const compiled = excerpt && excerpt !== "(no text)" ? excerpt : "";
+      const own = (S.shotPrompts || []).find((entry) => entry.shot_id === shot.id);
+      const stale = own && typeof share?.basis === "string" && own.basis !== share.basis;
+      const editing = S.shareEdit?.shotId === shot.id && S.shareEdit?.index === chunk.index;
+      const head = h("div", { class: "h3s-row" }, h("span", { class: "h3s-strong", style: { fontSize: "13px" } }, `Part ${chunk.index + 1}`),
+        own ? h("span", { class: `h3s-chip ${stale ? "h3s-warn" : ""}` }, stale ? "outdated" : own.by === "ai" ? "AI-written" : "edited")
+          : h("span", { class: "h3s-chip h3s-muted" }, "compiled"),
+        h("span", { class: "h3s-grow" }),
+        own ? h("button", { class: "h3s-btn ghost small", onclick: () => actions.resetShare(chunk.index, shot.id), title: "Use the compiled share again" }, "Reset") : null);
+      const body = editing
+        ? h("div", { style: { display: "grid", gap: "6px" } },
+          h("textarea", { class: "h3s-in", rows: 6, value: S.shareEdit.text, "aria-label": `Share of this shot in part ${chunk.index + 1}`,
+            oninput: (event) => { S.shareEdit.text = event.target.value; } }),
+          h("div", { class: "h3s-row" }, h("span", { class: "h3s-grow" }),
+            h("button", { class: "h3s-btn ai", onclick: () => actions.saveShare(chunk.index, shot.id) }, "Save"),
+            h("button", { class: "h3s-btn ghost", onclick: () => actions.editShare(null) }, "Cancel")))
+        : own
+          ? [h("span", { class: "h3s-lbl" }, stale ? "Compiled share (own text outdated)" : "Own text"),
+            h("pre", { style: { margin: 0 } }, stale ? compiled || "(no text)" : own.text),
+            h("div", { class: "h3s-row" }, h("span", { class: "h3s-grow" }),
+              h("button", { class: "h3s-btn small", onclick: () => actions.editShare(chunk.index, shot.id, own.text) }, "Edit"))]
+          : [h("span", { class: "h3s-lbl" }, "Compiled share"), h("pre", { style: { margin: 0 } }, compiled || "(no text)"),
+            h("div", { class: "h3s-row" }, h("span", { class: "h3s-grow" }),
+              h("button", { class: "h3s-btn small", onclick: () => actions.editShare(chunk.index, shot.id, compiled) }, "Edit"))];
+      return h("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } }, head, ...[body].flat().filter(Boolean));
+    }));
+}
+
 function shotPanel(S, actions, shot) {
   const add = h("button", { class: "h3s-btn small", onclick: () => actions.addSpoken(shot.id) }, icon("plus", 14), "Spoken line");
   const addBox = h("span", { style: { alignSelf: "flex-start" } });
@@ -186,6 +224,7 @@ function shotPanel(S, actions, shot) {
       S.values.mode === "fl2va" ? h("span", { class: "h3s-lbl" }, "First / last frame mode does not use voice references. Reference pictures still guide appearance; "
         + "describe the voice in the text, or switch to References to use a voice card.") : null,
       addBox),
+    shotShares(S, actions, shot),
     h("span", { class: "h3s-lbl" }, `In: ${chunks.join(", ") || "–"}`));
 }
 

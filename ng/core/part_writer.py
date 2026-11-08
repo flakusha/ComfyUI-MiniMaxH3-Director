@@ -15,6 +15,7 @@ def _without_own(director):
         return director
     data = json.loads(text)
     data.pop("part_prompts", None)
+    data.pop("shot_prompts", None)
     return {**director, "shots": json.dumps(data)}
 
 

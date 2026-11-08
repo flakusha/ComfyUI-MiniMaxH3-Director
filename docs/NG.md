@@ -192,8 +192,10 @@ each part's prompt comes from: compiled, AI-written, edited, or manual.
   planner's. What a model reliably gets slightly wrong is put back (a time on Shot 1, a sung line without its speaker,
   re-punctuated lyrics, lyric lines left out); anything else is refused with the reason and nothing changes. **Accept** stores it.
 - **Edit** lets you write the part yourself; **Save** stores it, **Reset** returns to the compiled prompt.
-- An AI-written or edited prompt is kept with the plan it was written for. When the plan of that part changes (timing, shots,
-  media, Look), the compiled prompt is used again and the badge says "own prompt outdated".
+- A hand edit on one shot's row stores that shot's share only, exactly as written. Own text is per shot with the
+  share it was written from: moving or resizing other shots keeps it where the share matches, a changed share falls
+  back to compiled with a shot-scoped outdated badge. Whole-part entries from older saves still apply as a legacy
+  fallback until that part is touched (only on matching index and whole-prompt key).
 - **Manual prompt** under More settings still replaces every part's prompt.
 
 While an AI action runs, a status at the bottom of the window shows the elapsed time against the AI Loader's timeout and

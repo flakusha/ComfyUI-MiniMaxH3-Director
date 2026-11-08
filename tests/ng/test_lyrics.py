@@ -61,6 +61,17 @@ class Parse(unittest.TestCase):
         language, lines = lyrics.parse(SONG)
         self.assertEqual(lyrics.parse(lyrics.to_lrc(language, lines)), (language, lines))
 
+    def test_multi_stamp_lines_agree_between_parse_and_story_stamps(self):
+        # Backend F2: parse expands one multi-stamp line into one LyricLine per stamp (for the
+        # compiler's story_lines), while story_stamps keeps the single text line with every stamp
+        # shifted (for the planners' text). Both must carry the same words at the same shifted times.
+        multi = "[00:01.00][00:05.00] Echo echo"
+        _, parsed = lyrics.parse(multi)
+        self.assertEqual([l.text for l in parsed], ["Echo echo", "Echo echo"])
+        shifted = lyrics.story_stamps(lyrics.stamped_lines(multi), 1.0)
+        self.assertEqual(shifted, ["[00:00.00][00:04.00] Echo echo"])
+        self.assertEqual([round(l.start - 1.0, 2) for l in parsed], [0.0, 4.0])
+
     def test_the_option_survives_the_card_json_and_old_cards_have_none(self):
         options = opts.ContextOptions(lyrics=SONG)
         self.assertEqual(opts.ContextOptions.from_dict(options.to_dict()), options)
@@ -167,13 +178,13 @@ class Placement(unittest.TestCase):
 class Captions(unittest.TestCase):
     def test_story_time_lrc_srt_and_chapters_come_from_the_same_window(self):
         nodes = module("ng.nodes.context_nodes")
-        lrc = nodes._card_lrc(SONG)
+        lrc = lyrics.card_lrc(SONG)
         self.assertIn("[00:01.00] My master", lrc)
         language, lines = lyrics.parse(SONG)
         srt = lyrics.to_srt(lines)
         self.assertTrue(srt.startswith("1\n00:00:01,000 --> 00:00:05,000\nMy master"))
         # the card trim shifts the caption, like the planner's story_stamps (P1.1)
-        trimmed = nodes._card_lrc(SONG, 4.0, 0.0)
+        trimmed = lyrics.card_lrc(SONG, 4.0, 0.0)
         self.assertIn("[00:01.00] I still wait", trimmed)
         self.assertNotIn("My master", trimmed)
         # the Director warns when the video outlasts the song (P1.2), naming the card

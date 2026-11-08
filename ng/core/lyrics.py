@@ -137,6 +137,20 @@ def story_stamps(lines, start_s, end_s=0.0):
     return out
 
 
+def card_lrc(stored, start_s=0.0, end_s=0.0):
+    """This card's timed words as story-time LRC: the stored text stays file-time, the stamps
+    are shifted into the card's own trim window (story_stamps), so the string reads seconds in
+    the video the card plays. Empty when the card carries no timed words."""
+    if not isinstance(stored, str) or not stored.strip():
+        return ""
+    language, _ = parse(stored)
+    lines = story_stamps(stamped_lines(stored), float(start_s or 0.0), float(end_s or 0.0))
+    if not lines:
+        return ""
+    out = ["[la:%s]" % language] if language else []
+    return "\n".join(out + lines)
+
+
 def _tokens(text):
     return re.findall(r"\w+", text.lower())
 

@@ -13,6 +13,7 @@ from ..adapters.audio_decode import trimmed_audio
 from ..core import trim_window
 from ..core.context import CONTENT_BY_MEDIA, PRESERVE, USAGE_BY_MEDIA
 from ..core.context_build import item_from_widgets
+from ..core.lyrics import card_lrc
 from ..core.context_options import ContextOptions
 from ..core.analysis import ProviderConfig
 from ..adapters.ai_provider import NativeAIProvider
@@ -146,21 +147,9 @@ def _trim_is_set(value):
     return isinstance(value, (int, float)) and value > 0
 
 
-def _card_lrc(stored, start_s=0.0, end_s=0.0):
-    """This card's timed words as story-time LRC (P1.1: the caption export, data-first).
-
-    The stored text stays file-time; the stamps are shifted into the card's own trim window
-    (lyrics.story_stamps), so the string reads seconds in the video the card plays. Empty when
-    the card carries no timed words."""
-    if not isinstance(stored, str) or not stored.strip():
-        return ""
-    from ..core import lyrics
-    language, _ = lyrics.parse(stored)
-    lines = lyrics.story_stamps(lyrics.stamped_lines(stored), float(start_s or 0.0), float(end_s or 0.0))
-    if not lines:
-        return ""
-    out = ["[la:%s]" % language] if language else []
-    return "\n".join(out + lines)
+def _card_lrc(*args, **kwargs):
+    """Moved to ng.core.lyrics.card_lrc (R2); this alias stays for old workflow restores."""
+    return card_lrc(*args, **kwargs)
 
 
 def _subject_inputs():
@@ -293,7 +282,7 @@ class NGContextAudio(io.ComfyNode):
         widgets["context_options"] = json.dumps(options)
         window = trim_window.max_duration(start_s, end_s, length_s)
         return io.NodeOutput(item_from_widgets("audio", widgets, length_s),
-                             trimmed_audio(audio, cut_start, cut_end), window, _card_lrc(options.get("lyrics", ""), start_s, end_s))
+                             trimmed_audio(audio, cut_start, cut_end), window, card_lrc(options.get("lyrics", ""), start_s, end_s))
 
 
 class NGContextText(io.ComfyNode):

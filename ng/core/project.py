@@ -17,7 +17,7 @@ from .legacy_bridge import decide_mode
 from .shots import auto_shots, parse_shots
 from .subjects import resolve_subjects
 from .shot_document import has_shots, read_document
-from .audio_timing import clip_issues, covers, lock_copy_shortfall, locked_spans
+from .audio_timing import clip_issues, covers, lock_copy_shortfall, locked_spans, max_duration_shortfall
 from . import control_timing, continuation, places
 
 CANVAS_MULTIPLE = 32
@@ -341,7 +341,7 @@ def plan_project(context: DirectorContext, chunk_seconds, continuity: Continuity
     if covers(locked_spans(context), plan.total_frames, limits.FPS):
         plan = replace(plan, issues=tuple(i for i in plan.issues if i.code != "audio_dulling"))
     compiled = tuple(compile_chunk(context, chunk, continuity) for chunk in plan.chunks)
-    issues = list(issues) + list(shot_issues) + list(plan.issues) + check_guide_times(context, plan.total_frames) + clip_issues(context) + lock_copy_shortfall(context)
+    issues = list(issues) + list(shot_issues) + list(plan.issues) + check_guide_times(context, plan.total_frames) + clip_issues(context) + lock_copy_shortfall(context) + max_duration_shortfall(context)
     issues.extend(control_timing.issues(context, plan.chunks))
     for one in compiled:
         issues.extend(one.issues)       # the same problem repeats per chunk; _merge lists it once

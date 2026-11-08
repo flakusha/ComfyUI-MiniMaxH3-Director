@@ -56,6 +56,22 @@ def stamp(seconds):
     return "[%02d:%05.2f]" % (minutes, rest)
 
 
+def to_srt(lines, offset_s=0.0):
+    """SRT text for story-time `LyricLine`s; the story offset (seconds) shifts every cue."""
+    out = []
+    for number, line in enumerate(lines, 1):
+        out.append("%d\n%s --> %s\n%s" % (number, _srt_stamp(line.start + offset_s), _srt_stamp(line.end + offset_s), line.text))
+    return "\n\n".join(out)
+
+
+def _srt_stamp(seconds):
+    total = max(0.0, seconds)
+    hours, rest = divmod(total, 3600)
+    minutes, rest = divmod(rest, 60)
+    whole, millis = divmod(rest, 1)
+    return "%02d:%02d:%02d,%03d" % (hours, minutes, int(whole), round(millis * 1000))
+
+
 def to_lrc(language, lines):
     """LRC text for lines; a pause longer than a second before the next line gets its own empty stamp."""
     out = ["[la:%s]" % language] if language else []
@@ -225,7 +241,8 @@ def story_lines(context):
 def sung_lines(context, chunk):
     """[(local frame where the line is sung, speaker item id, language, text)] for this chunk, in time order.
 
-    A line belongs to the part where its middle is sung; a part's carried-over head was rendered by the part before."""
+    A line belongs to the part where its middle is sung; a part's carried-over head was rendered by the part before.
+    A chained video keeps singing where the song is: the same narrowing the compiler uses for every part."""
     window = chunk.story_start_f - chunk.head_frames
     return [(line.middle_f - window, line.speaker, line.language, line.text) for line in story_lines(context)
             if chunk.story_start_f <= line.middle_f < chunk.story_end_f]

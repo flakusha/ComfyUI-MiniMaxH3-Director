@@ -124,6 +124,14 @@ def _load_model(path, device):
     return _load_safetensors(path, device) if _is_safetensors(path) else whisper.load_model(path, device=device)
 
 
+def _model_names(folder):
+    """Registered model names of one folder, for the ASR backend probe (core stays ComfyUI-free)."""
+    try:
+        return list(folder_paths.get_filename_list(folder)) if folder in folder_paths.folder_names_and_paths else []
+    except Exception:
+        return []
+
+
 def _samples(source):
     """The song as Whisper reads it, 16 kHz mono float, decoded through the shared decoder (adapters/audio_decode).
     The card-relative name goes in unresolved: the decoder resolves it itself, and a resolved path fed back in
@@ -132,13 +140,18 @@ def _samples(source):
     return wave.reshape(-1).numpy().astype(np.float32)
 
 
-def time_lyrics(source, text, device, chosen=""):
-    """LRC text for the song: the user's own lines with recognised times, or what Whisper heard when no lines are given.
+def time_lyrics(source, text, device, chosen="", engine=None):
+    """LRC text for the song: the user's own lines with recognised times, or what the engine heard when no lines are given.
 
     `device` is the caller's choice: the GPU only while nothing renders. `chosen`: the card's Whisper file, if any.
     `source` is the card's file - the chosen file, the mirrored origin file, or a materialized linked sound
     (input/h3-external/): the card always sends a name, because a linked AUDIO payload never crosses
-    request.json(). Whisper is the clock either way."""
+    request.json(). The ASR backend is picked by `ng.core.asr.select` (P1.5): Whisper is the clock either way,
+    an optional backend (Qwen3-ASR + ForcedAligner) only speaks when its weights and imports are present."""
+    from ..core import asr
+    name, factory = asr.select(engine, list_names=_model_names)
+    if name != "whisper":
+        return factory(source, text, device, chosen=chosen)
     if whisper is None:
         raise ValueError("Timing lyrics needs the openai-whisper package in ComfyUI's Python.")
     samples = _samples(source)

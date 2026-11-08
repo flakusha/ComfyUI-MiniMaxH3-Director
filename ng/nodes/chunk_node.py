@@ -109,26 +109,47 @@ class NGCollect(io.ComfyNode):
             description="After the loop: decode every chunk, cut off the pinned heads and join picture and sound into one video.",
             inputs=[io.Latent.Input("latents", tooltip="End Loop output (accumulate on)."), NGChunk.Input("chunks", tooltip="The Director's chunks."),
                     io.Vae.Input("vae"), io.Vae.Input("audio_vae"),
+                    io.Audio.Input("fallback_audio", optional=True,
+                                   tooltip="Opt-in soundtrack for chunks that sampled no audio at all (audio-less renders): silent chunks take these samples, generated or locked sound is untouched. Unconnected = unchanged."),
                     io.String.Input("resume_settings", optional=True, advanced=True,
                                     tooltip="Set by Render Sequence when the kept render parts are deleted once the video is put together."),
                     io.Boolean.Input("smooth_source_join", default=True, optional=True, advanced=True,
                                      tooltip="Ease the source/VAE picture difference over the first six new frames of Continue. Sound is unchanged.")],
             outputs=[io.Image.Output(display_name="images"), io.Audio.Output(display_name="audio"), io.String.Output(display_name="warnings"),
-                     io.Float.Output(display_name="fps", tooltip="24, for CreateVideo. Outside the loop, unlike Director Output's fps.")],
+                     io.Float.Output(display_name="fps", tooltip="24, for CreateVideo. Outside the loop, unlike Director Output's fps."),
+                     io.String.Output(display_name="chapters",
+                                      tooltip="One `start - end: Render part N` line per chunk: the seamless cut points of the finished video for an external editor.")],
         )
 
     @classmethod
-    def execute(cls, latents, chunks, vae, audio_vae, resume_settings=None, smooth_source_join=None):
+    def execute(cls, latents, chunks, vae, audio_vae, fallback_audio=None, resume_settings=None, smooth_source_join=None):
         project = _jobs_of(chunks)
         decode_audio = audio_nodes().vae_decode_audio
+        fallback = fallback_audio[0] if fallback_audio else None
         frames, sound, issues = collect.collect_chunks(
             latents, project.plan, lambda video: _decode_video(vae[0], video), lambda audio: decode_audio(audio_vae[0], {"samples": audio}),
-            restore_audio=lambda index, wave, rate: audio_locks.restore_waveform(chunks[index], wave, rate),
+            restore_audio=lambda index, wave, rate: audio_locks.restore_waveform(chunks[index], wave, rate, fallback=fallback),
             restore_picture=_picture_restorer(chunks, smooth_source_join), lock_spans=collect.lock_spans_of(chunks))
         # A list input: an empty field in a hand-built loop arrives as [""] (2026-10-18: Collect failed with JSONDecodeError).
         if resume_settings and resume_settings[0]:
             resume.forget(chunks, json.loads(resume_settings[0]))
-        return io.NodeOutput(frames, sound, "\n".join(str(i) for i in issues), float(FPS))
+        return io.NodeOutput(frames, sound, "\n".join(str(i) for i in issues), float(FPS), chapter_text(project))
+
+
+def chapter_marks(project):
+    """[(chunk index, story start s, story end s)] chunk boundaries in story seconds (P3 idea 5).
+
+    Chunk edges are the seamless cut points of the finished video: an external editor cutting
+    the single mp4 there never splits a pinned head or a crossfade."""
+    from ..core import frames
+    return [(chunk.index, round(frames.frames_to_seconds(chunk.story_start_f), 3),
+             round(frames.frames_to_seconds(chunk.story_end_f), 3)) for chunk in project.plan.chunks]
+
+
+def chapter_text(project):
+    """One `start - end: Render part N` line per chunk, for chapter files and edit lists."""
+    return "\n".join("%.3f - %.3f: Render part %d" % (start, end, index + 1)
+                        for index, start, end in chapter_marks(project))
 
 
 def _jobs_of(chunks):
@@ -153,20 +174,23 @@ class NGCollectVideo(io.ComfyNode):
                         "file, so the frames never have to fit in memory at once. Connect SaveVideo.",
             inputs=[io.Latent.Input("latents", tooltip="End Loop output (accumulate on)."), NGChunk.Input("chunks", tooltip="The Director's chunks."),
                     io.Vae.Input("vae"), io.Vae.Input("audio_vae"),
+                    io.Audio.Input("fallback_audio", optional=True,
+                                   tooltip="Opt-in soundtrack for chunks that sampled no audio at all: silent chunks take these samples, generated or locked sound is untouched. Unconnected = unchanged."),
                     io.Boolean.Input("smooth_source_join", default=True, optional=True, advanced=True,
                                      tooltip="Ease the source/VAE picture difference over the first six new frames of Continue. Sound is unchanged.")],
             outputs=[io.Video.Output(display_name="video"), io.String.Output(display_name="warnings")],
         )
 
     @classmethod
-    def execute(cls, latents, chunks, vae, audio_vae, smooth_source_join=None):
+    def execute(cls, latents, chunks, vae, audio_vae, fallback_audio=None, smooth_source_join=None):
         project = _jobs_of(chunks)
         decode_audio = audio_nodes().vae_decode_audio
+        fallback = fallback_audio[0] if fallback_audio else None
         path = os.path.join(folder_paths.get_temp_directory(), "ng_collect_%s.mp4" % uuid.uuid4().hex)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         issues = collect.write_video(path, latents, project.plan, lambda video: _decode_video(vae[0], video),
                                      lambda audio: decode_audio(audio_vae[0], {"samples": audio}),
-                                     restore_audio=lambda index, wave, rate: audio_locks.restore_waveform(chunks[index], wave, rate),
+                                     restore_audio=lambda index, wave, rate: audio_locks.restore_waveform(chunks[index], wave, rate, fallback=fallback),
                                      restore_picture=_picture_restorer(chunks, smooth_source_join),
                                      lock_spans=collect.lock_spans_of(chunks))
         return io.NodeOutput(InputImpl.VideoFromFile(path), "\n".join(str(i) for i in issues))

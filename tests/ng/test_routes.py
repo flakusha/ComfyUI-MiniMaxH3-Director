@@ -90,7 +90,7 @@ class Routes(unittest.IsolatedAsyncioTestCase):
         # and the stateless route has no node id to resolve a link with). The route forwards the name untouched.
         seen = {}
 
-        def fake_time(source, text, device, chosen=""):
+        def fake_time(source, text, device, chosen="", engine=None):
             seen["source"] = source
             return {"lrc": "[00:00.00] la", "language": "English", "lines": 1, "heard_words": 0}
 
@@ -111,7 +111,7 @@ class Routes(unittest.IsolatedAsyncioTestCase):
         # A linked sound with nothing to mirror (decoded audio) sends an empty source with `linked`: until one
         # run materializes it to input/h3-external/ the route answers with the run to do, not the decode error.
         # An unlinked card with no file keeps the decode error itself.
-        def fake_time(source, text, device, chosen=""):
+        def fake_time(source, text, device, chosen="", engine=None):
             if not str(source or "").strip():
                 raise ValueError("Choose a source containing audio.")
             return {"lrc": "[00:00.00] la", "language": "English", "lines": 1, "heard_words": 0}
@@ -132,7 +132,7 @@ class Routes(unittest.IsolatedAsyncioTestCase):
         # Unlinked cards send a file name and no payload: the route passes the name through untouched.
         seen = {}
 
-        def fake_time(source, text, device, chosen=""):
+        def fake_time(source, text, device, chosen="", engine=None):
             seen["source"] = source
             return {"lrc": "[00:00.00] la", "language": "English", "lines": 1, "heard_words": 0}
 

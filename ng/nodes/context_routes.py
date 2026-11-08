@@ -187,7 +187,8 @@ async def model_choices(request):
 
 @PromptServer.instance.routes.post("/ng/lyrics")
 async def time_lyrics(request):
-    """Time a song card's lyrics with Whisper. While a render runs it stays off the GPU (CPU is slower, not in the way).
+    """Time a song card's lyrics with the selected ASR backend (Whisper by default; H3_ASR_BACKEND opts in).
+    While a render runs it stays off the GPU (CPU is slower, not in the way).
 
     `source` is the card's file widget: the chosen file unlinked, the mirrored origin file linked. A linked
     sound with no file behind it (decoded audio) materializes to input/h3-external/ when the card runs, so the
@@ -199,7 +200,7 @@ async def time_lyrics(request):
         device = "cpu" if busy else comfy.model_management.get_torch_device()
         try:
             result = await asyncio.to_thread(lyrics_timing.time_lyrics, data.get("source", ""), data.get("lyrics", ""), device,
-                                             data.get("model", ""))
+                                             data.get("model", ""), data.get("engine", ""))
         except ValueError as error:
             if data.get("linked") and not str(data.get("source", "")).strip():
                 raise ValueError("The linked sound has no file yet - run the card once so its sound is "

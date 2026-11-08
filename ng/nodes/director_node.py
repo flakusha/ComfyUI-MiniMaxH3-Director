@@ -46,6 +46,8 @@ class NGDirector(io.ComfyNode):
                 # through here, so Pictures plan one still per shot instead of video chunks (review F3).
                 io.Combo.Input("output", options=["video", "images"], default="video", optional=True,
                                tooltip="Video, or one picture per shot (text to image, or a First frame picture changed as the shot says)."),
+                io.String.Input("continue_from", default="none", optional=True, advanced=True,
+                                tooltip="Continue from file (P3 idea 1): name of a video in ComfyUI's input folder to start this project from the end of, through the existing continuation machinery (39-frame latent prefix hold + seam fix). 'none' = start fresh. A Context Video card with Continue usage scopes the source to a shot instead."),
             ],
             outputs=[NGChunk.Output(display_name="chunks", is_output_list=True), io.String.Output(display_name="warnings"),
                      io.String.Output(display_name="plan")],
@@ -53,8 +55,17 @@ class NGDirector(io.ComfyNode):
 
     @classmethod
     def execute(cls, idea, shots, project_seconds, chunk_seconds, width, height, mode, continuity, pin_frames,
-                soundscape, music, prepend_text="", contexts=None, output="video"):
+                soundscape, music, prepend_text="", contexts=None, output="video", continue_from="none"):
         items = tuple(c for c in (contexts or {}).values() if isinstance(c, ContextItem))
+        # Continue from file: a first-class source video becomes a global Continue card, so the existing
+        # continuation machinery (core/continuation.py) opens the first chunk on its tail. A Context Video
+        # card with Continue usage still scopes the source per shot and wins over this widget.
+        # 'none'/empty = start fresh; anything else is a file name in ComfyUI's input folder.
+        source = str(continue_from or "").strip()
+        if source and source.lower() != "none" and not any(
+                i.media == "video" and i.source == source and "continue" in i.effective_usage for i in items):
+            items = items + (ContextItem(id="continue_file", name="Continue from file", media="video",
+                                         source=source, usage=("continue",)),)
         context = DirectorContext(idea=idea, project_seconds=project_seconds, width=width, height=height, mode=mode, shots_text=shots,
                                   soundscape=soundscape, music=music, prepend_text=prepend_text or "", items=items)
         plan = ContinuityPlan(mode=continuity, video_frames=int(pin_frames), audio_frames=PIN_AUDIO_DEFAULT)

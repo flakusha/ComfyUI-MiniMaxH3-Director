@@ -119,6 +119,27 @@ def lock_copy_shortfall(context):
     return out
 
 
+def max_duration_shortfall(context):
+    """An audio card (any usage) whose playable window ends before the project does (P1.2: warn, never clamp).
+
+    The card's `max duration` output is the same number; this names the card in the plan so the warning
+    reaches the Studio panel and the Director's warnings output without any wiring."""
+    from .frames import frames_to_seconds
+    total = seconds_to_frames(context.project_seconds)
+    out = []
+    for item in context.by_media("audio"):
+        if not item.source:
+            continue
+        _, available = source_window(item)
+        if available is None or available >= total:
+            continue
+        out.append(Issue("audio_shorter_than_project", "'%s' plays only the first %.1fs of the %.1fs video; "
+                         "keep project_seconds under its max duration, trim the video to it, or wire its "
+                         "'trimmed audio' output." % (item.name, frames_to_seconds(available),
+                                                      context.project_seconds), item.name))
+    return out
+
+
 def clip_issues(context):
     """Nothing is cut silently: a clip overlapping an earlier one on its lane, past the project's end, or with an offset past its file's end is named."""
     issues, last_end = [], {}

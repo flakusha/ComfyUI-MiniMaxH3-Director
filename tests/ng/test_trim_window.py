@@ -227,20 +227,21 @@ class TheAudioCardFoldsTrims(unittest.TestCase):
         return output.args
 
     def test_an_untrimmed_card_decodes_the_whole_file_and_reports_its_length(self):
-        item, audio, longest = self.run_card()
+        item, audio, longest, captions = self.run_card()
         self.assertEqual((item.options.start_s, item.options.end_s), (0.0, 0.0))
         self.assertEqual(audio["waveform"].shape[2], 12 * RATE)
         self.assertAlmostEqual(longest, 12.0, places=2)
+        self.assertEqual(captions, "", "no timed words, no captions")
 
     def test_widget_trims_cut_the_output_and_fold_into_the_options(self):
-        item, audio, longest = self.run_card(trim_start=2.0, trim_end=5.0)
+        item, audio, longest, _ = self.run_card(trim_start=2.0, trim_end=5.0)
         self.assertEqual((item.options.start_s, item.options.end_s), (2.0, 5.0))
         self.assertAlmostEqual(audio["waveform"].shape[2] / audio["sample_rate"], 3.0, places=2)
         self.assertAlmostEqual(longest, 3.0, places=2)
 
     def test_a_stored_range_still_applies_without_trim_widgets(self):
         stored = json.dumps(dict(schema_version=1, start_s=2.0, end_s=6.0))
-        item, audio, longest = self.run_card(options=stored)
+        item, audio, longest, _ = self.run_card(options=stored)
         self.assertEqual((item.options.start_s, item.options.end_s), (2.0, 6.0))
         self.assertAlmostEqual(longest, 4.0, places=2)
 
@@ -260,7 +261,7 @@ class TheAudioCardFoldsTrims(unittest.TestCase):
     def test_a_linked_trim_arrives_as_none_and_means_unset(self):
         plain = self.nodes.NGContextAudio.fingerprint_inputs(audio=self.name)
         self.assertEqual(plain, self.nodes.NGContextAudio.fingerprint_inputs(audio=self.name, trim_start=None, trim_end=None))
-        item, _, _ = self.run_card(trim_start=None, trim_end=None)
+        item, _, _, _ = self.run_card(trim_start=None, trim_end=None)
         self.assertEqual((item.options.start_s, item.options.end_s), (0.0, 0.0))
 
     def test_a_linked_audio_without_a_sample_rate_names_the_card(self):

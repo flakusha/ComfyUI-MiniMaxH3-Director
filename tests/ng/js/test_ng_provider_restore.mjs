@@ -56,4 +56,24 @@ assert.equal(providerRestoreValues({widgets_values:oldDisk},olderDefaults).local
 const modernDefaults={...defaults};delete modernDefaults.local_backend;
 assert.equal(providerRestoreValues({widgets_values:oldDisk},modernDefaults).source,"clip","a current backend migrates the old disk selection");
 assert.equal(providerRestoreValues({widgets_values:oldDisk,widgets_values_named:{source:"local",local_backend:"disk",local_model:"disk.safetensors"}},modernDefaults).source,"clip");
+// A named-less save by the current build holds all 23 widgets (ten source fields, the eight
+// sampling fields, three per-purpose models and the two local-encoder fields), so it exceeds the
+// 14-value restore ceiling on purpose: native positional assignment lines every value up with its
+// own widget one-to-one, including the appended overrides, and must not be overridden by defaults.
+const full=[...old.slice(0,10),.8,.95,20,.05,.1,-.2,7,true,"text-model.safetensors","caption-model.safetensors","audio-model.safetensors","disk-encoder.safetensors","ltxv"];
+assert.equal(providerRestoreValues({widgets_values:full},defaults),null,
+  "a current named-less positional workflow keeps native assignment of every widget, overrides included");
+class FullNode{
+  constructor(){this.widgets=[];for(const[name,value]of Object.entries({"source":"local","provider":"ollama","base_url":"","model":"","api_key_env":"","vision":true,"audio":false,"timeout_seconds":120,"max_tokens":512,"keep_alive":0,temperature:.3,top_p:.9,top_k:40,min_p:0,frequency_penalty:0,presence_penalty:0,seed:0,fixed_seed:false,model_text:"",model_caption:"",model_audio:"",local_model:"",local_type:"stable_diffusion"}))this.widgets.push({name,value});}
+  configure(data){data.widgets_values.forEach((value,index)=>{if(index<this.widgets.length)this.widgets[index].value=value;});return null;}
+}
+configureProviderType(FullNode,defaults);
+const fullNode=new FullNode();
+const savedFull=fullNode.widgets.map(entry=>entry.value);
+savedFull[10]=.8;savedFull[12]=20;savedFull[18]="caption-model.safetensors";savedFull[19]="audio-model.safetensors";savedFull[22]="ltxv";
+fullNode.configure({widgets_values:savedFull});
+assert.equal(fullNode.widgets[18].value,"caption-model.safetensors");
+assert.equal(fullNode.widgets[19].value,"audio-model.safetensors");
+assert.equal(fullNode.widgets[22].value,"ltxv");
+assert.equal(fullNode.widgets[10].value,.8);assert.equal(fullNode.widgets[12].value,20);
 console.log("ng provider restore: six-field, source-based, named and current native workflows passed");

@@ -164,6 +164,67 @@ class Placement(unittest.TestCase):
         self.assertIn("candles burn", result.compiled[1].prompt)
 
 
+class Captions(unittest.TestCase):
+    def test_story_time_lrc_srt_and_chapters_come_from_the_same_window(self):
+        nodes = module("ng.nodes.context_nodes")
+        lrc = nodes._card_lrc(SONG)
+        self.assertIn("[00:01.00] My master", lrc)
+        language, lines = lyrics.parse(SONG)
+        srt = lyrics.to_srt(lines)
+        self.assertTrue(srt.startswith("1\n00:00:01,000 --> 00:00:05,000\nMy master"))
+        # the card trim shifts the caption, like the planner's story_stamps (P1.1)
+        trimmed = nodes._card_lrc(SONG, 4.0, 0.0)
+        self.assertIn("[00:01.00] I still wait", trimmed)
+        self.assertNotIn("My master", trimmed)
+        # the Director warns when the video outlasts the song (P1.2), naming the card
+        result = plan(doc([shot("s1", 0, 27)], [lane()]), (song(),))
+        codes = {i.code: i for i in result.issues}
+        self.assertNotIn("audio_shorter_than_project", codes, "a 27 s song covers a 27 s video")
+        long = plan(doc([shot("s1", 0, 60)], [lane(end=60.0)]), (song(),), seconds=60.0)
+        self.assertIn("audio_shorter_than_project", {i.code for i in long.issues})
+
+    def test_asr_selection_stays_whisper_without_backends(self):
+        asr = module("ng.core.asr")
+        self.assertEqual(asr.select("no-such-backend")[0], "whisper")
+        self.assertEqual(asr.select()[0], "whisper")
+
+    def test_fallback_mux_only_fills_silence(self):
+        import torch
+        locks = module("ng.adapters.audio_locks")
+        silent = torch.zeros(1, 1, 100)
+        heard = torch.ones(1, 1, 100)
+        fallback = {"waveform": torch.ones(1, 1, 100) * 0.5, "sample_rate": 32000}
+        self.assertTrue((locks._mux_fallback(silent, fallback) == 0.5).all())
+        self.assertIs(locks._mux_fallback(heard, fallback), heard, "generated sound is untouched")
+        self.assertIs(locks._mux_fallback(silent, None), silent, "unconnected is byte-identical")
+
+    def test_lyrics_continuation_narrows_story_lines_per_chunk(self):
+        result = plan(doc([shot("s1", 0, 27)], [lane()]), (song(),))
+        first, second = result.plan.chunks[0], result.plan.chunks[1]
+        # sung_lines is the per-chunk narrowing the compiler already uses: each chunk sings the lines
+        # whose middle falls inside it, so a chained video keeps singing where the song is (P3 idea 7).
+        first_sung = module("ng.core.lyrics").sung_lines(result.context, first)
+        second_sung = module("ng.core.lyrics").sung_lines(result.context, second)
+        self.assertTrue(first_sung and second_sung, "both chunks sing lines")
+        whole = lyrics.story_lines(result.context)
+        self.assertEqual(len(first_sung) + len(second_sung) + len(module("ng.core.lyrics").sung_lines(result.context, result.plan.chunks[2])), len(whole))
+
+    def test_chapter_marks_cover_the_video_end_to_end(self):
+        from _pack import module as pack_module
+        chunk_node = pack_module("ng.nodes.chunk_node")
+        result = plan(doc([shot("s1", 0, 27)], [lane()]), (song(),))
+        text = chunk_node.chapter_text(result)
+        self.assertIn("Render part 1", text)
+        self.assertIn("Render part 3", text)
+
+    def test_caption_polish_prompt_never_writes_times(self):
+        native = module("ng.adapters.native_ai")
+        prompt, media = native.request_prompt("caption", {"words": "hello world", "language": "English"}, None)
+        self.assertEqual(media, "text")
+        self.assertIn("hello world", prompt)
+        self.assertNotIn("timestamps", prompt.lower())
+
+
 class Look(unittest.TestCase):
     def test_the_prompt_is_not_pasted_into_every_part_once_shots_exist(self):
         result = plan(doc([shot("s1", 0, 27)], look="Dark gothic fantasy, cinematic anime style."), ())

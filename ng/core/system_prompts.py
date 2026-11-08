@@ -56,7 +56,7 @@ SYSTEM_PROMPTS = {
         "sentence, so say what type of sound it is - speech, singing, ambient or environmental sound, "
         "sound effect, non-diegetic music, or mixed - what dominates it, and whether any music is "
         "heard by the characters or by the audience alone, with its in-world source where there is "
-        "one. For voices sketch each speaker without a name - approximate age range, on-screen or "
+        "one. Name the language, the mood and the instruments you hear. If lyrics are supplied, do not paraphrase them. For voices sketch each speaker without a name - approximate age range, on-screen or "
         "off-screen, pitch and timbre - since a name comes from the card. Judge what the sound is "
         "useful for - a figure's voice, reusing the sound, keeping the sound exactly, the style of the "
         "music, the rhythm to follow, or a sound to imitate - and say why in one short sentence. "

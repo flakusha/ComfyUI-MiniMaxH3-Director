@@ -184,7 +184,7 @@ class ExternalSampling(unittest.TestCase):
     def test_collect_gives_createvideo_an_fps_outside_the_loop(self):
         # User's graph: Director Output fps -> CreateVideo past End Loop; core rejected it as "loop boundary".
         names = [o.display_name for o in self.nodes["NGCollect"].GET_SCHEMA().outputs]
-        self.assertEqual(names, ["images", "audio", "warnings", "fps"], "fps appended, saved links keep their slots")
+        self.assertEqual(names, ["images", "audio", "warnings", "fps", "chapters"], "chapters appended last, saved links keep their slots")
         frames, sound = torch.zeros(1, 4, 4, 3), {"waveform": torch.zeros(1, 2, 10), "sample_rate": 32000}
         with patch.object(self.chunk_module.collect, "collect_chunks", return_value=(frames, sound, ())), \
              patch.object(self.chunk_module, "audio_nodes"):

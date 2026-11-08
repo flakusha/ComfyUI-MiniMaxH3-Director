@@ -55,9 +55,39 @@ def bind_source(model, job, lock):
     return bound
 
 
-def restore_waveform(job, wave, sample_rate):
-    """Use source samples inside Lock spans; keep decoded model sound everywhere else."""
+def _mux_fallback(wave, fallback):
+    """Fill silent chunks from the fallback AUDIO dict; generated or locked sound is untouched.
+
+    Only chunks with no audio at all take the fallback (peak below -60 dBFS): a chunk that generated
+    silence on purpose keeps its silence only when nothing is wired — wiring *is* the opt-in."""
+    samples = fallback.get("waveform") if isinstance(fallback, dict) else None
+    if samples is None or not hasattr(samples, "shape") or samples.shape[-1] <= 0:
+        return wave
+    if float(wave.abs().max() or 0.0) > 0.001:
+        return wave
+    take = samples[0] if samples.ndim == 3 else samples
+    take = take.to(device=wave.device, dtype=wave.dtype)
+    if take.shape[0] != wave.shape[1]:
+        take = take.mean(dim=0, keepdim=True).expand(wave.shape[1], -1) if wave.shape[1] > 1 else take[:1]
+        if take.shape[0] != wave.shape[1]:
+            return wave
+    count = min(wave.shape[-1], take.shape[-1])
+    if count <= 0:
+        return wave
+    out = wave.clone()
+    out[..., :count] = take[..., :count]
+    return out
+
+
+def restore_waveform(job, wave, sample_rate, fallback=None):
+    """Use source samples inside Lock spans; keep decoded model sound everywhere else.
+
+    `fallback` (P3 opt-in mux) is an AUDIO dict the caller mixed in only where the wave is
+    still silent: sampled chunks that carry no audio at all (silent windows, muted VAE) keep the
+    fallback's samples there, never over generated or locked sound. None (default) is byte-identical."""
     refs = job.compiled.of_kind("lock")
+    if fallback is not None:
+        wave = _mux_fallback(wave, fallback)
     if not refs:
         return wave
     chunk = job.chunk

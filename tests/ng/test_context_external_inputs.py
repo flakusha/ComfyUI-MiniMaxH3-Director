@@ -107,7 +107,7 @@ class ExternalContextInputs(unittest.TestCase):
 
         with patch.object(self.module.probe, "duration_seconds", return_value=99.0) as probe_seconds, \
                 patch.object(self.module, "trimmed_audio", side_effect=fake_trimmed):
-            item, trimmed, max_duration = self.execute("NGContextAudio", audio="voice.wav [input]",
+            item, trimmed, max_duration, captions = self.execute("NGContextAudio", audio="voice.wav [input]",
                                                        trim_start=1.0, trim_end=2.5, audio_in=audio_in).args
             self.assertAlmostEqual(item.length_s, 3.0, "the payload's own length, not the file header's")
             probe_seconds.assert_not_called()
@@ -120,9 +120,10 @@ class ExternalContextInputs(unittest.TestCase):
     def test_unlinked_audio_still_probes_the_file(self):
         with patch.object(self.module.probe, "duration_seconds", return_value=5.0), \
                 patch.object(self.module, "trimmed_audio", return_value={"waveform": None, "sample_rate": 0}):
-            item, trimmed, max_duration = self.execute("NGContextAudio", audio_in=None).args
+            item, trimmed, max_duration, captions = self.execute("NGContextAudio", audio_in=None).args
             self.assertAlmostEqual(item.length_s, 5.0)
             self.assertAlmostEqual(max_duration, 5.0)
+            self.assertEqual(captions, "")
 
     def test_a_file_less_audio_link_passes_pre_flight_and_materializes_on_run(self):
         # A linked sound with nothing to mirror (decoded audio) materializes to input/h3-external/ at execute,
@@ -159,7 +160,7 @@ class ExternalContextInputs(unittest.TestCase):
             return {"waveform": None, "sample_rate": 0}
 
         with patch.object(self.module, "trimmed_audio", side_effect=fake_trimmed):
-            item, _, max_duration = node.execute(audio="", name="", description="", content="voice", usage="voice",
+            item, _, max_duration, captions = node.execute(audio="", name="", description="", content="voice", usage="voice",
                                                  preserve="high", speaker="", audio_in=payload).args
         source = captured["source"]
         self.assertTrue(source.startswith("h3-external/") and source.endswith(".flac"), source)

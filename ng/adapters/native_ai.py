@@ -34,6 +34,24 @@ def conditioning_file(name, model_type):
     return model_type == "minimax" or "minimax_h3" in name.lower()
 
 
+def caption_prompt(payload):
+    """LLM caption polish (P3): words in, LRC out; the model never writes times.
+
+    The caller hands over plain lyric words (Whisper's or the provider transcript's); the answer
+    is cleaned lines (punctuation, splitting, phrasing) that the card re-stamps with its existing
+    times. Text-capability-gated: no audio model needed, any text LLM qualifies."""
+    need_dict(payload, "AI request")
+    words = read_str(payload, "words", "request", "")
+    language = read_str(payload, "language", "request", "")
+    ask = ("Clean these lyric or caption lines for a video soundtrack: fix punctuation and line "
+           "splitting, one sung or spoken line per line, in the order given. Keep every word as heard "
+           "(no paraphrase, no translation, no added words); drop only filler interjections that carry no "
+           "meaning. Do not add headings, speaker names or commentary.")
+    if language.strip():
+        ask += " The lines are %s; keep that language." % language.strip()
+    return "%s\n\nLines:\n%s" % (ask, words.strip())
+
+
 def _write_facts(payload):
     # The native encoder takes one picture at most; a part is written from the cards' descriptions instead.
     facts = brief(need_dict(payload["director"], "director"), payload["contexts"], int(read_number(payload, "part", "request", minimum=0)),
@@ -52,6 +70,8 @@ def request_prompt(action, payload, config):
         return direction_prompt(idea, seconds, payload["contexts"], read_str(director, "shots", "director", ""), timing), None
     if action == "write":
         return write_prompt(_write_facts(payload)), None
+    if action == "caption":
+        return caption_prompt(payload), "text"
     if action == "storyboard":
         # Generate Text takes one picture at most: the cards' descriptions carry the characters instead.
         return texts_prompt(read_board(payload.get("board") or ""), payload["contexts"]), None
@@ -101,7 +121,7 @@ def native_request(provider, action, request_json):
     max_length = (direct_tokens(provider.config.max_tokens) if action == "direct"
                   else write_tokens(provider.config.max_tokens) if action == "write"
                   else plan_tokens(provider.config.max_tokens) if action == "build"
-                  else texts_tokens(provider.config.max_tokens) if action == "storyboard" else provider.config.max_tokens)
+                  else texts_tokens(provider.config.max_tokens) if action in ("storyboard", "caption") else provider.config.max_tokens)
     inputs = dict(clip=clip, prompt=prompt, max_length=max_length,
                   sampling_mode="off", thinking=False, use_default_template=True,
                   # The role comes from system_prompts.py and the schema framing from there too, so
@@ -110,7 +130,7 @@ def native_request(provider, action, request_json):
                   # "write" is the exception and carries no schema framing: its answer is the prose of a
                   # render part's prompt, labelled fields rather than JSON.
                   system_prompt=(WRITE_SYSTEM if action == "write" else BUILD_SYSTEM if action == "build"
-                                 else STORYBOARD_SYSTEM if action == "storyboard"
+                                 else STORYBOARD_SYSTEM if action in ("storyboard", "caption")
                                  # The card's medium, not `media` (which only says what is sent along and is None for a
                                  # text note): with None a Text card got the generic role and Qwen3-VL 4B lost the JSON.
                                  else framed(for_node("director" if action == "direct" else "context", payload.get("media")))))
@@ -140,6 +160,10 @@ def parse_result(text, action, request_json):
         return parse_plan(text, float(payload["director"]["project_seconds"]), payload["contexts"], read_quick(payload), sung)
     # Generic Qwen CLIP tokenizers can decode the assistant role header with the answer.
     text = text.removeprefix("assistant\n").strip()
+    if action == "caption":
+        # Words in, LRC out: plain cleaned lines the card re-stamps with its existing times.
+        from ..adapters.analysis import transcript_lines
+        return {"lines": transcript_lines(text)}
     if action == "analyze":
         # The medium decides which content roles the answer may name: a picture cannot be dialogue.
         return parse_suggestion(text, payload.get("media", "text")).to_dict()

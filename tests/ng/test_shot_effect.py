@@ -10,12 +10,13 @@ ctx, project, chunks, document = (module("ng.core.context"), module("ng.core.pro
 HERO = ctx.ContextItem("hero", "Hero", "image", "hero.png", usage=("reference",), content=("character",), description="A runner.")
 
 
-def plan(mode, effect="minimaxh3_bullet_time", seconds=20):
+def plan(mode, effect="minimaxh3_bullet_time", seconds=20, override=""):
     shots = [{"id": "a", "start": 0, "end": seconds, "text": "@Hero jumps over the wall. She lands softly.", "effect": effect,
               "spoken": [{"schema_version": 1, "text": "Now.", "speaker_id": "hero", "language": "English", "delivery": "says"}],
               "media": [{"schema_version": 1, "context_id": "hero", "role": "context"}]}]
     context = ctx.DirectorContext(shots_text=json.dumps({"format": "h3-director-shots", "schema_version": 1, "shots": shots}),
-                                  items=(HERO,), project_seconds=seconds, width=1280, height=704, mode=mode, music="N/A", soundscape="Wind.")
+                                  items=(HERO,), project_seconds=seconds, width=1280, height=704, mode=mode, music="N/A", soundscape="Wind.",
+                                  prompt_override=override)
     return project.plan_project(context, 10, chunks.ContinuityPlan("video_audio"))
 
 
@@ -31,6 +32,18 @@ class Effect(unittest.TestCase):
         self.assertEqual(document.effect_name("embedding:minimaxh3_kiss_camera.safetensors"), "minimaxh3_kiss_camera")
         self.assertEqual(document.effect_name("bad name; rm"), "")
         self.assertNotIn("embedding:", plan("ref2va", effect="a b").compiled[0].prompt)
+
+    def test_a_manual_prompt_keeps_the_official_effect(self):
+        # compile_chunk pins this at part level: a rewrite that lost the shot's chosen effect gets it back,
+        # and one that already names it is not given it twice (ng.core.compile, keep_effects after _own_prompt).
+        for mode in ("ref2va", "fl2va"):
+            rewritten = "detailed_description: [Shot 1] A rewritten jump across the wall.\n\noverall_soundscape: Wind."
+            first, second = (c.prompt for c in plan(mode, override=rewritten).compiled)
+            self.assertIn("embedding:minimaxh3_bullet_time", first, mode)
+            self.assertNotIn("embedding:", second, mode)   # that part's compiled prompt names no effect
+            named = "detailed_description: [Shot 1] She jumps, embedding:minimaxh3_bullet_time.\n\noverall_soundscape: Wind."
+            first, _ = (c.prompt for c in plan(mode, override=named).compiled)
+            self.assertEqual(first.count("embedding:minimaxh3_bullet_time"), 1, mode)
 
     def test_an_own_prompt_that_lost_the_effect_gets_it_back(self):
         share = module("ng.core.shot_share")

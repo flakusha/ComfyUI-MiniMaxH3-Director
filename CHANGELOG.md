@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Manual prompts keep the official `minimaxh3_*` effect embeddings.** A hand-written or AI-rewritten part prompt that
+  lost the shot's chosen effect gets it re-appended from the compiled prompt; one that already names it is not duplicated
+  (compile_chunk applies `keep_effects` after the share substitution, once per part).
+
 - **Audio ✦ Analyze and ✦ Transcribe reach the configured Audio model, and a refused sound names the cause** (user report, 2026-11-07).
   The panel sent `schema_version: 2` after the per-purpose overrides commit, so the backend migration dropped the Audio
   model override and addressed the audio bytes to the Model above - a text/vision model that answers 500 "audio input

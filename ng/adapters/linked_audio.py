@@ -5,6 +5,7 @@ mirror into the card's media widget, so the linked execute path materializes the
 input/h3-external/ where the whole file-path pipeline (probe, decode, Whisper, collect) reads them."""
 import hashlib
 import os
+import tempfile
 
 import av
 import folder_paths
@@ -12,10 +13,19 @@ import folder_paths
 FOLDER = "h3-external"
 
 
+def _temporary_path(path):
+    """A unique sibling path to write first, then os.replace onto the content-hashed one: a crash mid-write
+    never leaves a half file at the cache entry, and a concurrent run of the same payload does not race."""
+    handle, tmp = tempfile.mkstemp(prefix=".partial_", suffix=os.path.splitext(path)[1], dir=os.path.dirname(path))
+    os.close(handle)
+    os.remove(tmp)   # keep only the unique name; the writer creates the file itself
+    return tmp
+
+
 def materialize(audio_in):
     """Write a connected AUDIO payload to input/h3-external/<sha>.flac; returns the card-relative name.
     The name derives from the bytes, the rate and the channel count, so the same sound reuses its file and a
-d    different one never collides. FLAC is lossless and the native loader reads it back."""
+    different one never collides. FLAC is lossless and the native loader reads it back."""
     wave, rate = read_waveform(audio_in)
     data = wave.float().contiguous().cpu().numpy()
     digest = hashlib.sha1(data.tobytes() + b"%d%d" % (int(rate), data.shape[-2])).hexdigest()[:16]
@@ -28,15 +38,21 @@ d    different one never collides. FLAC is lossless and the native loader reads 
             raise ValueError("The connected audio has %d channels; only mono and stereo can be materialized - "
                              "reconnect its source, or pick a file on the card." % data.shape[-2])
         layout = "mono" if data.shape[-2] == 1 else "stereo"
-        container = av.open(path, mode="w", format="flac")
+        tmp = _temporary_path(path)
         try:
-            stream = container.add_stream("flac", rate=int(rate), layout=layout)
-            frame = av.AudioFrame.from_ndarray(data, format="fltp", layout=layout)
-            frame.sample_rate, frame.pts = int(rate), 0
-            container.mux(stream.encode(frame))
-            container.mux(stream.encode(None))
+            container = av.open(tmp, mode="w", format="flac")
+            try:
+                stream = container.add_stream("flac", rate=int(rate), layout=layout)
+                frame = av.AudioFrame.from_ndarray(data, format="fltp", layout=layout)
+                frame.sample_rate, frame.pts = int(rate), 0
+                container.mux(stream.encode(frame))
+                container.mux(stream.encode(None))
+            finally:
+                container.close()
+            os.replace(tmp, path)
         finally:
-            container.close()
+            if os.path.isfile(tmp):
+                os.remove(tmp)
     return name
 
 
@@ -54,7 +70,13 @@ def materialize_image(image_in):
     path = os.path.join(folder, digest + ".png")
     if not os.path.isfile(path):
         from PIL import Image
-        Image.fromarray((data * 255.0).clip(0, 255).astype("uint8"), mode="RGB").save(path)
+        tmp = _temporary_path(path)
+        try:
+            Image.fromarray((data * 255.0).clip(0, 255).astype("uint8"), mode="RGB").save(tmp)
+            os.replace(tmp, path)
+        finally:
+            if os.path.isfile(tmp):
+                os.remove(tmp)
     return name
 
 
@@ -139,10 +161,16 @@ def _encode_video(video_in):
     os.makedirs(folder, exist_ok=True)
     path = os.path.join(folder, digest + ".mp4")
     if not os.path.isfile(path):
+        tmp = _temporary_path(path)
         try:
-            save(path)
-        except (OSError, ValueError, AttributeError) as error:
-            raise ValueError("The connected video could not be written (%s) - reconnect its source, or pick a file on the card." % error) from None
+            try:
+                save(tmp)
+            except (OSError, ValueError, AttributeError) as error:
+                raise ValueError("The connected video could not be written (%s) - reconnect its source, or pick a file on the card." % error) from None
+            os.replace(tmp, path)
+        finally:
+            if os.path.isfile(tmp):
+                os.remove(tmp)
     return name
 
 

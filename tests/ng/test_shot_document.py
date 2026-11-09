@@ -4,6 +4,7 @@ import unittest
 from _pack import module
 
 shots = module("ng.core.shots")
+sdoc = module("ng.core.shot_document")
 context = module("ng.core.context")
 chunks = module("ng.core.chunks")
 project = module("ng.core.project")
@@ -140,6 +141,38 @@ class Bindings(unittest.TestCase):
         result = plan(document(one), (image("a"), image("b")), seconds=8)
         self.assertIn("anchor_multiple", {i.code for i in result.issues})
         self.assertEqual([(r.kind, r.ctx_id) for r in result.compiled[0].refs], [("first_frame", "a")])
+
+
+class RenderCuts(unittest.TestCase):
+    """The document's manual render cuts: reader tolerance and planner split/refusal."""
+
+    @staticmethod
+    def doc(cuts, shots=()):
+        return json.dumps({"format": "h3-director-shots", "schema_version": 1, "shots": list(shots), "render_cuts": cuts})
+
+    def test_the_reader_drops_bad_entries(self):
+        text = self.doc([15.0, "x", None, float("nan"), float("inf"), 15.0, 12.0, -1, 0, 20.0])
+        self.assertEqual(sdoc.read_render_cuts(text, 20), (15.0,))       # finite, increasing, inside the project
+        self.assertEqual(sdoc.read_render_cuts(self.doc([3.0, 9.0])), (3.0, 9.0))
+        self.assertEqual(sdoc.read_render_cuts(self.doc([])), ())
+        self.assertEqual(sdoc.read_render_cuts("0-10: a"), ())           # legacy timed text has no cuts
+
+    def test_the_plan_splits_on_an_on_grid_cut(self):
+        text = self.doc([8.0], [record("s1", 0, 20)])                  # 8 s = frame 192, already a legal boundary
+        result = plan(text, seconds=20)
+        starts = [c.story_start_f for c in result.plan.chunks]
+        self.assertIn(192, starts)
+        self.assertNotIn("cut_moved", [i.code for i in result.issues])
+
+    def test_an_off_grid_cut_snaps_and_reports(self):
+        result = plan(self.doc([7.9], [record("s1", 0, 20)]), seconds=20)      # 7.9 s -> frame 192 snapped
+        self.assertIn(192, [c.story_start_f for c in result.plan.chunks])
+        self.assertIn("cut_moved", [i.code for i in result.issues])
+
+    def test_a_cut_past_the_end_is_reported_and_ignored(self):
+        result = plan(self.doc([25.0], [record("s1", 0, 20)]), seconds=20)
+        self.assertEqual([c.story_start_f for c in result.plan.chunks], [0, 243])       # the plain split only
+        self.assertIn("cut_beyond_end", [i.code for i in result.issues])
 
 
 class Dialogue(unittest.TestCase):

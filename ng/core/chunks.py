@@ -236,22 +236,23 @@ def _late_changes(shots, chunks):
     return issues
 
 
-def plan_chunks(project_frames, chunk_target_frames, continuity, shots=(), cuts=(), joins=(), max_frames=limits.SAMPLED_MAX_FRAMES):
+def plan_chunks(project_frames, chunk_target_frames, continuity, shots=(), cuts=(), joins=(), max_frames=limits.SAMPLED_MAX_FRAMES, manual_joins=()):
     """Split `project_frames` into chunks. Returns a SequencePlan; corrections are in plan.issues.
 
     `cuts` are story frames where a chunk starts without a pinned head, like the first one: a shot that opens on a First
     frame picture of its own. `joins` are story frames where a chunk must start but keeps its pin: the chunk before ends
-    on a Keyframe picture. Each edge must leave whole grid lengths before it (see project._part_edges). `max_frames` is
-    the longest sampled clip for the canvas (limits.max_frames)."""
+    on a Keyframe picture. `manual_joins` are the document's render_cuts: user-placed boundaries that keep the pin and
+    the join crossfade. Each edge must leave whole grid lengths before it (see project._part_edges and
+    project._manual_joins, which validate them). `max_frames` is the longest sampled clip for the canvas (limits.max_frames)."""
     if project_frames < 1:
         raise ValueError("the project needs at least one frame")
     head = continuity.head
     openings = cuts if isinstance(cuts, dict) else {frame: ChunkOpening() for frame in cuts}
     external = any(opening.context_id for opening in openings.values())
-    edges = sorted({0, *cuts, *joins, project_frames})
+    edges = sorted({0, *cuts, *joins, *manual_joins, project_frames})
     lengths, heads, sources = [], [], []
     for start, end in zip(edges, edges[1:]):
-        opening = openings.get(start, ChunkOpening(head if start in joins else 0))
+        opening = openings.get(start, ChunkOpening(head if start in joins or start in manual_joins else 0))
         first_head = opening.head_frames
         minimum = limits.GRID_OFFSET if external else limits.SAMPLED_MIN_FRAMES
         part = plan_lengths(end - start, max(chunk_target_frames, 1), head, first_head, minimum, max_frames)

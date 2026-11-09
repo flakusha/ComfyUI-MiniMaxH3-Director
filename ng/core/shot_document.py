@@ -4,6 +4,7 @@ IDs identify story units, never their current array index or chunk position. Dra
 and locks are editing metadata; only active text, media and spoken lines compile.
 """
 import json
+import math
 import re
 from dataclasses import dataclass
 
@@ -129,17 +130,51 @@ def read_look(text):
 PROMPT_SOURCES = ("ai", "user")
 
 
+def read_render_cuts(text, project_seconds=None):
+    """The document's manual render cuts in seconds (story time), earliest first; unusable entries are dropped.
+
+    A cut must be a finite number, strictly increasing, and 0 < cut < project_seconds (when the project length is
+    known). Bad entries are dropped, not raised: cuts are a preference and documents in the wild may carry junk, the
+    tolerance pattern of part_prompts."""
+    data = _load(text)
+    out = []
+    for value in fields.read_list(data or {}, "render_cuts", "shots"):
+        try:
+            cut = float(value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(cut) or cut <= 0 or (project_seconds is not None and cut >= project_seconds):
+            continue
+        if out and cut <= out[-1]:
+            continue
+        out.append(cut)
+    return tuple(out)
+
+
 def read_part_prompts(text):
-    """{render part index: (key of the compiled prompt it was written from, text, "ai" | "user")}."""
+    """{part's first story frame: (key of the compiled prompt it was written from, text, "ai" | "user")}.
+
+    NOTE: the key moved from part index to the part's starting story frame (render cuts, 2026-11-09) so inserting a
+    render cut does not orphan a part's prompt. Documents still carrying the old index-keyed entries load: they are
+    skipped here and compile.py flags them outdated instead of applying a prompt to the wrong part."""
     data = _load(text)
     out = {}
     for index, entry in enumerate(fields.read_list(data or {}, "part_prompts", "shots")):
         path = "shots.part_prompts[%d]" % index
         fields.need_dict(entry, path)
-        part = int(fields.read_number(entry, "index", path, minimum=0))
+        if "story_start_f" not in entry:
+            continue          # old index-keyed shape; has_legacy_part_prompts reports it
+        part = int(fields.read_number(entry, "story_start_f", path, minimum=0))
         out[part] = (fields.read_str(entry, "key", path), fields.read_str(entry, "text", path),
                      fields.read_choice(entry, "by", path, PROMPT_SOURCES, "user"))
     return out
+
+
+def has_legacy_part_prompts(text):
+    """Whether the document still carries part prompts keyed by part index (the pre-story-frame shape)."""
+    data = _load(text)
+    return any(isinstance(entry, dict) and "index" in entry and "story_start_f" not in entry
+               for entry in fields.read_list(data or {}, "part_prompts", "shots"))
 
 
 def read_shot_prompts(text):

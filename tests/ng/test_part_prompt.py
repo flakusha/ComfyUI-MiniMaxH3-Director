@@ -114,13 +114,22 @@ class OwnPrompt(unittest.TestCase):
     def test_an_own_prompt_written_from_this_plan_goes_to_the_sampler(self):
         compiled = plan(doc()).compiled[0]
         self.assertEqual((compiled.source, len(compiled.key)), ("compiled", 12))
-        mine = plan(doc([{"index": 0, "key": compiled.key, "text": "integrated_multimodal_description: [Shot 1] Mine.", "by": "user"}])).compiled[0]
+        start = plan(doc()).plan.chunks[0].story_start_f
+        mine = plan(doc([{"story_start_f": start, "key": compiled.key, "text": "integrated_multimodal_description: [Shot 1] Mine.", "by": "user"}])).compiled[0]
         self.assertEqual((mine.prompt, mine.source, mine.key), ("integrated_multimodal_description: [Shot 1] Mine.", "user", compiled.key))
 
     def test_after_a_plan_change_the_compiled_prompt_is_used_and_said(self):
-        result = plan(doc([{"index": 0, "key": "000000000000", "text": "old", "by": "ai"}]))
+        start = plan(doc()).plan.chunks[0].story_start_f
+        result = plan(doc([{"story_start_f": start, "key": "000000000000", "text": "old", "by": "ai"}]))
         self.assertEqual(result.compiled[0].source, "compiled")
         self.assertNotEqual(result.compiled[0].prompt, "old")
+        self.assertIn("part_prompt_outdated", {issue.code for issue in result.issues})
+
+    def test_a_legacy_index_keyed_entry_loads_as_outdated(self):
+        # documents in the wild still carry the pre-render-cuts part_prompts shape; it must not crash and must not be applied
+        result = plan(doc([{"index": 0, "key": "000000000000", "text": "old", "by": "ai"}]))
+        self.assertEqual(result.compiled[0].source, "compiled")
+        self.assertNotIn("old", result.compiled[0].prompt)
         self.assertIn("part_prompt_outdated", {issue.code for issue in result.issues})
 
     def test_an_answer_that_keeps_the_compiled_prompt_is_marked(self):
@@ -132,7 +141,7 @@ class OwnPrompt(unittest.TestCase):
 
     def test_the_writer_always_starts_from_the_compiled_prompt(self):
         compiled = plan(doc()).compiled[0]
-        director = {"idea": "An elf sings.", "shots": doc([{"index": 0, "key": compiled.key, "text": "mine", "by": "user"}]),
+        director = {"idea": "An elf sings.", "shots": doc([{"story_start_f": 0, "key": compiled.key, "text": "mine", "by": "user"}]),
                     "project_seconds": 8, "mode": "fl2va", "continuity": "none"}
         facts = writer.brief(director, [], 0)
         self.assertEqual((facts["compiled"], facts["key"], facts["story"]), (compiled.prompt, compiled.key, "An elf sings."))

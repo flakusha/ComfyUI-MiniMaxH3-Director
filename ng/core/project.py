@@ -17,6 +17,7 @@ from .legacy_bridge import decide_mode
 from .shots import auto_shots, parse_shots
 from .subjects import resolve_subjects
 from .shot_document import has_shots, read_document
+from .cuts import _edge, _shortest, manual_joins
 from .audio_timing import clip_issues, covers, lock_copy_shortfall, locked_spans, max_duration_shortfall
 from . import control_timing, continuation, places
 
@@ -168,19 +169,6 @@ def _keyframes(context, shot):
     return sorted(out, key=lambda b: b.at_s)
 
 
-def _shortest(head):
-    """The shortest part that can follow an edge, with this pin."""
-    low, high = frames.delivered_bounds(head)
-    return min(frames.delivered_candidates(low, head, low, high))
-
-
-def _edge(previous, previous_head, wanted):
-    """The grid frame nearest to `wanted` at which a part that started at `previous` (with that pin) can end."""
-    residue, step = frames.delivered_residue(previous_head), limits.GRID_STEP
-    low = previous + residue + (wanted - previous - residue) // step * step
-    return min((low, low + step), key=lambda f: (abs(f - wanted), f))
-
-
 def _place_edge(shot, start, previous, previous_head, until):
     """The cut at which a shot in the place of an earlier one opens its own part, or None; with the issue to report."""
     join = _edge(previous, previous_head, start)
@@ -303,7 +291,7 @@ def plan_project(context: DirectorContext, chunk_seconds, continuity: Continuity
     context, issues = _prepare(context)
     issues = canvas_issues + issues
     total = frames.seconds_to_frames(context.project_seconds)
-    cuts = joins = ()
+    cuts, joins = {}, []
     if has_shots(context.shots_text):
         shots, shot_issues = parse_shots(context.shots_text, total)
         chosen, place_issues = places.links(context.shots_text, shots)
@@ -328,10 +316,12 @@ def plan_project(context: DirectorContext, chunk_seconds, continuity: Continuity
         planned_places = ()
         shots, shot_issues = auto_shots(context.idea, total), ()
         initial = continuation.initial_opening(context, shots)
-        cuts = {0: initial} if initial else ()
+        cuts = {0: initial} if initial else {}
     chunk_frames = frames.seconds_to_frames(chunk_seconds or limits.DEFAULT_CHUNK_SECONDS)
     longest = limits.max_frames(context.width, context.height)
-    plan = plan_chunks(total, chunk_frames, continuity, shots, cuts, joins, longest)
+    manual, cut_issues = manual_joins(context.shots_text, total, continuity.head, cuts, joins)
+    issues = issues + cut_issues
+    plan = plan_chunks(total, chunk_frames, continuity, shots, cuts, joins, longest, manual_joins=manual)
     if chunk_frames > longest - continuity.head and longest < limits.LONG_PART_FRAMES:      # shortened by the size, not by 30 s
         issues = list(issues) + [Issue("part_capped", "Render parts are at most %.1f s at %dx%d; a smaller size allows longer ones "
                                        "(up to 30 s at 640x352)." % (frames.frames_to_seconds(longest - continuity.head), context.width,

@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from _pack import module
@@ -7,6 +8,8 @@ frames = module("ng.core.frames")
 limits = module("ng.core.limits")
 shots = module("ng.core.shots")
 issues = module("ng.core.issues")
+project = module("ng.core.project")
+cuts = module("ng.core.cuts")
 
 VIDEO = chunks.ContinuityPlan("video_audio", 22, 24)
 NONE = chunks.ContinuityPlan("none")
@@ -126,6 +129,45 @@ class ShotMapping(unittest.TestCase):
     def test_no_shots_gives_empty_lists(self):
         plan = chunks.plan_chunks(480, 240, VIDEO, ())
         self.assertTrue(all(c.shots == () for c in plan.chunks))
+
+
+class ManualJoins(unittest.TestCase):
+    """The document's render_cuts (project._manual_joins): forced pinned joins that snap to the grid."""
+
+    @staticmethod
+    def doc(cuts):
+        return json.dumps({"format": "h3-director-shots", "schema_version": 1, "render_cuts": cuts})
+
+    def test_a_cut_splits_at_the_snapped_frame_and_keeps_the_pin(self):
+        joins, cut_issues = cuts.manual_joins(self.doc([15.0]), 720, 22, {}, [])
+        self.assertEqual(joins, (362,))                 # 15 s: the nearest grid frame a part can end on
+        self.assertEqual([i.code for i in cut_issues], ["cut_moved"])
+        plan = chunks.plan_chunks(720, 240, VIDEO, manual_joins=joins)
+        starts = [c.story_start_f for c in plan.chunks]
+        self.assertIn(362, starts)
+        self.assertEqual(plan.chunks[starts.index(362)].head_frames, 22)
+
+    def test_a_cut_changes_the_total_at_most_by_one_grid_step(self):
+        plan = chunks.plan_chunks(720, 240, VIDEO, manual_joins=(362,))
+        self.assertLessEqual(abs(plan.total_frames - 720), 17)      # only grid snapping, like any derived edge
+        for chunk in plan.chunks:
+            self.assertTrue(frames.on_grid(chunk.sampled_frames), chunk)
+
+    def test_an_infeasible_cut_is_reported_and_never_splits(self):
+        joins, cut_issues = cuts.manual_joins(self.doc([2.0]), 720, 22, {}, [])
+        self.assertEqual(joins, ())
+        self.assertEqual([i.code for i in cut_issues], ["cut_dropped"])
+
+    def test_a_cut_past_the_end_is_dropped(self):
+        joins, cut_issues = cuts.manual_joins(self.doc([40.0]), 720, 22, {}, [])
+        self.assertEqual(joins, ())
+        self.assertEqual([i.code for i in cut_issues], ["cut_beyond_end"])
+
+    def test_a_cut_inside_an_external_prefix_is_refused(self):
+        cuts0 = {0: chunks.ChunkOpening(39, "ctx_src")}
+        joins, cut_issues = cuts.manual_joins(self.doc([1.0]), 720, 22, cuts0, [])
+        self.assertEqual(joins, ())
+        self.assertEqual([i.code for i in cut_issues], ["cut_too_close"])
 
 
 class Persistence(unittest.TestCase):

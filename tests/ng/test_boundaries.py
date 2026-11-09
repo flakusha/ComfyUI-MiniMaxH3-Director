@@ -70,6 +70,14 @@ class Align(unittest.TestCase):
         none = chunks.plan_chunks(720, 240, chunks.ContinuityPlan("none"), story)
         self.assertEqual(none.chunks[0].delivered_frames, 243)
 
+    def test_align_never_moves_a_manual_edge(self):
+        # render cuts are the user's edit: a shot starting right after one is warned about (late_change), never fixed
+        # by moving the cut - align runs per edge span, so the manual boundary is not even a candidate
+        story = parse("0-15.5: a\n15.5-30: b", 30)             # shot b starts 10 frames after the manual cut at 362
+        plan = chunks.plan_chunks(720, 240, VIDEO, story, manual_joins=(362,))
+        self.assertIn(362, [c.story_start_f for c in plan.chunks])
+        self.assertIn("late_change", [i.code for i in plan.issues])
+
 
 if __name__ == "__main__":
     unittest.main()

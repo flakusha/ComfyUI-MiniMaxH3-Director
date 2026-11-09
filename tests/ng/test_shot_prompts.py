@@ -66,28 +66,43 @@ class ShotPrompts(unittest.TestCase):
         outdated = {(i.code, i.ref) for i in owned.issues if i.code == "part_prompt_outdated"}
         self.assertIn(("part_prompt_outdated", "Shot 1"), outdated)
 
-    def test_legacy_fallback_needs_this_index_and_this_whole_key(self):
+    def test_the_whole_part_prompt_needs_this_story_frame_and_this_whole_key(self):
         base = plan(document(SHOTS))
         key = base.compiled[0].key
+        start = base.plan.chunks[0].story_start_f
         legacy = json.loads(document(SHOTS))
-        legacy["part_prompts"] = [{"index": 0, "key": key, "text": "LEGACY OWN.", "by": "user"}]
+        legacy["part_prompts"] = [{"story_start_f": start, "key": key, "text": "OWN PROMPT.", "by": "user"}]
         owned = plan(json.dumps(legacy))
         self.assertEqual(owned.compiled[0].source, "user")
-        self.assertEqual(owned.compiled[0].prompt, "LEGACY OWN.")
+        self.assertEqual(owned.compiled[0].prompt, "OWN PROMPT.")
         self.assertEqual(owned.compiled[0].key, key)
         stale = dict(legacy)
-        stale["part_prompts"] = [{"index": 0, "key": "000000000000", "text": "OLD.", "by": "ai"}]
+        stale["part_prompts"] = [{"story_start_f": start, "key": "000000000000", "text": "OLD.", "by": "ai"}]
         refused = plan(json.dumps(stale))
         self.assertEqual(refused.compiled[0].source, "compiled")
         self.assertIn("part_prompt_outdated", {i.code for i in refused.issues})
 
-    def test_legacy_fallback_only_covers_its_own_index(self):
+    def test_a_part_prompt_only_covers_its_own_story_frame(self):
         base = plan(document(SHOTS))
+        other = base.plan.chunks[1].story_start_f
         legacy = json.loads(document(SHOTS))
-        legacy["part_prompts"] = [{"index": 1, "key": base.compiled[1].key, "text": "OTHER PART.", "by": "user"}]
+        legacy["part_prompts"] = [{"story_start_f": other, "key": base.compiled[1].key, "text": "OTHER PART.", "by": "user"}]
         owned = plan(json.dumps(legacy))
         self.assertEqual(owned.compiled[0].source, "compiled")
         self.assertNotIn("OTHER PART.", owned.compiled[0].prompt)
+
+    def test_old_index_keyed_part_prompts_load_but_flag_outdated(self):
+        # documents in the wild carry the pre-render-cuts shape; they must not crash and must not be applied blind
+        base = plan(document(SHOTS))
+        old = json.loads(document(SHOTS))
+        old["part_prompts"] = [{"index": 0, "key": base.compiled[0].key, "text": "OLD SHAPE.", "by": "user"}]
+        text = json.dumps(old)
+        self.assertTrue(doc.has_legacy_part_prompts(text))
+        self.assertEqual(doc.read_part_prompts(text), {})
+        owned = plan(text)
+        self.assertEqual(owned.compiled[0].source, "compiled")
+        self.assertNotIn("OLD SHAPE.", owned.compiled[0].prompt)
+        self.assertIn("part_prompt_outdated", {i.code for i in owned.issues})
 
     def test_orphan_shot_ids_prune_on_the_write_path_only(self):
         text = document([record("s1")], [{"shot_id": "gone", "text": "X.", "by": "user", "basis": "k", "chunk": 0}])

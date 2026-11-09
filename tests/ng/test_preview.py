@@ -80,6 +80,16 @@ class Preview(unittest.TestCase):
             with self.subTest(payload=payload):
                 self.assertFalse(preview.plan_preview(payload)["ok"])
 
+    def test_render_cuts_are_echoed_snapped_and_reported(self):
+        text = json.dumps({"format": "h3-director-shots", "schema_version": 1,
+                           "shots": [{"id": "s1", "start": 0, "end": 30, "text": "A dog runs through the yard.", "media": []}],
+                           "render_cuts": [8.0, 40.0]})
+        out = preview.plan_preview({"director": {"shots": text, "project_seconds": 30}})
+        self.assertTrue(out["ok"], out)
+        self.assertIn(192, [c["story_start_f"] for c in out["chunks"]])      # 8 s is on-grid (first part unpinned): exact
+        self.assertIn("cut_beyond_end", {i["code"] for i in out["issues"]})
+        json.dumps(out)
+
 
 if __name__ == "__main__":
     unittest.main()

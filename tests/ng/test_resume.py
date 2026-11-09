@@ -63,6 +63,22 @@ class Keys(unittest.TestCase):
         self.assertEqual(ka, keys(plan(["One.", "Two.", "Three."])), "the same plan gives the same keys")
         self.assertNotEqual(ka[0], resume.part_key(plan(["One.", "Two.", "Three."])[0], {**SETTINGS, "seed": 8}))
 
+    def test_moving_a_cut_changes_keys_only_at_or_after_the_boundary(self):
+        base = {"format": "h3-director-shots", "schema_version": 1,
+                "shots": [{"id": "s1", "start": 0, "end": 30, "text": "One.", "media": []}]}
+
+        def keys(cuts):
+            base["render_cuts"] = cuts
+            result = project.plan_project(ctx.DirectorContext(shots_text=json.dumps(base), project_seconds=30), 10,
+                                          chunks.ContinuityPlan("video_audio"))
+            return [resume.part_key(j, SETTINGS) for j in project.jobs(result)]
+
+        before = keys([6.0, 11.0])
+        after = keys([6.0, 12.0])               # the second cut snaps to a different grid frame
+        self.assertEqual(len(before), len(after))
+        self.assertEqual(before[0], after[0])   # every part up to the first boundary keeps its key and resumes
+        self.assertTrue(all(a != b for a, b in zip(before[1:], after[1:])), (before, after))
+
 
 @unittest.skipUnless(HAVE_COMFY, "ComfyUI is not importable")
 class Disk(unittest.TestCase):

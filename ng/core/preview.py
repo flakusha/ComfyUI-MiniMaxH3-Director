@@ -54,7 +54,7 @@ def _chunk_view(chunk, compiled, context, picture=False):
     return {"index": chunk.index, "picture": picture, "start_s": round(frames.frames_to_seconds(chunk.story_start_f), 3),
             "end_s": round(frames.frames_to_seconds(chunk.story_end_f), 3), "delivered_frames": chunk.delivered_frames,
             "story_start_f": chunk.story_start_f, "story_end_f": chunk.story_end_f,
-            "sampled_frames": chunk.sampled_frames, "head_frames": chunk.head_frames, "mode": compiled.mode, "prompt": compiled.prompt,
+            "sampled_frames": chunk.sampled_frames, "head_frames": chunk.head_frames, "external": bool(chunk.continuation_id), "mode": compiled.mode, "prompt": compiled.prompt,
             "prompt_key": compiled.key, "prompt_source": compiled.source,
             "refs": [{"kind": r.kind, "ctx_id": r.ctx_id, "name": _name(context, r)} for r in compiled.refs],
             "prompt_labels": dict(compiled.prompt_labels), "shots": [s.to_dict() for s in chunk.shots], "sources": list(compiled.sources),
@@ -80,7 +80,7 @@ def plan_preview(payload, probe=None, image_size=None):
     except (SchemaError, KeyError, ValueError, TypeError, AttributeError, OverflowError) as error:
         return {"ok": False, "error": str(error)}
     return {"ok": True, "width": project.context.width, "height": project.context.height, "total_s": round(frames.frames_to_seconds(project.plan.total_frames), 3), "total_frames": project.plan.total_frames,
-            "fps": FPS, "requested_frames": project.plan.requested_frames,
+            "fps": FPS, "requested_frames": project.plan.requested_frames, "pin_frames": continuity.head,
             "mode": project.compiled[0].mode if project.compiled else context.mode, "output": project.output, "chunks": [_chunk_view(c, k, project.context, project.output == "images")
                                                                        for c, k in zip(project.plan.chunks, project.compiled)],
             "director_context": project.context.to_dict(),

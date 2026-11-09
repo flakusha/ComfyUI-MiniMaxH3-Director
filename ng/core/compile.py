@@ -19,7 +19,7 @@ from .media_ref import MediaRef
 from .guide_timing import plan_guides
 from .fl2va_refs import add_references
 from .part_prompt import prompt_key
-from .shot_document import read_part_prompts, read_shot_prompts
+from .shot_document import has_legacy_part_prompts, read_part_prompts, read_shot_prompts
 from .prompt_sources import prompt_sources
 
 
@@ -195,10 +195,17 @@ def _own_prompt(context, chunk, compiled):
     if fitted:
         by = {text_by for _, (_, text_by) in fitted.items()}
         return fitted, "mixed" if len(by) > 1 or len(fitted) < len(chunk.shots) else next(iter(by)), issues, None
-    legacy = read_part_prompts(context.shots_text).get(chunk.index)
-    if legacy is None:
-        return {}, "compiled", issues, None
-    key, text, by = legacy
+    # NOTE: part_prompts moved from part-index keys to the part's starting story frame (render cuts, 2026-11-09), so
+    # inserting a boundary no longer orphans a prompt. Old index-keyed documents still load: their entries cannot be
+    # matched to a part, so they are flagged outdated instead of applied to the wrong one.
+    own = read_part_prompts(context.shots_text).get(chunk.story_start_f)
+    if own is None:
+        if not has_legacy_part_prompts(context.shots_text):
+            return {}, "compiled", issues, None
+        return {}, "compiled", issues + (Issue("part_prompt_outdated", "This part prompt was written with the old "
+                                        "part-index key, which no plan can match any more; rewrite it in Prompts per "
+                                        "render part.", "Render part %d" % (chunk.index + 1)),), None
+    key, text, by = own
     if key == prompt_key(compiled) and text.strip():
         return {}, by, issues, text.strip()
     return {}, "compiled", issues + (Issue("part_prompt_outdated", "The plan changed after this part's own prompt was written, so the "

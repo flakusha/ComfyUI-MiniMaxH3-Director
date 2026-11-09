@@ -104,7 +104,10 @@ def _with_source(compiled, source_id, override):
 
 
 def plan_stills(context, image_size=None) -> ProjectPlan:
-    """One still per shot (or one from the idea when there are no shots)."""
+    """One still per shot (or one from the idea when there are no shots).
+
+    NOTE: the Pictures output ignores the document's render_cuts on purpose - one still per shot already fixes every
+    part edge, so a manual cut has nothing to cut."""
     context, canvas_issues = auto_canvas(context, image_size)
     shots_text, by_shot = shot_sources(context)
     context, sources, still_issues = still_context(replace(context, shots_text=shots_text))

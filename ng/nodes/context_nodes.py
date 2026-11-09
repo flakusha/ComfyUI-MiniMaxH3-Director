@@ -125,21 +125,6 @@ def _notify_materialized(node_cls, name):
     notify_materialized(node_cls, name)
 
 
-def _linked_float(value):
-    """Moved to ng.core.trim_window.linked_float (R1); this alias stays for old callers."""
-    return trim_window.linked_float(value)
-
-
-def _trim_is_set(value):
-    """Moved to ng.core.trim_window.trim_is_set (R1); this alias stays for old callers."""
-    return trim_window.trim_is_set(value)
-
-
-def _card_lrc(*args, **kwargs):
-    """Moved to ng.core.lyrics.card_lrc (R2); this alias stays for old workflow restores."""
-    return card_lrc(*args, **kwargs)
-
-
 def _subject_inputs():
     return [io.String.Input("subject_ids", default="", optional=True, advanced=True,
                             tooltip="JSON list of owning Subject context IDs; edited by the card's Subject assignment list.")]

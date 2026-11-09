@@ -59,7 +59,7 @@ class TrimContextIdInsteadOfSeconds(unittest.TestCase):
 
     def test_fingerprint_falls_back_to_the_stored_range_on_a_context_id(self):
         """fingerprint_inputs runs during validation: the shifted ID is truthy, so a truthiness
-        guard would compare `str > int` and raise TypeError before _linked_float. A non-number
+        guard would compare `str > int` and raise TypeError before trim_window.linked_float. A non-number
         must fall back to the stored options range instead."""
         from unittest.mock import patch as mock_patch
         stored = '{"schema_version": 1, "start_s": 2.0, "end_s": 6.0}'

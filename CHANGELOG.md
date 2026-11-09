@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **Studio render-cut grips snap to planned boundaries** (2026-11-09). Dragging a cut grip (or double-clicking it)
+  lands on the nearest shot edge or planned boundary within 0.3 s; elsewhere the drop stays where you left it and the
+  H3 grid's `cut_moved` applies. The drag line warns live when the neighbouring parts cannot take a cut there.
+
+- **Render cuts are editable** (2026-11-09). The shots document takes a `render_cuts` list of seconds; each becomes a
+  forced render-part boundary that keeps the pin and the join crossfade. A cut snaps once to H3's frame grid
+  (`cut_moved`) and is never auto-moved afterwards: a later shot edit that leaves it in a bad spot only warns
+  (`cut_dropped`, `cut_too_close` inside an opening source's prefix, `cut_beyond_end` past the project end). The
+  Pictures output ignores cuts - one still per shot already fixes every part edge. No schema-version bump; the Studio
+  writer must round-trip the field or the next save drops it.
+
+- **Part prompts are keyed by their part's first story frame, not the part index** (2026-11-09, with render cuts).
+  `part_prompts` entries now carry `story_start_f` (int frames) instead of `index`, so inserting a render cut no
+  longer shifts a prompt onto the wrong part. Documents in the wild that still carry the old index key load: their
+  prompts are flagged `part_prompt_outdated` and the compiled prompt is used until they are rewritten.
+
 - **Manual prompts keep the official `minimaxh3_*` effect embeddings.** A hand-written or AI-rewritten part prompt that
   lost the shot's chosen effect gets it re-appended from the compiled prompt; one that already names it is not duplicated
   (compile_chunk applies `keep_effects` after the share substitution, once per part).

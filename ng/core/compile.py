@@ -163,26 +163,21 @@ def _shot_position(chunk, shot):
     return -1
 
 
-def _share_basis(context, chunk, shot):
-    """The basis of one share: share_key of the exact share input it was compiled from."""
-    position = _shot_position(chunk, shot)
-    mode = decide_mode(context)
-    inputs = share_inputs(context, chunk, mode)
-    return share_key(inputs[position])
-
-
 def _covered_shares(context, chunk):
-    """({position: own text}, stale shots) for matching share bases; newest entry per shot_id wins."""
+    """({position: own text}, stale shots) for matching share bases; newest entry per shot_id wins.
+    The share inputs are computed once for the chunk: each shot's _shot_text covers every other shot too."""
     newest = {}
     for entry in read_shot_prompts(context.shots_text):
         newest[entry["shot_id"]] = entry
+    inputs = share_inputs(context, chunk, decide_mode(context))
     fitted, stale = {}, []
     for shot in chunk.shots:
         entry = newest.get(shot.shot_id)
         if entry is None:
             continue
-        if entry["basis"] == _share_basis(context, chunk, shot) and entry["text"].strip():
-            fitted[_shot_position(chunk, shot)] = (entry["text"].strip(), entry["by"])
+        position = _shot_position(chunk, shot)
+        if entry["basis"] == share_key(inputs[position]) and entry["text"].strip():
+            fitted[position] = (entry["text"].strip(), entry["by"])
         else:
             stale.append(shot)
     return fitted, stale

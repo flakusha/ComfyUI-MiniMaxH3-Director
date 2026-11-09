@@ -39,7 +39,8 @@ function validClip(clip) {
 
 // shots: the Story editor's records; audio: lane clips; lanes: lane order, including empty lanes; look: what every
 // render part shares (style, place, light), sent in place of the Prompt once there are shots; partPrompts: a render
-// part's own prompt {index, key, text, by}, used while `key` is still that of the part's compiled prompt (legacy fallback);
+// part's own prompt {story_start_f, index, key, text, by} — keyed by the part's starting story frame (legacy entries
+// carry only `index` and read as outdated), used while `key` is still that of the part's compiled prompt;
 // shotPrompts: one shot's share {shot_id, text, by, basis, chunk}, used while `basis` still matches the share the plan compiled.
 // skipped: ids of audio clips that are invalid or repeat an id; they are left out, the rest stays editable.
 // Cards that are both on a shot and on an audio lane: both play (shot_bindings.py), which is easy to miss (BUG-004).
@@ -50,15 +51,29 @@ export function boundAndLaned(shots, audio) {
 
 export function readProject(text) {
   const story = readStory(text || "");
-  if (story.error || !(text || "").trimStart().startsWith("{")) return { shots: story.shots, audio: [], lanes: [], control: [], look: "", partPrompts: [], shotPrompts: [], skipped: [], error: story.error };
+  if (story.error || !(text || "").trimStart().startsWith("{")) return { shots: story.shots, audio: [], lanes: [], control: [], look: "", partPrompts: [], shotPrompts: [], renderCuts: [], skipped: [], error: story.error };
   const data = JSON.parse(text), audio = [], skipped = [], seen = new Set();
   for (const clip of Array.isArray(data.audio) ? data.audio : []) {
     if (validClip(clip) && !seen.has(clip.id)) { seen.add(clip.id); audio.push({ offset: 0, mode: "ref", lane: "", ...clip }); }
     else skipped.push(typeof clip?.id === "string" && clip.id ? clip.id : "(no id)");
   }
   const lanes = [...new Set([...(data.audio_lanes || []), ...audio.map((clip) => clip.lane)])].filter(Boolean);
+  // Render cuts: story-time seconds where a render part boundary is forced. Garbage is dropped on read (finite,
+  // positive, strictly increasing); a cut past the project end stays — the planner refuses it with `cut_beyond_end`.
+  // NOTE: warn-only, never auto-moved — a cut in a bad spot renders a plan issue, the cut itself stays put.
+  const renderCuts = [];
+  for (const value of Array.isArray(data.render_cuts) ? data.render_cuts : []) {
+    const cut = typeof value === "number" && Number.isFinite(value) && value > 0 ? r1(value) : NaN;
+    if (cut > 0 && cut > (renderCuts.at(-1) ?? 0)) renderCuts.push(cut);
+  }
+  // part_prompts are migrating from part-index keys to the part's starting story frame (`story_start_f`). A missing
+  // `story_start_f` marks a legacy index-keyed entry: it is kept (never crash) and shown as outdated — see
+  // partPromptAt/partPromptLegacyAt. // NOTE: an old JS build rebuilds the JSON on save and silently drops unknown
+  // fields, so render_cuts and story-keyed part_prompts need this writer; the backend (shot_document.py) ships
+  // alongside — an old writer's save degrades to the derived plan again, never a broken document.
   const partPrompts = (Array.isArray(data.part_prompts) ? data.part_prompts : [])
-    .filter((entry) => Number.isInteger(entry?.index) && entry.index >= 0 && typeof entry.key === "string" && typeof entry.text === "string");
+    .filter((entry) => typeof entry?.key === "string" && typeof entry?.text === "string" && (entry.by === "ai" || entry.by === "user")
+      && ((Number.isInteger(entry.story_start_f) && entry.story_start_f >= 0) || (Number.isInteger(entry.index) && entry.index >= 0)));
   const shotPrompts = (Array.isArray(data.shot_prompts) ? data.shot_prompts : [])
     .filter((entry) => typeof entry?.shot_id === "string" && typeof entry?.text === "string" && (entry.by === "ai" || entry.by === "user")
       && typeof entry?.basis === "string" && Number.isInteger(entry?.chunk));
@@ -67,17 +82,74 @@ export function readProject(text) {
     if (!validClip({ ...clip, mode: "ref" }) || controlIds.has(clip.id)) return true;
     controlIds.add(clip.id); return false;
   });
-  return { shots: story.shots, audio, lanes, control, look: typeof data.look === "string" ? data.look : "", partPrompts, shotPrompts, skipped,
+  return { shots: story.shots, audio, lanes, control, look: typeof data.look === "string" ? data.look : "", partPrompts, shotPrompts, renderCuts, skipped,
     error: badControl ? "The saved control clips are invalid. Repair their timing or IDs before editing this project." : "",
     conflicts: boundAndLaned(story.shots, audio) };
 }
 
-export function writeProject({ shots, audio, lanes, control = [], look = "", partPrompts = [], shotPrompts = [] }) {
-  if (!shots.length && !audio.length && !lanes.length && !control.length && !look.trim() && !partPrompts.length && !shotPrompts.length) return "";
+export function writeProject({ shots, audio, lanes, control = [], look = "", partPrompts = [], shotPrompts = [], renderCuts = [] }) {
+  if (!shots.length && !audio.length && !lanes.length && !control.length && !look.trim() && !partPrompts.length && !shotPrompts.length && !renderCuts.length) return "";
   return JSON.stringify({ format: SHOT_FORMAT, schema_version: 1, shots, audio, audio_lanes: lanes, ...(look.trim() ? { look } : {}),
     ...(partPrompts.length ? { part_prompts: partPrompts } : {}), ...(shotPrompts.length ? { shot_prompts: shotPrompts } : {}),
+    ...(renderCuts.length ? { render_cuts: renderCuts } : {}),
     ...(control.length ? { control, control_lanes: ["control"] } : {}) });
 }
+
+// The usable part prompt of `chunk`: entries keyed by the part's starting story frame. Legacy index-keyed entries
+// (no story_start_f) never match here — they surface as outdated via partPromptLegacyAt.
+export const isStoryKeyed = (entry) => Number.isInteger(entry.story_start_f) && entry.story_start_f >= 0;
+export const partPromptAt = (list, chunk) => (list || []).find((entry) => isStoryKeyed(entry) && entry.story_start_f === chunk.story_start_f);
+export const partPromptLegacyAt = (list, chunk) => (list || []).find((entry) => !isStoryKeyed(entry) && entry.index === chunk.index);
+
+// A forced render boundary replaces any earlier cut within a hair of it; kept sorted and on the 0.1 s grid.
+export function upsertCut(cuts, sec) {
+  const cut = r1(sec);
+  if (!(cut > 0)) return cuts || [];
+  return [...(cuts || []).filter((at) => Math.abs(at - cut) > 0.05), cut].sort((a, b) => a - b);
+}
+export const cutAt = (cuts, sec) => (cuts || []).find((at) => Math.abs(at - sec) <= 0.05);
+// The nearest snap target within `threshold` seconds of `sec` — a shot start/end, or one of `planEnds` (the current
+// plan's chunk boundaries: derived Keyframe joins, Continue edges), so a drag lands where the planner already put a
+// cut. `own` (this grip's position) and other entries of `cuts` are never snapped onto: the backend drops a manual cut
+// that collides with an existing boundary. If the nearest candidate is illegal the next-nearest legal one wins; null
+// keeps the drag position.
+export function nearestShotEdge(shots, sec, threshold = 0.3, planEnds = [], cuts = [], own = null) {
+  const busy = (cuts || []).filter((cut) => own === null || Math.abs(cut - own) > 0.05);
+  const edges = (shots || []).flatMap((shot) => [shot.start, shot.end])
+    .concat((planEnds || []).filter((end) => !busy.some((cut) => Math.abs(cut - end) <= 0.05)));
+  const best = edges.filter((edge) => own === null || Math.abs(edge - own) > 0.05)
+    .sort((a, b) => Math.abs(a - sec) - Math.abs(b - sec) || a - b)
+    .find((edge) => Math.abs(edge - sec) <= threshold);
+  return best === undefined ? null : r1(best);
+}
+
+// The H3 numbers the render cuts live on (ng/core/cuts.py): 24 fps, a sampled clip has 17k + 5 frames, and its trained
+// minimum is 96 frames, so a part with `head` pin frames can be no shorter than the first 17-step position at or after
+// 96 - head delivered frames. cutFits is the drag warning's cheap parity with manual_joins: when the cut moves right
+// past the grip the boundary that persists is the grip itself, and the part starting there keeps its shortest length —
+// or just its pin prefix when it opens on an external source; when it moves left the boundary before the grip is the
+// base. The snapped join must clear that minimum, and the next boundary must clear the part that follows the cut.
+const H3_FPS = 24, H3_STEP = 17, H3_OFFSET = 5, H3_MIN_SAMPLED = 96;
+const shortestDelivered = (head) => {
+  const low = Math.max(H3_MIN_SAMPLED - head, 1), residue = ((H3_OFFSET - head) % H3_STEP + H3_STEP) % H3_STEP;
+  return low + ((residue - low) % H3_STEP + H3_STEP) % H3_STEP;
+};
+const minAfter = (chunk) => chunk.external ? Math.max(chunk.head_frames, 1) : shortestDelivered(chunk.head_frames);
+// `pin` is the document's continuity pin (S.plan?.pin_frames; the plan root carries continuity.head): the new part after
+// a manual cut always opens with it, so the right check is always its shortest delivered length, measured from the
+// snapped join — never the following chunk's own opening. The caller's fallback for a stale payload without the field
+// is a small pin on purpose: shortestDelivered shrinks as the pin grows, so the smallest real pin (5) warns the most
+// and a missing field can only ever over-warn, never silently drop a cut the backend would refuse.
+export const cutFits = (here, next, pin, at, sec) => {
+  if (Math.abs(sec - at) <= 0.05) return true;             // no move: nothing to warn about
+  const f = Math.round(sec * H3_FPS), atF = Math.round(at * H3_FPS);
+  const open = sec > at ? next : here;                     // the opening that persists at the left base boundary
+  const prev = sec > at ? atF : here.story_start_f, right = sec > at ? next.story_end_f : atF;
+  const residue = ((H3_OFFSET - open.head_frames) % H3_STEP + H3_STEP) % H3_STEP, k = Math.floor((f - prev - residue) / H3_STEP);
+  let join = prev + residue + k * H3_STEP;                 // cuts.py _edge: the nearest grid position, ties keep the lower
+  if (Math.abs(join + H3_STEP - f) < Math.abs(join - f)) join += H3_STEP;
+  return join - prev >= minAfter(open) && right - join >= shortestDelivered(pin);
+};
 
 // The Director's widgets after a Context rename: the Prompt, timed text, or the shot document's shot texts, spoken lines,
 // Look and render-part prompts (BUG-079). Returns only what changed.
@@ -110,10 +182,12 @@ export function removeLane({ lanes, audio }, lane) {
   return { lanes: lanes.filter((entry) => entry !== lane), audio: audio.filter((clip) => clip.lane !== lane) };
 }
 
-// A part's own prompt replaces any earlier one of that part; text "" removes it.
-export function setPartPrompt(list, index, key, text, by) {
-  const rest = (list || []).filter((entry) => entry.index !== index);
-  return text.trim() ? [...rest, { index, key, text, by }].sort((a, b) => a.index - b.index) : rest;
+// A part's own prompt replaces any earlier one of that part; text "" removes it. `story_start_f` (the chunk's) keys
+// the entry so a re-time that shifts part indices keeps the prose; without it the entry stays legacy index-keyed.
+export function setPartPrompt(list, index, key, text, by, story_start_f) {
+  const rest = (list || []).filter((entry) => (Number.isInteger(story_start_f) ? entry.story_start_f !== story_start_f : entry.index !== index));
+  return text.trim() ? [...rest, { index, ...(Number.isInteger(story_start_f) ? { story_start_f } : {}), key, text, by }]
+    .sort((a, b) => (a.story_start_f ?? a.index) - (b.story_start_f ?? b.index)) : rest;
 }
 
 // One shot's share replaces any earlier one of that shot; text "" removes it.

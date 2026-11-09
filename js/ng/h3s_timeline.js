@@ -1,7 +1,8 @@
 // Timeline: picture track with shots, free audio lanes and the render parts the plan produced.
 // During a mouse drag only the dragged block is moved; the project is written once, on release.
 import { h, icon, tip } from "./h3s_dom.js";
-import { dragTo, reorder, sorted, span, fmt, partColor, r1, isKeyframe, keyframeAt, nextClipStart } from "./h3s_model.js";
+import { dragTo, reorder, sorted, span, fmt, partColor, r1, isKeyframe, keyframeAt, nextClipStart, cutAt, nearestShotEdge, cutFits } from "./h3s_model.js";
+import { issueLine } from "./h3s_issues.js";
 import { timeView, tickTimes } from "./h3s_time.js";
 import { timelineNavigation, rememberTimeline } from "./h3s_navigation.js";
 
@@ -183,19 +184,72 @@ export function timelineView(S, actions) {
       sourcePicker("control", "Control", items)), track);
   }
 
+  // Render cuts: a grip on every interior part boundary (in the style of the clip edges). Dragging drafts the new
+  // position, snapped to a nearby shot edge; the write happens once, on release, and the lane re-renders at the
+  // snapped position the plan echoes back. NOTE: warn-only — the backend never auto-moves a cut; a cut in a bad spot
+  // (a shot starting within 2.5 s after it) only warns via the plan issues, so the tooltip says the same.
+  const CUT_TIP = "Render cut: drag to move this part boundary; it snaps to a nearby shot edge or planned boundary. Cuts keep the pin and the crossfade and are never moved automatically — a shot starting within 2.5 s after a cut only warns. Double-click or right-click: cut at the nearest shot edge or planned boundary. ✕ (or drag onto a cut at a shot edge) removes; a cut the H3 grid or the neighbours cannot take is reported, not moved.";
+  function cutGrip(track, here, next, at) {
+    const has = cutAt(S.renderCuts, at) !== undefined;
+    const snapHere = () => nearestShotEdge(S.shots, at, 0.3, (S.plan?.chunks || []).map((chunk) => chunk.end_s), S.renderCuts, at) ?? at;
+    const grip = h("span", { class: has ? "h3s-grip cut has" : "h3s-grip cut", style: { left: pct(at) }, title: CUT_TIP,
+      role: "button", tabindex: "0", "aria-label": `Render cut at ${fmt(at)}` });
+    grip.onpointerdown = (event) => {
+      if (event.target?.closest?.(".h3s-cut-x")) return;   // the ✕ handles its own click; a drag here would swallow it
+      event.stopPropagation(); event.preventDefault();
+      const handle = event.currentTarget, x0 = event.clientX, width = track.getBoundingClientRect().width;
+      let target = null;
+      try { handle.setPointerCapture(event.pointerId); } catch {}
+      actions.beginPointer();
+      const line = h("span", { class: "h3s-cut-line", style: { left: pct(at) } }); track.append(line);
+      handle.onpointermove = (move) => {
+        let sec = Math.max(here.start_s + 0.2, Math.min(next.end_s - 0.2, r1(at + (move.clientX - x0) / width * axis)));
+        const edge = nearestShotEdge(S.shots, sec, 0.3, (S.plan?.chunks || []).map((chunk) => chunk.end_s), S.renderCuts, at);
+        if (edge !== null) sec = edge;
+        target = sec; line.style.left = pct(sec);
+        info.textContent = `Cut at ${fmt(sec)}${edge !== null ? " (nearby boundary)" : ""}${cutFits(here, next, S.plan?.pin_frames ?? 5, at, sec) ? "" : " · the neighbours cannot take a cut here"} · release to set`;
+      };
+      const finish = (cancelled) => {
+        handle.onpointermove = handle.onpointerup = handle.onpointercancel = null;
+        line.remove(); info.textContent = DEFAULT_HINT; actions.endPointer();
+        if (cancelled || target === null) return;
+        const other = cutAt(S.renderCuts, target);
+        if (other !== undefined && Math.abs(other - at) > 0.05) actions.removeRenderCut(other);   // drag onto a neighbour's cut: take it away
+        else if (Math.abs(target - at) > 0.05) actions.setRenderCut(target);
+      };
+      handle.onpointerup = () => finish(false);
+      handle.onpointercancel = handle.onlostpointercapture = () => finish(true);
+    };
+    grip.ondblclick = grip.oncontextmenu = (event) => { event.preventDefault(); event.stopPropagation(); actions.setRenderCut(snapHere()); };
+    grip.onkeydown = (event) => {
+      if (!["Enter", " "].includes(event.key)) return;
+      event.preventDefault(); event.stopPropagation(); actions.setRenderCut(snapHere());
+    };
+    if (has) grip.append(h("span", { class: "h3s-cut-x", title: "Remove this render cut", "aria-label": `Remove the render cut at ${fmt(at)}`,
+      role: "button", tabindex: "0", onclick: (event) => { event.stopPropagation(); actions.removeRenderCut(at); },
+      onkeydown: (event) => { if (!["Enter", " "].includes(event.key)) return; event.preventDefault(); event.stopPropagation(); actions.removeRenderCut(at); } }, "✕"));
+    return grip;
+  }
+
   function partsRow() {
     const track = h("div", { class: "h3s-track", style: { height: "30px", border: 0 } });
-    const chosen = S.selectedRange;
-    for (const chunk of S.plan?.chunks || []) {
+    const chosen = S.selectedRange, chunks = S.plan?.chunks || [];
+    for (const chunk of chunks) {
       const [color, bg] = partColor(chunk.index), hit = chosen && chosen[0] < chunk.end_s && chosen[1] > chunk.start_s;
       track.append(h("div", { class: "h3s-part", style: { left: pct(chunk.start_s), width: pct(chunk.end_s - chunk.start_s), borderColor: color, background: hit ? bg : "#141922" },
         title: chunk.picture ? `Picture ${chunk.index + 1}: this shot as one picture` : `Part ${chunk.index + 1}: ${chunk.delivered_frames} new frames${chunk.head_frames ? `, with ${chunk.head_frames} preceding frames for continuity` : ""}` },
         h("span", { class: "h3s-swatch", style: { background: color } }), `${chunk.picture ? "Picture" : "Part"} ${chunk.index + 1} · ${span(chunk.start_s, chunk.end_s)}`));
     }
+    // Pictures output renders one part per shot and ignores render_cuts, so picture boundaries get no grip.
+    for (let n = 0; n + 1 < chunks.length; n++) if (!chunks[n].picture && !chunks[n + 1].picture) track.append(cutGrip(track, chunks[n], chunks[n + 1], chunks[n].end_s));
+    const cutIssues = (S.plan?.issues || []).filter((issue) => issue.code.startsWith("cut_"));
     // A failed plan is said in warning colour: in grey small print it read like "still planning" (2026-10-11).
     if (!S.plan) track.append(S.planError ? h("span", { class: "h3s-warn", role: "alert", style: { fontSize: "13px", padding: "4px 8px" } },
       `The plan failed: ${S.planError}`) : h("span", { class: "h3s-empty", style: { fontSize: "12px" } }, "Planning …"));
-    return lane(h("span", { class: "h3s-lane-name" }, "Render parts"), track);
+    const name = h("span", { class: "h3s-lane-name" }, "Render parts",
+      cutIssues.length ? h("span", { class: "h3s-chip h3s-warn", title: cutIssues.map((issue) => issueLine(issue)).join("\n") }, `${cutIssues.length} cut note${cutIssues.length === 1 ? "" : "s"}`) : null,
+      (S.renderCuts || []).length ? h("button", { class: "h3s-btn ghost small", title: "Remove every render cut: back to the derived plan", "aria-label": "Reset all render cuts", onclick: () => actions.resetCuts() }, "Reset cuts") : null);
+    return lane(name, track);
   }
 
   const ghostBanner = S.ghosts.length ? h("div", { class: "h3s-banner" },

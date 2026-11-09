@@ -3,17 +3,18 @@
 // with the key of the compiled prompt it came from, and an older one is not used after the plan changes. A shot's own
 // text is kept per share instead, so a re-time that keeps the shot keeps its prose.
 import { h, icon } from "./h3s_dom.js";
-import { fmt, partColor, chunkBudget } from "./h3s_model.js";
+import { fmt, partColor, chunkBudget, partPromptAt, partPromptLegacyAt } from "./h3s_model.js";
 import { issueLine } from "./h3s_issues.js";
 
 const SOURCE = { compiled: ["compiled", "h3s-muted"], ai: ["AI-written", ""], user: ["edited", ""], manual: ["manual prompt", "h3s-warn"] };
 
 // A part has its own prompt, or one of its shot shares does, but the plan compiled it again: the plan changed since,
-// and the compiled text is used.
-export function outdated(S, index) {
-  if ((S.partPrompts || []).some((entry) => entry.index === index) && S.plan?.chunks?.[index]?.prompt_source === "compiled") return true;
-  const shares = S.plan?.chunks?.[index]?.shares || [];
-  return shares.some((share) => (S.shotPrompts || []).some((entry) => entry.shot_id === share.shot_id && entry.basis !== share.basis));
+// and the compiled text is used. A legacy index-keyed part prompt (no story_start_f) is always outdated: the plan it
+// was written from cannot be recognised across re-times, so it shows the outdated badge and is never silently applied.
+export function outdated(S, chunk) {
+  if (partPromptLegacyAt(S.partPrompts || [], chunk)) return true;
+  if (partPromptAt(S.partPrompts || [], chunk) && chunk.prompt_source === "compiled") return true;
+  return (chunk.shares || []).some((share) => (S.shotPrompts || []).some((entry) => entry.shot_id === share.shot_id && entry.basis !== share.basis));
 }
 
 // One shot's compiled share of a part: the "Made from" text of that shot, what the sampler uses without an own share.
@@ -39,11 +40,11 @@ const SHARE_LABEL = { compiled: ["compiled", "h3s-muted"], ai: ["AI-written", ""
 // The part badge aggregates its shares: every share's own text, only some (mixed), or how many went outdated.
 function badgeFor(S, chunk) {
   if (chunk.prompt_source === "manual") return SOURCE.manual;
-  const shares = chunk.shares || [], legacy = (S.partPrompts || []).some((entry) => entry.index === chunk.index);
+  const shares = chunk.shares || [], legacy = partPromptAt(S.partPrompts || [], chunk) || partPromptLegacyAt(S.partPrompts || [], chunk);
   const covered = shares.some((share) => shareEntry(S, share.shot_id));
   if (!shares.length || (!covered && legacy)) {
     const [label, tone] = SOURCE[chunk.prompt_source] || SOURCE.compiled;
-    return outdated(S, chunk.index) ? ["own prompt outdated", "h3s-warn"] : [label, tone];
+    return outdated(S, chunk) ? ["own prompt outdated", "h3s-warn"] : [label, tone];
   }
   const states = shares.map((share) => shareState(S, share));
   const bad = states.filter((state) => state === "outdated").length;
@@ -114,7 +115,7 @@ function partView(S, actions, chunk) {
   const [label, tone] = badgeFor(S, chunk);
   const draft = S.partDrafts?.[i], editing = S.partEdit?.index === i, busy = S.busy === `write${i}`;
   const members = chunk.shares || chunk.shots || [];
-  const own = (S.partPrompts || []).some((entry) => entry.index === i)
+  const own = partPromptAt(S.partPrompts || [], chunk) || partPromptLegacyAt(S.partPrompts || [], chunk)
     || (S.shotPrompts || []).some((entry) => members.some((share) => share.shot_id === entry.shot_id));
   const tools = chunk.prompt_source === "manual" ? [] : [
     h("button", { class: "h3s-btn ai small", disabled: !S.ai || Boolean(S.busy), onclick: () => actions.writePart(i),

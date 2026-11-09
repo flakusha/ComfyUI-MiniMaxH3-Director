@@ -191,6 +191,44 @@ const shot = (id, start, end) => ({ id, start, end, text: id, media: [], spoken:
   assert.deepEqual(model.setPartPrompt(parts, 0, "", "", "user").map((entry) => entry.index), [1], "empty text removes the part's own prompt");
 }
 
+// Render cuts and the story-frame keying of part prompts ride in the shot document; a legacy document without them
+// is unaffected, and an old JS build that drops unknown fields only loses the cuts (back to the derived plan).
+{
+  const shot = { ...model.newShot(0, 8) };
+  const text = model.writeProject({ shots: [shot], audio: [], lanes: [], renderCuts: [4.5, 6] });
+  const back = model.readProject(text);
+  assert.deepEqual(back.renderCuts, [4.5, 6], "render_cuts round-trip");
+  assert.ok(text.includes('"render_cuts":[4.5,6]'));
+  assert.deepEqual(model.readProject(model.writeProject({ shots: [shot], audio: [], lanes: [] })).renderCuts, [], "no cuts, no key");
+  assert.deepEqual(model.readProject("0-4: A walk.").renderCuts, [], "timed text has no cuts");
+  const raw = JSON.stringify({ format: "h3-director-shots", schema_version: 1, shots: [], render_cuts: [3, 2, "x", -1, NaN, 3, 7] });
+  assert.deepEqual(model.readProject(raw).renderCuts, [3, 7], "garbage and non-increasing cuts are dropped on read");
+  const legacy = JSON.stringify({ format: "h3-director-shots", schema_version: 1, shots: [] });
+  assert.deepEqual(model.readProject(legacy).renderCuts, [], "a legacy document without the field reads unchanged");
+  // part prompts keyed by the part's starting story frame; legacy index-keyed entries stay but read as outdated.
+  const story = [{ index: 2, story_start_f: 240, key: "k", text: "t", by: "ai" }];
+  assert.deepEqual(model.readProject(model.writeProject({ shots: [], audio: [], lanes: [], partPrompts: story })).partPrompts, story);
+  assert.equal(model.partPromptAt(story, { story_start_f: 240 }), story[0]);
+  assert.equal(model.partPromptAt(story, { story_start_f: 480, index: 2 }), undefined, "a shifted index alone no longer matches");
+  const old = [{ index: 0, key: "k", text: "t", by: "user" }];
+  assert.equal(model.partPromptLegacyAt(old, { index: 0 }), old[0], "legacy entries still match by index");
+  assert.deepEqual(model.readProject(model.writeProject({ shots: [], audio: [], lanes: [], partPrompts: old })).partPrompts, old, "legacy entries survive a save");
+  const mixed = model.setPartPrompt(old, 5, "k2", "new", "user", 120);
+  assert.deepEqual(mixed.map((entry) => entry.story_start_f ?? "legacy"), ["legacy", 120], "a story-keyed write keeps the legacy entry for its badge");
+  assert.deepEqual(model.upsertCut([], 4.25), [4.3], "cuts land on the 0.1 s grid");
+  assert.deepEqual(model.upsertCut([4.3, 9], 4.28), [4.3, 9], "re-setting a cut at the same spot replaces it");
+  assert.deepEqual(model.upsertCut([4.3], -1), [4.3], "a non-positive cut is refused");
+  assert.equal(model.nearestShotEdge([{ start: 0, end: 6 }, { start: 6, end: 12 }], 6.1), 6, "a drag near a shot edge snaps to it");
+  assert.equal(model.nearestShotEdge([{ start: 0, end: 6 }], 5.5), null, "a drag away from any shot edge keeps its position");
+  const cuts = [6.1], ends = [6.1, 10.4];
+  assert.equal(model.nearestShotEdge([], 10.5, 0.3, ends), 10.4, "a drag near a plan boundary snaps to it");
+  assert.equal(model.nearestShotEdge([], 10.8, 0.3, ends), null, "a drag near no boundary keeps its position");
+  assert.equal(model.nearestShotEdge([], 6.2, 0.3, ends, cuts, 6.1), null, "a grip never snaps onto its own position");
+  assert.equal(model.nearestShotEdge([], 6.12, 0.3, [6.1, 6.15, 10.4], cuts, 10.3), 6.2, "an illegal nearest candidate is skipped for the next-nearest legal one");
+  assert.equal(model.nearestShotEdge([], 6.2, 0.3, ends, cuts, 10.3), null, "another grip's cut is never a snap target");
+  assert.equal(model.nearestShotEdge([{ start: 9.9, end: 20 }], 10.5, 0.3, ends), 10.4, "the nearest target wins, shot edge or plan boundary");
+}
+
 console.log("h3s model ok");
 
 // Keyframes in a shot: own role or the card's, a time in seconds after the shot's start, and where the plan put it.

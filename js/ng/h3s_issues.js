@@ -9,6 +9,8 @@ const TITLES = {
   shot_clipped: "Shot shortened", shot_after_end: "Shot after project end", reference_disabled: "Not used in First/last frame mode",
   prompt_override: "Manual prompt active", planner: "Compiler note", no_text: "No text", no_continuity: "Hard cuts",
   length_snapped: "Length fitted to H3 grid", late_change: "Change just after a seam", guide_outside_project: "Time outside project",
+  cut_moved: "Render cut fitted to the grid", cut_dropped: "Render cut dropped", cut_beyond_end: "Render cut past the project end", cut_too_close: "Render cut in a continuation prefix",
+  part_prompt_outdated: "Part prompt outdated",
   content_unknown: "Unknown content", canvas_snapped: "Size on 32 grid", canvas_from_image: "Size from picture",
   canvas_default: "Default size", audio_short: "Audio too short", audio_roles: "Several audio roles", audio_dulling: "Audio gets duller",
   audio_clip_unknown: "Audio clip without audio Content", audio_clip_clipped: "Audio clip shortened", audio_clip_after_end: "Audio clip after project end", audio_clip_past_file: "Audio clip past file end", soundtrack_short: "Song shorter than video",

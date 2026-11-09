@@ -88,6 +88,11 @@ textarea.h3s-in{padding:10px;line-height:1.45;resize:vertical;width:100%}
 .h3s-chip{font-size:11px;padding:1px 6px;border-radius:5px;white-space:nowrap}
 .h3s-grip{position:absolute;top:0;bottom:0;width:10px;cursor:ew-resize;touch-action:none}
 .h3s-grip:hover{background:rgba(143,193,255,.25)}
+.h3s-cut{width:12px;z-index:2}
+.h3s-cut-line{position:absolute;top:0;bottom:0;width:2px;background:#8FC1FF;pointer-events:none}
+.h3s-cut.has{background:rgba(79,184,196,.35)}
+.h3s-cut.has::before{content:"";position:absolute;top:0;bottom:0;left:5px;width:2px;background:#4FB8C4}
+.h3s-cut-x{position:absolute;top:1px;left:50%;transform:translateX(-50%);font-size:11px;line-height:12px;width:13px;height:13px;border-radius:50%;background:#12272B;color:#4FB8C4;text-align:center;cursor:pointer;z-index:1}
 .h3s-clip{position:absolute;top:4px;bottom:4px;border-radius:6px;border:1px solid #4A3E6E;background:#1E1830;cursor:grab;touch-action:none;overflow:hidden;display:flex;align-items:center;gap:6px;padding:0 12px;font-size:12px;user-select:none;white-space:nowrap}
 .h3s-clip.sel{border-color:#8FC1FF;box-shadow:0 0 0 1px #8FC1FF}
 .h3s-clip.drag{z-index:3;cursor:grabbing}

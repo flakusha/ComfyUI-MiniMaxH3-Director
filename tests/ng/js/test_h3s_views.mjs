@@ -18,8 +18,8 @@ const contexts = contentEntries([
   { media: "audio", widgets: { context_id: "song", name: "Song", audio: "song.wav", usage: "music_style" } },
 ], (entry) => ({ image: "#6AA6F8", video: "#E6BE57", audio: "#B38CF5" }[entry.media]));
 const plan = { width: 1344, height: 768, total_s: 20, total_frames: 480, mode: "ref2va", issues: [{ code: "shot_gap", text: "there is a gap.", ref: "shot 2" }],
-  chunks: [{ index: 0, start_s: 0, end_s: 10, delivered_frames: 240, head_frames: 0, mode: "ref2va", prompt: "first prompt", refs: [{ kind: "picture", ctx_id: "mage" }], shots: [{ shot_id: "a" }] },
-    { index: 1, start_s: 10, end_s: 20, delivered_frames: 240, head_frames: 22, mode: "ref2va", prompt: "second prompt", refs: [], shots: [{ shot_id: "a" }, { shot_id: "b" }] }] };
+  chunks: [{ index: 0, story_start_f: 0, start_s: 0, end_s: 10, delivered_frames: 240, head_frames: 0, mode: "ref2va", prompt: "first prompt", refs: [{ kind: "picture", ctx_id: "mage" }], shots: [{ shot_id: "a" }] },
+    { index: 1, story_start_f: 240, start_s: 10, end_s: 20, delivered_frames: 240, head_frames: 22, mode: "ref2va", prompt: "second prompt", refs: [], shots: [{ shot_id: "a" }, { shot_id: "b" }] }] };
 
 function state(extra = {}) {
   const values = { idea: "A walk.", project_seconds: 20, chunk_seconds: 0, width: 1344, height: 768, mode: "ref2va", turbo: false, steps: 20, seed: 1,
@@ -237,7 +237,8 @@ function recorder() {
   // Each part: write it with the AI, edit it, reset it; an own prompt of an older plan is flagged.
   const { actions: parts, calls: asked } = recorder();
   const own = { ...plan, chunks: [{ ...plan.chunks[0], prompt_key: "k0", prompt_source: "ai" }, { ...plan.chunks[1], prompt_key: "k1", prompt_source: "compiled" }] };
-  const view = drawerView(state({ promptOpen: true, ai: true, plan: own, partPrompts: [{ index: 0, key: "k0", text: "mine", by: "ai" }, { index: 1, key: "old", text: "x", by: "user" }] }), parts);
+  const view = drawerView(state({ promptOpen: true, ai: true, plan: own, partPrompts: [{ index: 0, story_start_f: 0, key: "k0", text: "mine", by: "ai" }, { index: 1, key: "old", text: "x", by: "user" }] }), parts);
+  // A story-keyed entry whose key matches reads as its author; a legacy index-keyed entry (no story_start_f) is outdated.
   assert.ok(view.innerText.includes("AI-written") && view.innerText.includes("own prompt outdated"), view.innerText);
   view.button("Write all parts with AI").onclick();
   assert.deepEqual(asked.at(-1), ["writeAllParts"]);

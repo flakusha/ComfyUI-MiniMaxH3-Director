@@ -138,6 +138,16 @@ class ManualJoins(unittest.TestCase):
     def doc(cuts):
         return json.dumps({"format": "h3-director-shots", "schema_version": 1, "render_cuts": cuts})
 
+    @staticmethod
+    def fdoc(cuts):
+        return json.dumps({"format": "h3-director-shots", "schema_version": 1, "render_cuts_f": cuts})
+
+    def test_a_frame_cut_plans_like_its_legacy_seconds_entry(self):
+        seconds_joins, seconds_issues = cuts.manual_joins(self.doc([15.0]), 720, 22, {}, [])   # 15 s -> frame 360
+        frames_joins, frames_issues = cuts.manual_joins(self.fdoc([360]), 720, 22, {}, [])
+        self.assertEqual(frames_joins, seconds_joins)
+        self.assertEqual(frames_issues, seconds_issues)
+
     def test_a_cut_splits_at_the_snapped_frame_and_keeps_the_pin(self):
         joins, cut_issues = cuts.manual_joins(self.doc([15.0]), 720, 22, {}, [])
         self.assertEqual(joins, (362,))                 # 15 s: the nearest grid frame a part can end on

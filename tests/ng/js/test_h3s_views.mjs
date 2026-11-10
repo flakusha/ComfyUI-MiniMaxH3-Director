@@ -18,8 +18,8 @@ const contexts = contentEntries([
   { media: "audio", widgets: { context_id: "song", name: "Song", audio: "song.wav", usage: "music_style" } },
 ], (entry) => ({ image: "#6AA6F8", video: "#E6BE57", audio: "#B38CF5" }[entry.media]));
 const plan = { width: 1344, height: 768, total_s: 20, total_frames: 480, mode: "ref2va", issues: [{ code: "shot_gap", text: "there is a gap.", ref: "shot 2" }],
-  chunks: [{ index: 0, story_start_f: 0, start_s: 0, end_s: 10, delivered_frames: 240, head_frames: 0, mode: "ref2va", prompt: "first prompt", refs: [{ kind: "picture", ctx_id: "mage" }], shots: [{ shot_id: "a" }] },
-    { index: 1, story_start_f: 240, start_s: 10, end_s: 20, delivered_frames: 240, head_frames: 22, mode: "ref2va", prompt: "second prompt", refs: [], shots: [{ shot_id: "a" }, { shot_id: "b" }] }] };
+  chunks: [{ index: 0, story_start_f: 0, story_end_f: 240, start_s: 0, end_s: 10, delivered_frames: 240, head_frames: 0, mode: "ref2va", prompt: "first prompt", refs: [{ kind: "picture", ctx_id: "mage" }], shots: [{ shot_id: "a" }] },
+    { index: 1, story_start_f: 240, story_end_f: 480, start_s: 10, end_s: 20, delivered_frames: 240, head_frames: 22, mode: "ref2va", prompt: "second prompt", refs: [], shots: [{ shot_id: "a" }, { shot_id: "b" }] }] };
 
 function state(extra = {}) {
   const values = { idea: "A walk.", project_seconds: 20, chunk_seconds: 0, width: 1344, height: 768, mode: "ref2va", turbo: false, steps: 20, seed: 1,
@@ -47,10 +47,10 @@ function recorder() {
   assert.equal(view.byClass("h3s-clip")[0].innerText.includes("locked · 4–18 s"), true);
   const parts = view.byClass("h3s-part");
   assert.deepEqual(parts.map((node) => node.style.borderColor), ["#4FB8C4", "#E58A5C"], "each render part has its own colour");
-  assert.equal(parts[0].title, "Part 1: 240 new frames");
-  assert.equal(parts[1].title, "Part 2: 240 new frames, with 22 preceding frames for continuity");
+  assert.equal(parts[0].title, "Part 1: 240 new frames, ends at frame 240 (10.00 s)");
+  assert.equal(parts[1].title, "Part 2: 240 new frames, with 22 preceding frames for continuity, ends at frame 480 (20.00 s)");
   const external = timelineView(state({ plan: { ...plan, chunks: [{ ...plan.chunks[0], head_frames: 90, delivered_frames: 102 }] } }), actions);
-  assert.equal(external.byClass("h3s-part")[0].title, "Part 1: 102 new frames, with 90 preceding frames for continuity");
+  assert.equal(external.byClass("h3s-part")[0].title, "Part 1: 102 new frames, with 90 preceding frames for continuity, ends at frame 240 (10.00 s)");
   assert.ok(view.innerText.includes("Audio 2"), "an empty lane is shown");
   // Drag shot b over shot a: the drop reorders.
   const block = view.byClass("h3s-shot")[1];

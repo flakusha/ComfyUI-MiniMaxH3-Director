@@ -8,7 +8,7 @@ import math
 import re
 from dataclasses import dataclass
 
-from . import fields
+from . import fields, frames
 from .issues import SchemaError
 
 FORMAT = "h3-director-shots"
@@ -130,24 +130,43 @@ def read_look(text):
 PROMPT_SOURCES = ("ai", "user")
 
 
-def read_render_cuts(text, project_seconds=None):
-    """The document's manual render cuts in seconds (story time), earliest first; unusable entries are dropped.
+def read_render_cuts_frames(text, total_frames=None):
+    """The document's manual render cuts in story frames (render_cuts_f), earliest first; unusable entries are dropped.
 
-    A cut must be a finite number, strictly increasing, and 0 < cut < project_seconds (when the project length is
-    known). Bad entries are dropped, not raised: cuts are a preference and documents in the wild may carry junk, the
-    tolerance pattern of part_prompts."""
-    data = _load(text)
+    Legacy documents carry render_cuts in seconds; they are converted once with the planner's own arithmetic
+    (int(round(s*24)), frames.py) so a migrated document plans byte-identically. A string entry "f295" names frame
+    295 directly; plain numbers are seconds. A cut must be finite, strictly increasing, and 0 < f < total_frames
+    (when the project length is known). Bad entries are dropped, not raised: cuts are a preference and documents in
+    the wild may carry junk, the tolerance pattern of part_prompts."""
+    data = _load(text) or {}
+    entries = fields.read_list(data, "render_cuts_f", "shots")
+    legacy = not entries
+    if legacy:
+        entries = fields.read_list(data, "render_cuts", "shots")
     out = []
-    for value in fields.read_list(data or {}, "render_cuts", "shots"):
-        try:
-            cut = float(value)
-        except (TypeError, ValueError):
+    for value in entries:
+        if isinstance(value, str):
+            name = value.strip()
+            if not name.startswith("f"):
+                continue
+            try:
+                frame = int(name[1:])
+            except ValueError:
+                continue
+        else:
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(number):
+                continue
+            # Legacy seconds convert with the planner's own arithmetic; numbers in render_cuts_f already are frames.
+            frame = frames.seconds_to_frames(number) if legacy else int(round(number))
+        if frame <= 0 or (total_frames is not None and frame >= total_frames):
             continue
-        if not math.isfinite(cut) or cut <= 0 or (project_seconds is not None and cut >= project_seconds):
+        if out and frame <= out[-1]:
             continue
-        if out and cut <= out[-1]:
-            continue
-        out.append(cut)
+        out.append(frame)
     return tuple(out)
 
 

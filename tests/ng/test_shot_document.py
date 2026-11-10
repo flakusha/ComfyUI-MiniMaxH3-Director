@@ -150,12 +150,21 @@ class RenderCuts(unittest.TestCase):
     def doc(cuts, shots=()):
         return json.dumps({"format": "h3-director-shots", "schema_version": 1, "shots": list(shots), "render_cuts": cuts})
 
-    def test_the_reader_drops_bad_entries(self):
-        text = self.doc([15.0, "x", None, float("nan"), float("inf"), 15.0, 12.0, -1, 0, 20.0])
-        self.assertEqual(sdoc.read_render_cuts(text, 20), (15.0,))       # finite, increasing, inside the project
-        self.assertEqual(sdoc.read_render_cuts(self.doc([3.0, 9.0])), (3.0, 9.0))
-        self.assertEqual(sdoc.read_render_cuts(self.doc([])), ())
-        self.assertEqual(sdoc.read_render_cuts("0-10: a"), ())           # legacy timed text has no cuts
+    @staticmethod
+    def fdoc(cuts, shots=()):
+        return json.dumps({"format": "h3-director-shots", "schema_version": 1, "shots": list(shots), "render_cuts_f": cuts})
+
+    def test_the_reader_reads_frames_and_drops_bad_entries(self):
+        text = self.fdoc([190, "x", None, float("nan"), float("inf"), 190, 150, -1, 0, "f", "fnord"])
+        self.assertEqual(sdoc.read_render_cuts_frames(text, 480), (190,))    # finite, increasing, inside the project
+        self.assertEqual(sdoc.read_render_cuts_frames(self.fdoc([100, "f192", 300.0])), (100, 192, 300))   # numbers here are frames, not seconds
+        self.assertEqual(sdoc.read_render_cuts_frames(self.fdoc([])), ())
+        self.assertEqual(sdoc.read_render_cuts_frames("0-10: a"), ())        # legacy timed text has no cuts
+
+    def test_legacy_seconds_are_converted_with_the_planner_arithmetic(self):
+        self.assertEqual(sdoc.read_render_cuts_frames(self.doc([3.0, 9.0])), (72, 216))   # int(round(s*24))
+        self.assertEqual(sdoc.read_render_cuts_frames(self.doc([15.0, "x", None, float("nan"), 15.0, 12.0, -1, 0, 20.0]), 480), (360,))
+        self.assertEqual(sdoc.read_render_cuts_frames(self.doc(["f295"])), (295,))        # the explicit frame form wins over seconds
 
     def test_the_plan_splits_on_an_on_grid_cut(self):
         text = self.doc([8.0], [record("s1", 0, 20)])                  # 8 s = frame 192, already a legal boundary
@@ -168,6 +177,13 @@ class RenderCuts(unittest.TestCase):
         result = plan(self.doc([7.9], [record("s1", 0, 20)]), seconds=20)      # 7.9 s -> frame 192 snapped
         self.assertIn(192, [c.story_start_f for c in result.plan.chunks])
         self.assertIn("cut_moved", [i.code for i in result.issues])
+        self.assertIn("frame 192", [i.text for i in result.issues if i.code == "cut_moved"][0])
+
+    def test_a_migrated_frames_document_plans_like_its_seconds_original(self):
+        legacy = plan(self.doc([7.9, 14.3], [record("s1", 0, 20)]), seconds=20)      # 7.9 s -> 190, 14.3 s -> 343
+        migrated = plan(self.fdoc([190, 343], [record("s1", 0, 20)]), seconds=20)
+        self.assertEqual([c.to_dict() for c in legacy.plan.chunks], [c.to_dict() for c in migrated.plan.chunks])
+        self.assertEqual(legacy.issues, migrated.issues)
 
     def test_a_cut_past_the_end_is_reported_and_ignored(self):
         result = plan(self.doc([25.0], [record("s1", 0, 20)]), seconds=20)

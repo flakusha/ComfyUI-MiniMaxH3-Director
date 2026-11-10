@@ -46,12 +46,13 @@ export function promptActions(S, { save, render, stale }) {
   return actions;
 }
 
-// Render cuts: forced part boundaries, kept in the document's render_cuts. An empty list plans exactly as before.
-// NOTE: warn-only — a bad cut renders cut_moved/cut_dropped/cut_beyond_end plan issues; the list itself is never rewritten.
+// Render cuts: forced part boundaries, kept in the document's render_cuts_f (story frames). An empty list plans
+// exactly as before. NOTE: warn-only — a bad cut renders cut_moved/cut_dropped/cut_beyond_end plan issues; the list
+// itself is never rewritten.
 export function cutActions(S, { save, render }) {
   return {
-    setRenderCut(sec) { S.renderCuts = upsertCut(S.renderCuts, sec); save(); render(); },
-    removeRenderCut(sec) { S.renderCuts = (S.renderCuts || []).filter((at) => Math.abs(at - sec) > 0.05); save(); render(); },
+    setRenderCut(frame) { S.renderCuts = upsertCut(S.renderCuts, frame); save(); render(); },
+    removeRenderCut(frame) { S.renderCuts = (S.renderCuts || []).filter((at) => Math.abs(at - frame) > 2); save(); render(); },
     resetCuts() { S.renderCuts = []; save(); render(); },
   };
 }

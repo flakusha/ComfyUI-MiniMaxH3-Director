@@ -32,8 +32,12 @@ and Redo.
 - **Audio lanes**: a sound on a lane runs on its own, across shots and render parts (a song is not restarted per shot).
   **+ Audio lane** adds one; move and trim the clip with the mouse.
 - **Control**: control videos and masks (Workflows 7 and 8).
-- **Render parts**: how the Director cuts the video into H3 runs, each in its own colour. You do not edit them; they follow
-  the shots, the duration and the render-part length in the Settings.
+- **Render parts**: how the Director cuts the video into H3 runs, each in its own colour. The plan puts the boundaries
+  (they follow the shots, the duration and the render-part length in the Settings), and you nudge them: drag a grip to
+  move a boundary — it lands in whole story frames and snaps to a nearby shot edge or planned boundary; the drag label
+  shows the frame and its seconds ("Frame 305 (12.71 s) · release to set"). Double-click or press Enter to cut at the
+  nearest one, ✕ removes a cut, **Reset cuts** removes every one. Notes stay warn-only: a cut in a spot the H3 grid or
+  the neighbours cannot take is reported, never moved.
 
 ## The right side
 

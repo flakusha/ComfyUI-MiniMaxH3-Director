@@ -45,7 +45,7 @@ Every field of the H3 Director in one place, from top to bottom. How to work wit
 | **+ Shot** | a 4 s shot after the selected one |
 | **+ Audio lane** | a new lane for a sound card |
 | **Control +** | a control clip from a Video card set to *Control video* |
-| **Render parts** | how the Director cuts the video into H3 runs (read only) |
+| **Render parts** | how the Director cuts the video into H3 runs; drag a grip to move a boundary (whole story frames, snaps to a nearby shot edge or planned boundary), double-click or Enter cuts at the nearest one, ✕ removes a cut; notes are warn-only |
 
 ### A selected shot
 

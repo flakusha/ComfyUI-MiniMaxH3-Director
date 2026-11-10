@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Render cuts are stored in frames, seconds become the display** (2026-11-10). The shots document now carries
+  `render_cuts_f` (whole story frames) instead of `render_cuts` seconds; a grip drag lands exactly where the planner
+  cuts, and the ghost-cut case where a snapped boundary rendered as an un-owned grip is gone. Legacy documents that
+  still carry `render_cuts` seconds load unchanged — they convert once with the planner's own `round(s*24)`, so a
+  migrated document plans byte-identically (resume keys included); a string entry `"f295"` names frame 295 directly.
+  No schema-version bump, but the Studio writer must round-trip the field: a cached old JS build's save drops it and
+  degrades to the derived plan again until the browser reloads. `cut_moved`/`cut_dropped`/`cut_beyond_end` notes now
+  speak frames first ("frame 305 (12.71 s)").
+
 - **Studio render-cut grips snap to planned boundaries** (2026-11-09). Dragging a cut grip (or double-clicking it)
   lands on the nearest shot edge or planned boundary within 0.3 s; elsewhere the drop stays where you left it and the
   H3 grid's `cut_moved` applies. The drag line warns live when the neighbouring parts cannot take a cut there.
@@ -17,6 +26,11 @@
   `part_prompts` entries now carry `story_start_f` (int frames) instead of `index`, so inserting a render cut no
   longer shifts a prompt onto the wrong part. Documents in the wild that still carry the old index key load: their
   prompts are flagged `part_prompt_outdated` and the compiled prompt is used until they are rewritten.
+
+- **Rewriting a part prompt clears its legacy index-keyed entry** (2026-11-09, fix to the story-frame keying above).
+  The Studio's writer kept the old `index` entry beside the new `story_start_f` one, so the part's badge stayed
+  "own prompt outdated" and the plan kept the `part_prompt_outdated` note even though the rewritten prompt was
+  applied. A story-keyed write (edit, accept or reset) now also drops the legacy entry of that part.
 
 - **Manual prompts keep the official `minimaxh3_*` effect embeddings.** A hand-written or AI-rewritten part prompt that
   lost the shot's chosen effect gets it re-appended from the compiled prompt; one that already names it is not duplicated

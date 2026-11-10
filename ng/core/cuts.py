@@ -6,7 +6,7 @@ auto-moved afterwards: a later shot edit that leaves it in a bad spot only warns
 from . import frames, limits
 from .chunks import ChunkOpening
 from .issues import Issue
-from .shot_document import read_render_cuts
+from .shot_document import read_render_cuts_frames
 
 
 def _shortest(head):
@@ -31,11 +31,10 @@ def manual_joins(shots_text, total, head, cuts, joins):
     starts = dict(cuts or {})
     for frame in (joins or ()):
         starts.setdefault(frame, ChunkOpening(head))
-    for seconds in read_render_cuts(shots_text):
-        wanted = frames.seconds_to_frames(seconds)
+    for wanted in read_render_cuts_frames(shots_text):
         if wanted >= total:
-            issues.append(Issue("cut_beyond_end", "A manual render cut at %.2fs lies past the end of the project; "
-                                "it is dropped." % seconds))
+            issues.append(Issue("cut_beyond_end", "A manual render cut at frame %d (%.2fs) lies past the end of the "
+                                "project; it is dropped." % (wanted, frames.frames_to_seconds(wanted))))
             continue
         previous = max((frame for frame in starts if frame < wanted), default=0)
         opening = starts.get(previous, ChunkOpening())
@@ -49,15 +48,18 @@ def manual_joins(shots_text, total, head, cuts, joins):
         fits_after = following - join >= _shortest(head)
         if not fits_before or not fits_after:
             if external and not fits_before:
-                issues.append(Issue("cut_too_close", "A manual render cut at %.2fs falls inside the opening source's "
-                                    "reserved prefix; it is dropped." % seconds))
+                issues.append(Issue("cut_too_close", "A manual render cut at frame %d (%.2fs) falls inside the "
+                                    "opening source's reserved prefix; it is dropped."
+                                    % (wanted, frames.frames_to_seconds(wanted))))
             else:
-                issues.append(Issue("cut_dropped", "A manual render cut at %.2fs is too close to the neighbouring "
-                                    "render parts for a part of its own; it is dropped." % seconds))
+                issues.append(Issue("cut_dropped", "A manual render cut at frame %d (%.2fs) is too close to the "
+                                    "neighbouring render parts for a part of its own; it is dropped."
+                                    % (wanted, frames.frames_to_seconds(wanted))))
             continue
         manual.append(join)
         starts[join] = ChunkOpening(head)
         if join != wanted:
-            issues.append(Issue("cut_moved", "A manual render cut sits at %.2fs instead of %.2fs: render parts end "
-                                "on H3's grid." % (frames.frames_to_seconds(join), frames.frames_to_seconds(wanted))))
+            issues.append(Issue("cut_moved", "A manual render cut sits at frame %d (%.2fs) instead of frame %d "
+                                "(%.2fs): render parts end on H3's grid."
+                                % (join, frames.frames_to_seconds(join), wanted, frames.frames_to_seconds(wanted))))
     return tuple(manual), issues

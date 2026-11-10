@@ -1,7 +1,7 @@
 // Timeline: picture track with shots, free audio lanes and the render parts the plan produced.
 // During a mouse drag only the dragged block is moved; the project is written once, on release.
 import { h, icon, tip } from "./h3s_dom.js";
-import { dragTo, reorder, sorted, span, fmt, partColor, r1, isKeyframe, keyframeAt, nextClipStart, cutAt, nearestShotEdge, cutFits } from "./h3s_model.js";
+import { dragTo, reorder, sorted, span, fmt, partColor, r1, isKeyframe, keyframeAt, nextClipStart, cutAt, nearestShotEdge, cutFits, frameLabel } from "./h3s_model.js";
 import { issueLine } from "./h3s_issues.js";
 import { timeView, tickTimes } from "./h3s_time.js";
 import { timelineNavigation, rememberTimeline } from "./h3s_navigation.js";
@@ -190,10 +190,12 @@ export function timelineView(S, actions) {
   // (a shot starting within 2.5 s after it) only warns via the plan issues, so the tooltip says the same.
   const CUT_TIP = "Render cut: drag to move this part boundary; it snaps to a nearby shot edge or planned boundary. Cuts keep the pin and the crossfade and are never moved automatically — a shot starting within 2.5 s after a cut only warns. Double-click or right-click: cut at the nearest shot edge or planned boundary. ✕ (or drag onto a cut at a shot edge) removes; a cut the H3 grid or the neighbours cannot take is reported, not moved.";
   function cutGrip(track, here, next, at) {
-    const has = cutAt(S.renderCuts, at) !== undefined;
-    const snapHere = () => nearestShotEdge(S.shots, at, 0.3, (S.plan?.chunks || []).map((chunk) => chunk.end_s), S.renderCuts, at) ?? at;
+    const fps = S.plan?.fps ?? 24, atF = Math.round(at * fps);
+    const has = cutAt(S.renderCuts, atF) !== undefined;
+    const planEnds = (S.plan?.chunks || []).map((chunk) => chunk.end_s);
+    const snapHere = () => nearestShotEdge(S.shots, at, fps, planEnds, S.renderCuts, atF) ?? atF;
     const grip = h("span", { class: has ? "h3s-grip cut has" : "h3s-grip cut", style: { left: pct(at) }, title: CUT_TIP,
-      role: "button", tabindex: "0", "aria-label": `Render cut at ${fmt(at)}` });
+      role: "button", tabindex: "0", "aria-label": `Render cut at frame ${frameLabel(atF, fps)}` });
     grip.onpointerdown = (event) => {
       if (event.target?.closest?.(".h3s-cut-x")) return;   // the ✕ handles its own click; a drag here would swallow it
       event.stopPropagation(); event.preventDefault();
@@ -204,18 +206,19 @@ export function timelineView(S, actions) {
       const line = h("span", { class: "h3s-cut-line", style: { left: pct(at) } }); track.append(line);
       handle.onpointermove = (move) => {
         let sec = Math.max(here.start_s + 0.2, Math.min(next.end_s - 0.2, r1(at + (move.clientX - x0) / width * axis)));
-        const edge = nearestShotEdge(S.shots, sec, 0.3, (S.plan?.chunks || []).map((chunk) => chunk.end_s), S.renderCuts, at);
-        if (edge !== null) sec = edge;
-        target = sec; line.style.left = pct(sec);
-        info.textContent = `Cut at ${fmt(sec)}${edge !== null ? " (nearby boundary)" : ""}${cutFits(here, next, S.plan?.pin_frames ?? 5, at, sec) ? "" : " · the neighbours cannot take a cut here"} · release to set`;
+        const edge = nearestShotEdge(S.shots, sec, fps, planEnds, S.renderCuts, atF);
+        if (edge !== null) sec = edge / fps;
+        target = Math.round(sec * fps); line.style.left = pct(sec);
+        const join = cutFits(here, next, S.plan?.pin_frames ?? 5, atF, target);
+        info.textContent = `Frame ${frameLabel(join ?? target, fps)}${edge !== null ? " (nearby boundary)" : ""}${join === null ? " · the neighbours cannot take a cut here" : ""} · release to set`;
       };
       const finish = (cancelled) => {
         handle.onpointermove = handle.onpointerup = handle.onpointercancel = null;
         line.remove(); info.textContent = DEFAULT_HINT; actions.endPointer();
         if (cancelled || target === null) return;
         const other = cutAt(S.renderCuts, target);
-        if (other !== undefined && Math.abs(other - at) > 0.05) actions.removeRenderCut(other);   // drag onto a neighbour's cut: take it away
-        else if (Math.abs(target - at) > 0.05) actions.setRenderCut(target);
+        if (other !== undefined && Math.abs(other - atF) > 2) actions.removeRenderCut(other);   // drag onto a neighbour's cut: take it away
+        else if (Math.abs(target - atF) > 2) actions.setRenderCut(target);
       };
       handle.onpointerup = () => finish(false);
       handle.onpointercancel = handle.onlostpointercapture = () => finish(true);
@@ -225,9 +228,9 @@ export function timelineView(S, actions) {
       if (!["Enter", " "].includes(event.key)) return;
       event.preventDefault(); event.stopPropagation(); actions.setRenderCut(snapHere());
     };
-    if (has) grip.append(h("span", { class: "h3s-cut-x", title: "Remove this render cut", "aria-label": `Remove the render cut at ${fmt(at)}`,
-      role: "button", tabindex: "0", onclick: (event) => { event.stopPropagation(); actions.removeRenderCut(at); },
-      onkeydown: (event) => { if (!["Enter", " "].includes(event.key)) return; event.preventDefault(); event.stopPropagation(); actions.removeRenderCut(at); } }, "✕"));
+    if (has) grip.append(h("span", { class: "h3s-cut-x", title: "Remove this render cut", "aria-label": `Remove the render cut at frame ${frameLabel(atF, fps)}`,
+      role: "button", tabindex: "0", onclick: (event) => { event.stopPropagation(); actions.removeRenderCut(atF); },
+      onkeydown: (event) => { if (!["Enter", " "].includes(event.key)) return; event.preventDefault(); event.stopPropagation(); actions.removeRenderCut(atF); } }, "✕"));
     return grip;
   }
 
@@ -237,7 +240,7 @@ export function timelineView(S, actions) {
     for (const chunk of chunks) {
       const [color, bg] = partColor(chunk.index), hit = chosen && chosen[0] < chunk.end_s && chosen[1] > chunk.start_s;
       track.append(h("div", { class: "h3s-part", style: { left: pct(chunk.start_s), width: pct(chunk.end_s - chunk.start_s), borderColor: color, background: hit ? bg : "#141922" },
-        title: chunk.picture ? `Picture ${chunk.index + 1}: this shot as one picture` : `Part ${chunk.index + 1}: ${chunk.delivered_frames} new frames${chunk.head_frames ? `, with ${chunk.head_frames} preceding frames for continuity` : ""}` },
+        title: chunk.picture ? `Picture ${chunk.index + 1}: this shot as one picture` : `Part ${chunk.index + 1}: ${chunk.delivered_frames} new frames${chunk.head_frames ? `, with ${chunk.head_frames} preceding frames for continuity` : ""}, ends at frame ${frameLabel(chunk.story_end_f, S.plan?.fps ?? 24)}` },
         h("span", { class: "h3s-swatch", style: { background: color } }), `${chunk.picture ? "Picture" : "Part"} ${chunk.index + 1} · ${span(chunk.start_s, chunk.end_s)}`));
     }
     // Pictures output renders one part per shot and ignores render_cuts, so picture boundaries get no grip.

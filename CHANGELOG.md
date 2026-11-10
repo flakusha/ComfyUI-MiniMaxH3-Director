@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **The shot panel's "Compiled share" wraps inside the side card** (user report, 2026-11-10).
+  Selecting a shot showed the compiled share as one line that ran past the node: the side panel's
+  `pre` kept the browser's no-wrap default, while the same text in the Prompts drawer wraps through
+  `.h3s-prompt pre`. The shot panel's own-text/compiled-share `pre`s now set `white-space: pre-wrap`.
+
 - **Render cuts are stored in frames, seconds become the display** (2026-11-10). The shots document now carries
   `render_cuts_f` (whole story frames) instead of `render_cuts` seconds; a grip drag lands exactly where the planner
   cuts, and the ghost-cut case where a snapped boundary rendered as an un-owned grip is gone. Legacy documents that

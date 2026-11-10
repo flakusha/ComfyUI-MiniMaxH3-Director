@@ -178,10 +178,10 @@ function shotShares(S, actions, shot) {
             h("button", { class: "h3s-btn ghost", onclick: () => actions.editShare(null) }, "Cancel")))
         : own
           ? [h("span", { class: "h3s-lbl" }, stale ? "Compiled share (own text outdated)" : "Own text"),
-            h("pre", { style: { margin: 0 } }, stale ? compiled || "(no text)" : own.text),
+            h("pre", { style: { margin: 0, whiteSpace: "pre-wrap" } }, stale ? compiled || "(no text)" : own.text),
             h("div", { class: "h3s-row" }, h("span", { class: "h3s-grow" }),
               h("button", { class: "h3s-btn small", onclick: () => actions.editShare(chunk.index, shot.id, own.text) }, "Edit"))]
-          : [h("span", { class: "h3s-lbl" }, "Compiled share"), h("pre", { style: { margin: 0 } }, compiled || "(no text)"),
+          : [h("span", { class: "h3s-lbl" }, "Compiled share"), h("pre", { style: { margin: 0, whiteSpace: "pre-wrap" } }, compiled || "(no text)"),
             h("div", { class: "h3s-row" }, h("span", { class: "h3s-grow" }),
               h("button", { class: "h3s-btn small", onclick: () => actions.editShare(chunk.index, shot.id, compiled) }, "Edit"))];
       return h("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } }, head, ...[body].flat().filter(Boolean));

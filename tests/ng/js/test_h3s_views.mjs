@@ -162,6 +162,16 @@ function recorder() {
   assert.ok(panel.innerText.includes("That shot is gone"), panel.innerText);
 }
 
+// The selected shot's compiled share wraps inside the side card; a pre keeps the browser's no-wrap default otherwise.
+{
+  const shared = { ...plan, chunks: plan.chunks.map((chunk) => ({ ...chunk,
+    sources: [{ kind: "shot", id: "a", label: "Shot 1", text: "A very long compiled share sentence that has to wrap inside the 360 px side card instead of spilling out of the node." }] })) };
+  const [, panel] = sideView(state({ selected: { kind: "shot", id: "a" }, plan: shared }), recorder().actions);
+  const share = panel.byTag("pre").find((one) => one.innerText.includes("has to wrap"));
+  assert.ok(share, "the compiled share of the selected shot is shown");
+  assert.equal(share.style.whiteSpace, "pre-wrap");
+}
+
 // Each part says what its prompt is made from; a shot chip selects the shot, a shot without text is flagged.
 {
   const { sourcesRow } = await import("../../../js/ng/h3s_prompts.js");

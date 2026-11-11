@@ -19,7 +19,7 @@ function recorder() {
   const calls = [];
   return { calls, actions: new Proxy({}, { get: (_t, name) => (...args) => { calls.push([name, ...args]); } }) };
 }
-const state = (extra = {}) => ({ media: "audio", values: { audio: "song.mp3" }, opts: { lyrics: "" }, usage: "lock", busy: "", els: {}, ...extra });
+const state = (extra = {}) => ({ media: "audio", node: { properties: {} }, values: { audio: "song.mp3" }, opts: { lyrics: "" }, usage: "lock", busy: "", els: {}, ...extra });
 
 // Whisper, Stamp and Transcribe are buttons on the one Lyrics subtab; the hint says when lines reach the prompt.
 {
@@ -94,6 +94,37 @@ assert.equal(deviceNote("cuda:0"), "GPU");
   const busy = lyricsBox(state({ busy: "transcribe" }), actions);
   busy.button("Cancel").onclick();
   assert.deepEqual(calls.at(-1), ["cancel"]);
+}
+
+// The engine dropdown: the choice is the card's action, the default is today's Whisper behaviour, and
+// the button label names the chosen engine without growing a second button.
+{
+  const { actions, calls } = recorder();
+  const plain = lyricsBox(state(), actions);
+  assert.ok(plain.innerText.includes("Timing engine"), plain.innerText);
+  const automatic = plain.byTag("option")[0];
+  assert.equal(automatic.value, "");
+  assert.equal(plain.button("⟳ Time with Whisper").textContent, "⟳ Time with Whisper");
+
+  const engines = [{ value: "whisper", label: "Whisper", available: true },
+    { value: "qwen3", label: "Qwen3-ASR (local)", available: true },
+    { value: "ark", label: "Seed-ASR (cloud)", available: false }];
+  const picked = lyricsBox(state({ node: { properties: { ng_engine: "qwen3" } }, engineChoices: engines }), actions);
+  const select = picked.byTag("select")[0];
+  assert.equal(select.value, "qwen3");
+  select.onchange({ target: { value: "ark" } });
+  assert.deepEqual(calls.at(-1), ["setEngine", "ark"]);
+  assert.equal(picked.button("⟳ Time with Qwen3").textContent, "⟳ Time with Qwen3");
+  const ark = select.find((node) => node.tagName === "OPTION" && node.value === "ark")[0];
+  assert.equal(ark.disabled, true, "an engine that cannot run is greyed out");
+
+  // A saved workflow whose chosen engine became unavailable still reads back: the value stays,
+  // the option is not greyed out for the card that chose it, and the label still names the engine.
+  const lost = lyricsBox(state({ node: { properties: { ng_engine: "ark" } }, engineChoices: engines }), actions);
+  assert.equal(lost.byTag("select")[0].value, "ark");
+  assert.equal(lost.find((node) => node.tagName === "OPTION" && node.value === "ark")[0].disabled, false);
+  assert.equal(lost.button("⟳ Time with Seed-ASR").textContent, "⟳ Time with Seed-ASR");
+  assert.equal(lyricsBox(state({ node: { properties: { ng_engine: "mystery" } } }), actions).button("⟳ Time lyrics").textContent, "⟳ Time lyrics");
 }
 
 console.log("h3c lyrics ok");

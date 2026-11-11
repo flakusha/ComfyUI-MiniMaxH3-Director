@@ -370,8 +370,12 @@ The export codec can still change samples. This avoids short silent tails caused
 **⟳ Time with Whisper** keeps your own words and takes only the times from a local Whisper model (`models/whisper/small.pt`
 or larger; while a render runs it stays on the CPU). Without lines it writes down what it hears. **Stamp line** sets the
 selected line's time by ear while the song plays. Where the card plays exactly (Lock or Copy, on an audio lane, a shot or the
-whole project), each render part gets only the lines sung in it, as `<Subject 1> (S1) sings, <d>[English] …</d>` in the
+whole project), each render part gets only the lines sung in it, as `<Subject 1> (S1) sings, <d>[English] …</d> in the
 shot where they are sung. Measured on the 27 s elf song: Whisper small heard all eight lines in 7 s.
+The **Timing engine** pick on the Lyrics box chooses which backend runs that button per card (the choice is saved with
+the workflow; empty is Whisper, the old default, so older workflows run unchanged): Whisper, Qwen3-ASR (local, when its
+model folders are in place — see Models → Sound) or Seed-ASR (cloud). A backend that cannot run here is listed greyed
+out, and picking one anyway answers with exactly what it needs. The button's label names the chosen engine.
 With `H3_ASR_BACKEND` the automatic choice itself changes (its name shows in the pick), and `H3_ASR_BACKEND=ark` is the
 cloud route as before: the song file must
 be uploaded once to a web address under its file name (`H3_ARK_AUDIO_URL_BASE` is that address; only the file's own

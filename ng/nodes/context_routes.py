@@ -7,7 +7,7 @@ from server import PromptServer
 import comfy.model_management
 
 from ..adapters import control_files, example_media, keys, lyrics_timing, model_files, models, presets, preview_media, waveform
-from ..core import providers
+from ..core import asr, providers
 from ..core.context_build import item_from_widgets
 from ..core.presets import ContextPreset, widget_values
 
@@ -183,6 +183,21 @@ async def model_choices(request):
     wanted = list(model_files.MODELS) if asked == "all" else [name for name in asked.split(",") if name in model_files.MODELS]
     return web.json_response({name: {**model_files.MODELS[name], "files": model_files.names(name), "auto": model_files.find(name)}
                               for name in wanted})
+
+
+@PromptServer.instance.routes.get("/ng/lyrics")
+async def lyrics_engines(request):
+    """What the Audio card's engine dropdown offers, and whether each backend can run here.
+
+    The POST on this path does the timing and already accepts the chosen engine; this only answers
+    the menu, so the card never offers a backend that would only fail. Importing lyrics_timing (above)
+    registers qwen3 and ark in the same registry the POST dispatches through, so availability and
+    dispatch can never drift apart."""
+    engines = []
+    for name, label in (("whisper", "Whisper"), ("qwen3", "Qwen3-ASR (local)"), ("ark", "Seed-ASR (cloud)")):
+        entry = asr.get(name)
+        engines.append({"value": name, "label": label, "available": bool(entry and entry[0]())})
+    return web.json_response({"engines": engines, "default": asr.requested_engine()})
 
 
 @PromptServer.instance.routes.post("/ng/lyrics")

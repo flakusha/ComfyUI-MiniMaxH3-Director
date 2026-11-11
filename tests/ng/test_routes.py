@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import types
 import unittest
@@ -146,3 +147,17 @@ class Routes(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         self.assertTrue(json.loads(response.text)["ok"])
         self.assertEqual(seen["source"], "song.wav")
+
+    async def test_lyrics_engines_route_answers_the_menu_the_dropdown_renders(self):
+        # The GET on the timing path answers only what the card's engine dropdown needs: the same
+        # registry the POST dispatches through decides availability, so menu and dispatch cannot drift.
+        # whisper is always offered, qwen3/ark are greyed out unless their weights or keys exist.
+        with patch.dict(os.environ, {"H3_ARK_API_KEY": "", "H3_ARK_APP_ID": "", "H3_ARK_ACCESS_KEY": ""}):
+            response = await self.context.lyrics_engines(types.SimpleNamespace())
+        body = json.loads(response.text)
+        offered = {entry["value"]: entry for entry in body["engines"]}
+        self.assertEqual(response.status, 200)
+        self.assertTrue(offered["whisper"]["available"])
+        self.assertFalse(offered["ark"]["available"])
+        self.assertIn("available", offered["qwen3"])
+        self.assertEqual(body["default"], "whisper")

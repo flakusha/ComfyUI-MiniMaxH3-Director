@@ -27,37 +27,81 @@ export function deviceNote(device) {
   return name.startsWith("cpu") || !name ? "CPU while a render runs" : "GPU";
 }
 
+// Where the timing engines are: one GET per API for the session (the probe pattern da3Available uses).
+// The route answers what can run here; a failed probe falls back to null, and the dropdown then shows
+// the plain Whisper default only - the old behaviour, never a menu of engines that cannot run.
+const engineProbes = new WeakMap();
+export function engines(api) {
+  if (!engineProbes.has(api)) {
+    const pending = api.fetchApi("/ng/lyrics").then((r) => r.json())
+      .then((data) => Array.isArray(data.engines) && data.engines.length ? data : null).catch(() => null);
+    engineProbes.set(api, pending);
+  }
+  return engineProbes.get(api);
+}
+
+// The card-side plumbing, kept beside the menu code so h3c_card stays under its size lint: the
+// one-time menu probe on attach, and the property write the pick saves through.
+export function wireEngines(api, S, schedule) {
+  engines(api).then((data) => { S.engineChoices = data?.engines; S.engineDefault = data?.default; schedule(); });
+}
+export function storeEngine(node, engine) { node.properties.ng_engine = engine || undefined; node.graph?.change?.(); }
+
+// The one label the timing button carries; Whisper is what the pack has always used, so the default
+// keeps its name, a chosen engine gets its own, and anything unknown reads plain.
+export function engineLabel(engine) {
+  const name = String(engine || "").toLowerCase();
+  if (!name || name === "whisper") return "⟳ Time with Whisper";
+  if (name.startsWith("qwen3")) return "⟳ Time with Qwen3";
+  if (name === "ark" || name === "seed-asr") return "⟳ Time with Seed-ASR";
+  return "⟳ Time lyrics";
+}
+
 // One Lyrics subtab: the card's own words (LRC/Whisper/Stamp) plus the AI transcribe offer.
 // Transcription belongs here, not in a second box: it starts from the existing lyrics and time
 // them, so operating on the same text keeps "what Whisper timed" and "what the AI heard" together.
 export function lyricsBox(S, actions) {
   const text = S.opts.lyrics || "", timed = timedCount(text);
+  const engine = S.node?.properties?.ng_engine || "";
   const lines = String(text).split("\n").filter((line) => line.replace(STAMP, "").trim() && !/^\s*\[la:/i.test(line)).length;
+  const label = engineLabel(engine);
   const editor = h("textarea", { class: "h3c-in", rows: Math.min(12, Math.max(4, lines + 1)), value: text, spellcheck: false, "aria-label": "Lyrics",
-    placeholder: "Paste the lyrics, one line per sung line. ⟳ Time with Whisper adds when each line is sung.",
+    placeholder: `Paste the lyrics, one line per sung line. ${label.replace("⟳ ", "")} adds when each line is sung.`,
     onchange: (event) => actions.setOptions({ lyrics: event.target.value }) });
   S.els.lyrics = editor;
   const sung = ["lock", "copy"].includes(S.usage);
   const note = !text.trim() ? "Optional. Only for a song or speech whose words should be sung or spoken in the video."
     : !sung ? "Sung where this song plays exactly: Lock or Copy here, or a Lock or Copy clip on a Studio audio lane."
-    : `${timed} of ${lines} line(s) timed; each render part gets the lines sung in it.${timed === 0 && lines > 0 ? " Untimed lines are skipped; press \u27F3 Time with Whisper." : ""}`;
-  // The file widget gate covers the file sources; Whisper alone stays lit for a linked sound with no file
+    : `${timed} of ${lines} line(s) timed; each render part gets the lines sung in it.${timed === 0 && lines > 0 ? ` Untimed lines are skipped; press ${label}.` : ""}`;
+  // The file widget gate covers the file sources; timing alone stays lit for a linked sound with no file
   // behind it: unlinked the widget holds the chosen file, linked the mirror of the origin's file
   // (ng_external.js) or nothing until one run materializes it (input/h3-external/). Transcribe and Stamp
-  // need the file itself - one sends the widget, the other plays it - while Whisper answers a file-less link
+  // need the file itself - one sends the widget, the other plays it - while the timing answers a file-less link
   // with the run to do, so only its button stays lit there.
   const heard = S.values.audio || "";
   const whisperHeard = heard || (S.external?.linked ? "linked" : "");
   const transcript = transcriptRow(S, actions);
+  // The engine pick rides the same row as the Models choices (properties, per card): empty is the old
+  // Whisper default, byte for byte. Engines the backend cannot run stay listed but greyed out, so a
+  // saved workflow's choice still reads back instead of vanishing from the menu.
+  const known = S.engineChoices || [];
+  const enginePick = h("select", { class: "h3c-in", "aria-label": "Lyric timing engine",
+    title: "Which speech-to-text backend times the lines. Greyed ones cannot run here; picking one anyway answers with what it needs.",
+    onchange: (event) => actions.setEngine(event.target.value) },
+    h("option", { value: "" }, `Automatic${S.engineDefault && S.engineDefault !== "whisper" ? `: ${S.engineDefault}` : " (Whisper)"}`),
+    ...known.map((entry) => h("option", { value: entry.value, disabled: !entry.available && entry.value !== engine },
+      entry.label + (entry.available || entry.value === engine ? "" : " (unavailable)"))));
+  enginePick.value = known.some((entry) => entry.value === engine) ? engine : "";
   return h("div", { class: "h3c-box" },
     h("div", { class: "h3c-cap" }, "Lyrics", h("span", { class: "h3c-grow" }),
       h("button", { class: "h3c-btn ai", disabled: !heard || Boolean(S.busy),
         title: "Let the connected AI provider write down the words of this sound (plain text, no times). Your lyrics stay until you accept.",
         onclick: () => actions.transcribe() }, S.busy === "transcribe" ? "Transcribing …" : "✦ Transcribe with AI"),
-      h("button", { class: "h3c-btn", disabled: !whisperHeard || Boolean(S.busy), title: "Time each line with the local Whisper model; without lines it writes down what it hears",
-        onclick: () => actions.timeLyrics() }, S.busy === "lyrics" ? "Listening …" : "⟳ Time with Whisper"),
+      h("button", { class: "h3c-btn", disabled: !whisperHeard || Boolean(S.busy), title: "Time each line with the chosen engine; without lines it writes down what it hears",
+        onclick: () => actions.timeLyrics() }, S.busy === "lyrics" ? "Listening …" : label),
       h("button", { class: "h3c-btn", disabled: !heard || Boolean(S.busy), title: "Play the song and press at the start of the selected line",
         onclick: () => actions.stampLyric() }, "Stamp line")),
+    h("div", { class: "h3c-row" }, h("span", { class: "h3c-lbl" }, "Timing engine"), enginePick),
     editor, transcript, h("span", { class: "h3c-hint" }, note));
 }
 

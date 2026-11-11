@@ -5,7 +5,7 @@ import { ensureCardStyle } from "./h3c_style.js";
 import { TEMPLATES, usableFields, offerFor } from "./h3c_model.js";
 import { CARD_MODELS, modelState, da3Available } from "./ng_models.js";
 import { mediaURL, wirePlayback, moveHeads } from "./h3c_media.js";
-import { stampLine, deviceNote } from "./h3c_lyrics.js";
+import { stampLine, deviceNote, storeEngine, wireEngines } from "./h3c_lyrics.js";
 import { values, applyValues, newContextId, ownIdentity, analysisFingerprint, request, followNodeWidth } from "./ng_widgets.js";
 import { contextOptions, setOptions, selectedRoles } from "./ng_context_controls.js";
 import { hideNative } from "./ng_editor_fields.js";
@@ -75,7 +75,7 @@ function attach(node, media) {
     S.els.mask = h("video", { controls: true, preload: "metadata", muted: true });
     da3Available(api).then((available) => { S.da3 = available; schedule(); });
   }
-  if (media === "audio") { S.els.audio = h("audio", { preload: "metadata" }); wirePlayback(S, () => schedule(), S.els.audio, () => moveHeads(root, S.els.audio)); }
+  if (media === "audio") { S.els.audio = h("audio", { preload: "metadata" }); wirePlayback(S, () => schedule(), S.els.audio, () => moveHeads(root, S.els.audio)); wireEngines(api, S, schedule); }
   if (media === "video") wirePlayback(S, () => {}, S.els.video, () => moveHeads(root, S.els.video));
   let source = null, controller = null, removed = false, timer = null;
 
@@ -323,12 +323,13 @@ function attach(node, media) {
     setModel(purpose, file) { node.properties.ng_models = { ...node.properties.ng_models, [purpose]: file || undefined }; node.graph?.change?.(); render(); },
     // Lyrics: Whisper times the lines that are there (or writes down what it hears); the words stay the user's.
     // Linked with no file behind it, the card sends `linked`: one run saves the sound, then Whisper hears it.
+    setEngine(engine) { storeEngine(node, engine); render(); },
     async timeLyrics() {
       if (S.busy) return;
       S.busy = "lyrics"; say("");
       try {
         const data = await request(api, "/ng/lyrics", { source: values(node).audio, lyrics: S.els.lyrics?.value ?? contextOptions(node).lyrics ?? "",
-          model: node.properties.ng_models?.whisper || "", linked: externalLinked() });
+          model: node.properties.ng_models?.whisper || "", engine: node.properties.ng_engine || "", linked: externalLinked() });
         setOptions(node, { lyrics: data.lrc });
         say(`Timed ${data.lines} line(s) (${data.language}, ${deviceNote(data.device)}). Check them while the song plays.`);
       } catch (error) { say(`Lyrics: ${error.message}`, true); }

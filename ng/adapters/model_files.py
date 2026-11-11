@@ -13,6 +13,16 @@ with open(PATH, encoding="utf-8") as file:
     MODELS = json.load(file)
 
 
+def dir_names(folder):
+    """The registered model *directories* of one folder (dot-dirs excluded), for `"dirs": true` purposes.
+    This ComfyUI's get_filename_list returns files only (relative paths), so the roots are scanned directly."""
+    if folder not in folder_paths.folder_names_and_paths:
+        return []
+    return [d for root in folder_paths.get_folder_paths(folder) if os.path.isdir(root)
+            for d in os.listdir(root)
+            if os.path.isdir(os.path.join(root, d)) and not d.startswith(".")]
+
+
 def names(purpose):
     """The files of the purpose's folder. When ComfyUI knows the folder - its own under models/, or one registered
     through extra_model_paths.yaml - its list is used, so files on a registered extra path show up too. Whisper's,
@@ -22,12 +32,9 @@ def names(purpose):
     folder = MODELS[purpose]["folder"]
     want_dirs = bool(MODELS[purpose].get("dirs"))
     if folder in folder_paths.folder_names_and_paths:
-        listed = folder_paths.get_filename_list(folder)
-        if not want_dirs:
-            return listed
-        roots = folder_paths.get_folder_paths(folder)
-        return [name for name in listed
-                if any(os.path.isdir(os.path.join(root, name)) for root in roots)]
+        if want_dirs:
+            return sorted(dir_names(folder))
+        return folder_paths.get_filename_list(folder)
     root = os.path.join(folder_paths.models_dir, folder)
     if not os.path.isdir(root):
         return []

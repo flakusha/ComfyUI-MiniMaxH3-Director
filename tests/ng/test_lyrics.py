@@ -4,9 +4,15 @@ User's 27 s elf song (2026-10-05): all eight lines were in each of the three 9 s
 the first was a sung line at all.
 """
 import json
+import os
+import sys
 import unittest
 
-from _pack import module
+from _pack import COMFY_ROOT, module, stub_prompt_server
+
+if COMFY_ROOT not in sys.path:
+    sys.path.insert(0, COMFY_ROOT)
+stub_prompt_server()   # the chapter-mark and audio-mux tests import nodes; they need a PromptServer to register against
 
 ctx, opts = module("ng.core.context"), module("ng.core.context_options")
 chunks, project, lyrics = module("ng.core.chunks"), module("ng.core.project"), module("ng.core.lyrics")
@@ -205,6 +211,51 @@ class Captions(unittest.TestCase):
         self.assertEqual(asr.qwen3_dirs(lambda folder: []), (None, None))
         self.assertEqual(asr.qwen3_dirs(None), (None, None))
 
+    def test_qwen3_discovery_lists_directories_not_files(self):
+        # get_filename_list returns files only (even .cache/huggingface/.gitignore), so dir purposes scan the roots.
+        import os
+        import tempfile
+        model_files = module("ng.adapters.model_files")
+        with tempfile.TemporaryDirectory() as root:
+            os.makedirs(os.path.join(root, "Qwen3-ASR-1.7B-hf"))
+            os.makedirs(os.path.join(root, ".cache", "huggingface"))
+            open(os.path.join(root, ".cache", "huggingface", ".gitignore"), "w").close()
+            with unittest.mock.patch.object(model_files.folder_paths, "folder_names_and_paths", {"asr": []}), \
+                    unittest.mock.patch.object(model_files.folder_paths, "get_folder_paths", return_value=[root]):
+                self.assertEqual(model_files.dir_names("asr"), ["Qwen3-ASR-1.7B-hf"])
+                self.assertEqual(model_files.names("qwen3_asr"), ["Qwen3-ASR-1.7B-hf"])
+                self.assertEqual(model_files.find("qwen3_asr"), "Qwen3-ASR-1.7B-hf")
+                self.assertEqual(model_files.find("qwen3_aligner"), None)
+
+    def test_qwen3_empty_transcript_skips_the_aligner(self):
+        # Noise can transcribe to nothing: no aligner load, no words, no crash.
+        import sys
+        import types
+        timing = module("ng.adapters.lyrics_timing")
+        stub = types.ModuleType("transformers")
+        stub.__version__ = "5.19.0"
+        aligner_loads = []
+        class FakeModel:
+            device = "cpu"
+            dtype = None
+            def generate(self, **kwargs):
+                return [[0]]
+        class FakeProcessor:
+            def apply_transcription_request(self, samples, language=None, prompt=None):
+                return {"input_features": samples}
+            def batch_decode(self, tokens, skip_special_tokens=True):
+                return ["assistant\nlanguage None<asr_text>"]
+        stub.AutoModelForMultimodalLM = types.SimpleNamespace(from_pretrained=lambda *a, **k: FakeModel())
+        stub.AutoModelForTokenClassification = types.SimpleNamespace(
+            from_pretrained=lambda *a, **k: aligner_loads.append(1))
+        stub.AutoProcessor = types.SimpleNamespace(from_pretrained=lambda *a, **k: FakeProcessor())
+        with unittest.mock.patch.dict(sys.modules, {"transformers": stub}), \
+                unittest.mock.patch.object(timing, "_qwen3_dirs", return_value=("asr-dir", "aligner-dir")):
+            words, kept = timing._qwen3_words([0.0] * 1600, [], "en", "cpu")
+        self.assertEqual(words, [])
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(aligner_loads, [])
+
     def test_qwen3_factory_returns_whisper_shaped_timings_with_stubbed_transformers(self):
         # No weights on this box: stub transformers + folders, assert the factory returns the same
         # shape time_lyrics returns (lrc/language/lines/heard_words) from the aligner words.
@@ -215,10 +266,13 @@ class Captions(unittest.TestCase):
         heard = [("hello", 0.0, 0.5), ("world", 0.6, 1.0)]
         stub = types.ModuleType("transformers")
         stub.__version__ = "5.19.0"
+        class FakeBatchFeature(dict):
+            def to(self, device, dtype=None):
+                return self
         class FakeModel:
             device = "cpu"
-            def __init__(self, text=""):
-                self.text = text
+            dtype = None
+            config = types.SimpleNamespace(timestamp_token_id=7)
             def generate(self, **kwargs):
                 return [[0]]
             def __call__(self, **kwargs):
@@ -227,11 +281,12 @@ class Captions(unittest.TestCase):
             def apply_transcription_request(self, samples, language=None, prompt=None):
                 return {"input_features": samples}
             def batch_decode(self, tokens, skip_special_tokens=True):
-                return ["hello world"]
+                return ["assistant\nlanguage None<asr_text>hello world"]
             def prepare_forced_aligner_inputs(self, part, text, lang):
-                return {"input_values": part}
-            def decode_forced_alignment(self, logits, part, text):
-                return [{"text": word, "start_time": start, "end_time": end} for word, start, end in heard]
+                return FakeBatchFeature(input_ids=[[1]]), [["hello", "world"]]
+            def decode_forced_alignment(self, logits, input_ids, word_lists, timestamp_token_id):
+                assert timestamp_token_id == 7
+                return [[{"text": word, "start_time": start, "end_time": end} for word, start, end in heard]]
         stub.AutoModelForMultimodalLM = types.SimpleNamespace(from_pretrained=lambda *a, **k: FakeModel())
         stub.AutoModelForTokenClassification = types.SimpleNamespace(from_pretrained=lambda *a, **k: FakeModel())
         stub.AutoProcessor = types.SimpleNamespace(from_pretrained=lambda *a, **k: FakeProcessor())
@@ -239,7 +294,6 @@ class Captions(unittest.TestCase):
         with unittest.mock.patch.dict(sys.modules, {"transformers": stub}), \
                 unittest.mock.patch.object(timing, "_qwen3_dirs", return_value=("asr-dir", "aligner-dir")), \
                 unittest.mock.patch.object(timing, "decode_audio") as decode:
-            import numpy as np
             import torch
             decode.return_value = (torch.zeros(1, 16000), 16000)
             result = timing._qwen3_transcribe("song.mp3", "[00:00.00] hello world", "cpu")

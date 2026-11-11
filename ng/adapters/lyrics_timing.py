@@ -125,9 +125,11 @@ def _load_model(path, device):
 
 
 def _model_names(folder):
-    """Registered model names of one folder, for the ASR backend probe (core stays ComfyUI-free)."""
+    """Registered model *directories* of one folder, for the ASR backend probe (core stays ComfyUI-free).
+    The Qwen3 pair are HF dirs under models/asr, and get_filename_list lists files only."""
     try:
-        return list(folder_paths.get_filename_list(folder)) if folder in folder_paths.folder_names_and_paths else []
+        from . import model_files
+        return model_files.dir_names(folder)
     except Exception:
         return []
 
@@ -146,14 +148,21 @@ def _qwen3_dirs():
     return full(asr_dir), full(aligner_dir)
 
 
+def _to_model(value, device, dtype):
+    """Onto the model's device; floating tensors also onto its dtype (bf16 weights reject fp32 features)."""
+    if not hasattr(value, "to"):
+        return value
+    return value.to(device, dtype) if getattr(value, "is_floating_point", lambda: False)() else value.to(device)
+
+
 def _qwen3_align_window(aligner_model, aligner_processor, part, heard_text, language, start_s):
     """[(word, start_s, end_s)] for one aligner window (<= 5 minutes): file seconds via start_s."""
-    align_inputs = aligner_processor.prepare_forced_aligner_inputs(part, heard_text, language or "en")
-    moved = {key: value.to(aligner_model.device) if hasattr(value, "to") else value
-             for key, value in align_inputs.items()}
-    logits = aligner_model(**moved).logits
+    align_inputs, word_lists = aligner_processor.prepare_forced_aligner_inputs(part, heard_text, language or "en")
+    logits = aligner_model(**align_inputs.to(aligner_model.device, aligner_model.dtype)).logits
+    decoded = aligner_processor.decode_forced_alignment(logits, align_inputs["input_ids"], word_lists,
+                                                        aligner_model.config.timestamp_token_id)[0]
     return [(entry["text"], float(entry["start_time"]) + start_s, float(entry["end_time"]) + start_s)
-            for entry in aligner_processor.decode_forced_alignment(logits, part, heard_text)]
+            for entry in decoded]
 
 
 def _qwen3_words(samples, known, language, device):
@@ -176,9 +185,12 @@ def _qwen3_words(samples, known, language, device):
         asr_processor = transformers.AutoProcessor.from_pretrained(asr_dir)
         request = asr_processor.apply_transcription_request(samples, language=language or None,
                                                             prompt=" ".join(known) or None)
-        moved = {key: value.to(asr_model.device) if hasattr(value, "to") else value for key, value in request.items()}
+        moved = {key: _to_model(value, asr_model.device, asr_model.dtype) for key, value in request.items()}
         transcript = asr_model.generate(**moved)
         heard_text = asr_processor.batch_decode(transcript, skip_special_tokens=True)[0]
+        heard_text = heard_text.split("<asr_text>", 1)[1].strip() if "<asr_text>" in heard_text else heard_text.strip()
+        if not heard_text:
+            return [], (asr_model,)
         aligner_model = transformers.AutoModelForTokenClassification.from_pretrained(aligner_dir, dtype="auto",
                                                                                      device_map=asr_model.device)
         aligner_processor = transformers.AutoProcessor.from_pretrained(aligner_dir)

@@ -341,6 +341,40 @@ class Captions(unittest.TestCase):
         self.assertNotIn("timestamps", prompt.lower())
 
 
+class Ark(unittest.TestCase):
+    ANSWER = {"audio_info": {"duration": 2000},
+              "result": {"utterances": [{"text": "hello world", "start_time": 100, "end_time": 1900,
+                                         "words": [{"text": "hello", "start_time": 100, "end_time": 900},
+                                                   {"text": "world", "start_time": 1000, "end_time": 1900}]}]}}
+
+    def test_ark_factory_returns_whisper_shaped_timings_from_a_canned_answer(self):
+        # No keys on this box: stub the submit+poll network call, assert the factory returns the same
+        # shape time_lyrics returns (lrc/language/lines/heard_words) from the answer's word times.
+        from unittest import mock
+        timing = module("ng.adapters.lyrics_timing")
+        ark = module("ng.adapters.ark_asr")
+        asr = module("ng.core.asr")
+        env = {"H3_ARK_API_KEY": "test-key", "H3_ARK_AUDIO_URL_BASE": "http://bucket.example/songs/"}
+        with mock.patch.dict(os.environ, env), mock.patch.object(ark, "_recognize", return_value=self.ANSWER):
+            result = timing.time_lyrics("song.mp3", "[la:English]\nhello world\n", "cpu", engine="ark")
+        self.assertEqual(result["heard_words"], 2)
+        self.assertEqual(result["lines"], 1)
+        self.assertEqual(result["language"], "English")
+        self.assertIn("[00:00.10] hello world", result["lrc"])
+        self.assertIs(asr.get("ark")[1], ark.ark_transcribe)
+        self.assertIs(asr.get("seed-asr")[1], ark.ark_transcribe)
+
+    def test_ark_names_the_missing_variables(self):
+        from unittest import mock
+        ark = module("ng.adapters.ark_asr")
+        empty = {"H3_ARK_API_KEY": "", "H3_ARK_APP_ID": "", "H3_ARK_ACCESS_KEY": ""}
+        with mock.patch.dict(os.environ, empty):
+            with self.assertRaisesRegex(ValueError, "H3_ARK_API_KEY"):
+                ark.ark_transcribe("song.mp3", "", "cpu")
+        with mock.patch.dict(os.environ, {"H3_ARK_API_KEY": "k", "H3_ARK_AUDIO_URL_BASE": ""}):
+            with self.assertRaisesRegex(ValueError, "H3_ARK_AUDIO_URL_BASE"):
+                ark.ark_transcribe("song.mp3", "", "cpu")
+
 class Look(unittest.TestCase):
     def test_the_prompt_is_not_pasted_into_every_part_once_shots_exist(self):
         result = plan(doc([shot("s1", 0, 27)], look="Dark gothic fantasy, cinematic anime style."), ())

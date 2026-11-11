@@ -69,6 +69,14 @@ Qwen3-ASR is the alternative hearer: `Qwen3-ASR-0.6B-hf` hears the words (traine
 `H3_ASR_BACKEND=qwen3`; without it (or without the folders) the card stays on Whisper. Needs
 `transformers >= 5.13` in ComfyUI's Python.
 
+Doubao Seed-ASR (cloud, opt-in) needs no download at all: it is ByteDance's recorded-file recognition on
+Volcengine (`volc.seedasr.auc`), strong on Chinese and English songs. The API only accepts an audio URL, so upload
+the song once to a web address under its file name (a Volcengine TOS bucket works; the console
+is Volcengine's China cloud, account and keys at console.volcengine.com), point `H3_ARK_AUDIO_URL_BASE` there, set
+`H3_ARK_API_KEY` (new console) or `H3_ARK_APP_ID` + `H3_ARK_ACCESS_KEY` (legacy console), and opt in with
+`H3_ASR_BACKEND=ark`. Audio hours cost about ¥0.7–0.8 in resource packs, with a free trial quota. Whisper and
+Qwen3-ASR stay the local defaults; without the variables the card keeps using them.
+
 ## Example files
 
 The pictures, voice, song and videos of the example workflows come with the node pack (`example_media`). When you open

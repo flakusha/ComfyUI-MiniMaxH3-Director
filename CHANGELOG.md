@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Doubao Seed-ASR 2.0 times lyrics in the cloud, opt-in** (2026-11-11). `H3_ASR_BACKEND=ark` sends the song's URL to
+  Volcengine's recorded-file recognition (`volc.seedasr.auc`, submit + poll) instead of running Whisper: the user
+  uploads the song once to any web address (`H3_ARK_AUDIO_URL_BASE`, the card's file name is appended), keys come from
+  the environment (`H3_ARK_API_KEY`, or legacy `H3_ARK_APP_ID` + `H3_ARK_ACCESS_KEY`), the typed lines ride along as
+  hotwords, and the returned per-word times feed the same `lyrics.align`. Whisper stays the default and the fallback.
+  No model files, so the Models menu gains nothing; wire format and parsing are proven against a local fake of the two
+  endpoints (a real API call needs keys and remains unverified).
+
 - **The shot panel's "Compiled share" wraps inside the side card** (user report, 2026-11-10).
   Selecting a shot showed the compiled share as one line that ran past the node: the side panel's
   `pre` kept the browser's no-wrap default, while the same text in the Prompts drawer wraps through

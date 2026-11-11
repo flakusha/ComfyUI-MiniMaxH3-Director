@@ -372,6 +372,13 @@ or larger; while a render runs it stays on the CPU). Without lines it writes dow
 selected line's time by ear while the song plays. Where the card plays exactly (Lock or Copy, on an audio lane, a shot or the
 whole project), each render part gets only the lines sung in it, as `<Subject 1> (S1) sings, <d>[English] …</d>` in the
 shot where they are sung. Measured on the 27 s elf song: Whisper small heard all eight lines in 7 s.
+With `H3_ASR_BACKEND` the automatic choice itself changes (its name shows in the pick), and `H3_ASR_BACKEND=ark` is the
+cloud route as before: the song file must
+be uploaded once to a web address under its file name (`H3_ARK_AUDIO_URL_BASE` is that address; only the file's own
+name is appended) and a key set
+(`H3_ARK_API_KEY`, or the legacy `H3_ARK_APP_ID` + `H3_ARK_ACCESS_KEY`); the typed lines ride along as hotwords, the
+heard words come back with per-word times and your lines keep their own words. GUIDE chapter 2 has the account and
+price notes; Whisper stays the default whenever the variables are missing.
 The card's **captions** output carries the same words as story-time LRC (seconds in the video the card
 plays, not the file); **NG Save Captions** writes them next to the saved video as `.srt` (and optionally
 `.lrc`) under one name — wire it with the same filename prefix as SaveVideo.

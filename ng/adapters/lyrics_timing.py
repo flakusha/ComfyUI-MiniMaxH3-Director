@@ -233,6 +233,7 @@ from ..core import asr as _asr_registry
 _asr_registry.register("qwen3", _asr_registry._qwen3_available, _qwen3_transcribe)
 _asr_registry.register("qwen3-asr", _asr_registry._qwen3_available, _qwen3_transcribe)
 
+from . import ark_asr as _ark_asr  # noqa: F401 -- importing registers the Ark cloud backend (H3_ASR_BACKEND=ark)
 
 def _samples(source):
     """Moved inline into time_lyrics (R5); this alias stays for old callers."""

@@ -124,9 +124,10 @@ def _load_model(path, device):
     return _load_safetensors(path, device) if _is_safetensors(path) else whisper.load_model(path, device=device)
 
 
-def _model_names(folder):
+def model_names(folder):
     """Registered model *directories* of one folder, for the ASR backend probe (core stays ComfyUI-free).
-    The Qwen3 pair are HF dirs under models/asr, and get_filename_list lists files only."""
+    The Qwen3 pair are HF dirs under models/asr, and get_filename_list lists files only. Public: the
+    /ng/lyrics GET passes the same lister through select, so menu and dispatch cannot drift."""
     try:
         from . import model_files
         return model_files.dir_names(folder)
@@ -137,7 +138,7 @@ def _model_names(folder):
 def _qwen3_dirs():
     """(asr HF dir, aligner HF dir) under models/asr, chosen dir or first match."""
     from ..core import asr
-    asr_dir, aligner_dir = asr.qwen3_dirs(_model_names)
+    asr_dir, aligner_dir = asr.qwen3_dirs(model_names)
     if asr_dir is None or aligner_dir is None:
         raise ValueError("Qwen3-ASR needs its two HF folders under models/asr (Qwen3-ASR-0.6B-hf + "
                          "Qwen3-ForcedAligner-0.6B-hf); unset H3_ASR_BACKEND to use Whisper.")
@@ -250,7 +251,7 @@ def time_lyrics(source, text, device, chosen="", engine=None):
     request.json(). The ASR backend is picked by `ng.core.asr.select` (P1.5): Whisper is the clock either way,
     an optional backend (Qwen3-ASR + ForcedAligner) only speaks when its weights and imports are present."""
     from ..core import asr
-    name, factory = asr.select(engine, list_names=_model_names)
+    name, factory = asr.select(engine, list_names=model_names)
     if name != "whisper":
         return factory(source, text, device, chosen=chosen)
     if whisper is None:

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **"Qwen3-ASR (local)" shows as unavailable with the models in place** (user report, 2026-11-11).
+  The Audio card's engine dropdown asks `GET /ng/lyrics`, and that route probed each backend with a
+  bare `available()` - but the Qwen3 probe reads its two HF folders through the model-dir lister the
+  timing POST passes into `select`, and a bare call sees no folders at all, so the entry stayed greyed
+  out no matter what sat under `models/asr`. The route now answers availability through `select` with
+  the same lister (`lyrics_timing.model_names`), so the menu offers exactly what a timing call would
+  pick. Transformers 5.13+ was never the problem (5.19.0 here); the UI needs a page reload to re-probe.
+
 - **Doubao Seed-ASR 2.0 times lyrics in the cloud, opt-in** (2026-11-11). `H3_ASR_BACKEND=ark` sends the song's URL to
   Volcengine's recorded-file recognition (`volc.seedasr.auc`, submit + poll) instead of running Whisper: the user
   uploads the song once to any web address (`H3_ARK_AUDIO_URL_BASE`, the card's file name is appended), keys come from

@@ -190,13 +190,14 @@ async def lyrics_engines(request):
     """What the Audio card's engine dropdown offers, and whether each backend can run here.
 
     The POST on this path does the timing and already accepts the chosen engine; this only answers
-    the menu, so the card never offers a backend that would only fail. Importing lyrics_timing (above)
-    registers qwen3 and ark in the same registry the POST dispatches through, so availability and
-    dispatch can never drift apart."""
+    the menu, so the card never offers a backend that would only fail. Availability is answered by
+    `select` itself, with the same model-dir lister the POST passes (the Qwen3 probe reads registered
+    folders through it; a bare `available()` call sees no folders and reports False forever), so the
+    menu can never drift apart from what a timing call would really pick."""
     engines = []
     for name, label in (("whisper", "Whisper"), ("qwen3", "Qwen3-ASR (local)"), ("ark", "Seed-ASR (cloud)")):
-        entry = asr.get(name)
-        engines.append({"value": name, "label": label, "available": bool(entry and entry[0]())})
+        chosen, _factory = asr.select(name, list_names=lyrics_timing.model_names)
+        engines.append({"value": name, "label": label, "available": chosen == name})
     return web.json_response({"engines": engines, "default": asr.requested_engine()})
 
 

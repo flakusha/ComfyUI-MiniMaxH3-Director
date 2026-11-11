@@ -161,3 +161,13 @@ class Routes(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(offered["ark"]["available"])
         self.assertIn("available", offered["qwen3"])
         self.assertEqual(body["default"], "whisper")
+
+        # The Qwen3 probe sees its HF dirs only through the same lister the POST passes to select
+        # (a bare available() call sees no folders, so a working backend stayed greyed out).
+        with patch.object(self.context.lyrics_timing, "model_names",
+                          lambda folder: ["Qwen3-ASR-1.7B-hf", "Qwen3-ForcedAligner-0.6B-hf"]), \
+                patch.object(self.context.asr, "transformers_version_ok", return_value=True):
+            response = await self.context.lyrics_engines(types.SimpleNamespace())
+        offered = {entry["value"]: entry for entry in json.loads(response.text)["engines"]}
+        self.assertTrue(offered["qwen3"]["available"])
+        self.assertFalse(offered["ark"]["available"])

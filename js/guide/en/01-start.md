@@ -51,4 +51,4 @@ Then change the shots, or go on with Workflow 2 for your own character.
 - **Card**: a Context node with one picture, video, sound or text. Its name is used as `@Name` in shots.
 - **Mode**: *References* (Ref2VA, your pictures and voices as references) or *First / last frame* (FL2VA, shots start or
   end on your pictures). See chapter *References or first frames*.
-- **Turbo**: renders with a turbo LoRA in 6–8 steps instead of 20, about three times faster.
+- **Faster LoRAs**: optional turbo LoRAs render in 4–8 steps instead of 20, about three times faster (chapter 2).

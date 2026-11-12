@@ -101,16 +101,6 @@ const shot = (id, start, end) => ({ id, start, end, text: id, media: [], spoken:
   assert.deepEqual(model.chunkBudget(refs(["first_frame", "frame"], ["last_frame", "frame"])), { image: 2, video: 0, audio: 0, total: 2 });
 }
 
-// A known turbo LoRA is found in the shared profile table whatever its folder and case; the user picks the LoRA, nothing is preset.
-{
-  const { readFileSync } = await import("node:fs");
-  const table = JSON.parse(readFileSync(new URL("../../../js/ng/turbo_profiles.json", import.meta.url), "utf8"));
-  assert.equal(model.turboProfile(table, "MiniMax-H3\\minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors").steps, 6);
-  assert.equal(model.turboProfile(table, "minimax-h3/MINIMAX_H3_TURBO_4STEP_CKPT500_PRUNED_COMFYUI.safetensors").steps, 8);
-  assert.equal(model.turboProfile(table, "flux2/Flux2TurboComfyv2.safetensors"), null);
-  assert.equal(model.turboProfile(table, "none"), null);
-}
-
 // "+ Shot" always finds a place: room after the selected shot, else any free room, else it halves a shot.
 {
   const at = (id, start, end) => ({ id, start, end });

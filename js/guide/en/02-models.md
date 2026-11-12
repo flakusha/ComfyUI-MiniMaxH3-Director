@@ -20,15 +20,21 @@ Models**. Your files may have other names or lie in a subfolder; then choose the
 Only the model a render part needs is loaded. A text-only project never loads the References model; a project with
 character pictures never loads the First / last frame model.
 
-## Turbo
+## Optional faster LoRAs (turbo)
 
 | What | File (click to download) | Folder | Size |
 |---|---|---|---|
-| Turbo LoRA: First / last frame | [minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors) | `models/loras` | 1.8 GB |
-| Turbo LoRA: References | [minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors) | `models/loras` | 1.8 GB |
+| Turbo LoRA: First / last frame v1.0 | [minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors) | `models/loras` | 1.8 GB |
+| Turbo LoRA: References v0.1 | [minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors) | `models/loras` | 1.8 GB |
+| Turbo LoRA: First / last frame v1.2 | [minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors) | `models/loras` | 1.8 GB |
 
-They are chosen in **Settings → Turbo**. A known LoRA brings its own steps, sampler and scheduler (with 4 steps the
-References LoRA leaves a white veil; 6 are clean). Other LoRAs work too; then the Director's own steps are used.
+The Director has no turbo switch: if you want one of these, insert ComfyUI's own **LoraLoaderModelOnly** between the
+model loader and the Director, and set **Steps**, **Sampler** and **Scheduler** in Settings to what the LoRA wants.
+Measured values (res_multistep + simple unless noted): v1.0 FL2VA **8 steps** — 4 paint brush-stroke artefacts and the
+second part's sound falls silent; v1.2 FL2VA **4 steps** (6 look the same at 1.4× the time); References v0.1 **6 steps** —
+nominal 4 leave a white veil (black level 0.024, 6 are clean at 0.002); Taomate **3 steps**. The `ckpt500` turbo wants
+**8 steps, Euler + Beta** — and only the `pruned` build fits the pruned H3 models: the non-pruned one carries full-model
+AdaLN pieces that mismatch and log load errors. CFG stays 1.
 
 ## Control videos and masks (Workflows 7 and 8)
 

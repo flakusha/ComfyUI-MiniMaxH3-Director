@@ -1,8 +1,8 @@
 // The gear: every setting a first video does not need, in one window instead of in the Studio's page. The page keeps the
-// Prompt, Content, Timeline, Mode, Turbo on/off, Duration and Resolution (user, 2026-10-18: "much less text, a gear menu
+// Prompt, Content, Timeline, Mode, Duration and Resolution (user, 2026-10-18: "much less text, a gear menu
 // with all presets"). A manual prompt is shown on the page as long as it is set, because it replaces every part's prompt.
 import { h, icon, field, select, tip } from "./h3s_dom.js";
-import { fmt, turboProfile } from "./h3s_model.js";
+import { fmt } from "./h3s_model.js";
 import { ASPECTS, RESIZE, nearestAspect, canvasInfo, isAuto, NATIVE_MP } from "./h3s_canvas.js";
 import { controlSettings } from "./h3s_control.js";
 import { PLACE_MODELS, chosenModels, modelState, modelsMenu, modelsList } from "./ng_models.js";
@@ -15,7 +15,7 @@ const BAD_PAIRS = { "res_multistep|beta": "res_multistep with beta overexposes a
 // Spectrum is the user's own install (xmarre/ComfyUI-Spectrum-MiniMax-H3); the switch shows only when ComfyUI knows its node.
 const spectrumInstalled = () => Boolean(globalThis.LiteGraph?.registered_node_types?.SpectrumApplyMiniMaxH3);
 const SPECTRUM_HINT = "Forecasts some sampling steps instead of computing them: about a third faster at 20 steps, same quality "
-  + "in our test. Only with Turbo off.";
+  + "in our test.";
 const STYLES = [["None", "No style"], ["Cinematic", "Cinematic"], ["Anime", "Anime"], ["Documentary", "Documentary"], ["Photorealistic", "Photorealistic"]];
 
 function withCurrent(options, value, label) {
@@ -29,7 +29,6 @@ function number(value, onchange, props = {}) {
 function section(title, hint, ...children) {
   return [h("h3", {}, title, " ", hint ? tip(hint) : null), h("div", { class: "h3s-modal-sec" }, ...children.flat().filter(Boolean))];
 }
-
 function switchRow(on, label, hint, onclick) {
   return h("button", { class: "h3s-toggle", "aria-pressed": String(on), onclick },
     h("span", { class: on ? "h3s-switch on" : "h3s-switch" }), h("span", { class: "h3s-strong" }, label), tip(hint));
@@ -55,7 +54,7 @@ function samplingSection(S, actions) {
   const v = S.values, set = (name) => (value) => actions.setWidget(name, value);
   const sampler = (S.options.sampler_name || [v.sampler_name]).map((value) => [value, value]);
   const scheduler = (S.options.scheduler || [v.scheduler]).map((value) => [value, value]);
-  return section("Sampling", v.turbo ? "With a known turbo LoRA its own steps, sampler and scheduler are used; these apply to unknown LoRAs and Turbo off." : "",
+  return section("Sampling", "",
     field("Seed", h("span", { class: "h3s-row", style: { gap: "6px", flexWrap: "nowrap" } }, number(v.seed, set("seed"), { style: { width: "130px" } }),
       h("button", { class: "h3s-btn", title: "Random seed", "aria-label": "Random seed", onclick: () => actions.setWidget("seed", Math.floor(Math.random() * 1e9)) }, icon("dice")))),
     field("Steps", number(v.steps, (value) => actions.setWidget("steps", Math.max(1, Math.min(100, Math.round(value) || 1))), { min: "1", max: "100", style: { width: "80px" } })),
@@ -63,26 +62,10 @@ function samplingSection(S, actions) {
     field("Scheduler", select(scheduler, v.scheduler, set("scheduler"))),
     BAD_PAIRS[`${v.sampler_name}|${v.scheduler}`] ? h("span", { class: "h3s-warn", style: { flex: "1 1 260px", fontSize: "13px" } },
       BAD_PAIRS[`${v.sampler_name}|${v.scheduler}`]) : null,
-    spectrumInstalled() || v.spectrum ? switchRow(v.spectrum === true, `Spectrum ${v.spectrum ? "on" : "off"}${v.turbo ? " (Turbo is on: not used)" : ""}`,
+    spectrumInstalled() || v.spectrum ? switchRow(v.spectrum === true, `Spectrum ${v.spectrum ? "on" : "off"}`,
       SPECTRUM_HINT, () => actions.setWidget("spectrum", v.spectrum !== true)) : null,
     field("Shift video", number(v.shift_video, set("shift_video"), { step: "0.1", style: { width: "88px" } })),
     field("Shift audio", number(v.shift_audio, set("shift_audio"), { step: "0.1", style: { width: "88px" } })));
-}
-
-function turboSection(S, actions) {
-  const mode = S.values.mode, rows = [];
-  for (const [name, label] of [["turbo_lora_fl2va", "Turbo LoRA first / last frame"], ["turbo_lora_ref2va", "Turbo LoRA references"]]) {
-    if ((mode === "fl2va" && name.endsWith("ref2va")) || (mode === "ref2va" && name.endsWith("fl2va"))) continue;
-    const options = withCurrent((S.options[name] || ["none"]).map((value) => [value, value]), S.values[name], (file) => `${file} (not installed)`);
-    // pictures take a LoRA's "still" values where it has them (core/turbo_profiles.py)
-    const profile = turboProfile(S.turboProfiles, S.values[name]);
-    const known = (S.values.output === "images" && profile?.still) || (profile?.steps ? profile : null);
-    rows.push(field(label, select(options, S.values[name], (value) => actions.setTurboLora(name, value), { style: { maxWidth: "380px" } })),
-      h("span", { class: S.values[name] === "none" ? "h3s-warn" : "h3s-lbl", style: { fontSize: "12px", flex: "1 1 220px" }, title: known?.source || "" },
-        S.values[name] === "none" ? "No LoRA: Turbo gives no usable picture." : known
-          ? `Known LoRA: ${known.steps} steps · ${known.sampler_name} · ${known.scheduler}.` : "Unknown LoRA: uses the Sampling values."));
-  }
-  return section("Turbo", "Turbo uses a few-step LoRA: fast for trying things out. Switch it on or off on the page.", rows);
 }
 
 function resumeSection(S, actions) {
@@ -135,7 +118,7 @@ export function settingsView(S, actions) {
     h("div", { class: "h3s-modal", role: "dialog", "aria-label": "Settings" },
       h("div", { class: "h3s-row" }, icon("gear"), h("span", { class: "h3s-strong", style: { fontSize: "16px" } }, "Settings"),
         h("span", { class: "h3s-grow" }), h("button", { class: "h3s-btn", onclick: close }, "Done")),
-      videoSection(S, actions), samplingSection(S, actions), S.values.turbo ? turboSection(S, actions) : null,
+      videoSection(S, actions), samplingSection(S, actions),
       controlSettings(S, actions), resumeSection(S, actions), moreSection(S, actions), modelsSection(S, actions), manualSection(S, actions)));
 }
 

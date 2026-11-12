@@ -1,13 +1,13 @@
 """Studio lab node parity with the product Director (review F3, IMPROVEMENT path).
 
 NGDirectorStudio carries NGH3Director's extras as its own trailing widgets, so the shared Studio panel's
-writes land, its AI/control indicators resolve through its own sockets, and its Turbo switch reaches the graph.
+writes land and its AI/control indicators resolve through its own sockets.
 """
 import unittest
 
 from _pack import comfy_available, load_full_pack
 
-EXTRAS = ("duration_seconds", "style", "prompt_override", "turbo", "turbo_lora_fl2va", "turbo_lora_ref2va",
+EXTRAS = ("duration_seconds", "style", "prompt_override",
           "resize_method", "ref_image_size", "resume", "resume_delete_done", "control_strength", "control_start",
           "control_end", "models", "output", "spectrum")
 SOCKETS = ("ai_provider", "preview_vae", "model_patch")
@@ -61,19 +61,6 @@ class StudioParity(unittest.TestCase):
 
     def by_type(self, output, kind):
         return [(key, value) for key, value in output.expand.items() if value["class_type"] == kind]
-
-    def test_turbo_reaches_the_render_graph_from_a_studio_node(self):
-        out = self.studio.execute(**self.values(turbo=True, turbo_lora_fl2va="fl.safetensors",
-                                                turbo_lora_ref2va="ref.safetensors"))
-        loras = {value["inputs"]["model"][0]: value["inputs"]["lora_name"]
-                 for value in out.expand.values() if value["class_type"] == "NGTurboLora"}
-        self.assertEqual(loras, {"fl2va": "fl.safetensors", "ref2va": "ref.safetensors"})
-        sampling = next(v for v in out.expand.values() if v["class_type"] == "NGChunkSampling")["inputs"]
-        self.assertIn('"turbo": true', sampling["settings"])
-
-    def test_turbo_off_adds_no_lora(self):
-        out = self.studio.execute(**self.values())
-        self.assertEqual([v for v in out.expand.values() if v["class_type"] == "NGTurboLora"], [])
 
     def test_duration_socket_overrides_the_length_widget_like_the_product(self):
         out = self.studio.execute(**self.values(duration_seconds=30.0))

@@ -139,7 +139,7 @@ class ProductWorkflows(unittest.TestCase):
         for name in ("output_value", "next_iteration_value"):
             self.assertEqual(source(end, name), [sampler, 0])
         self.assertEqual(source(sampler, "latent_image")[0], output)
-        self.assertEqual(source(sampler, "sigmas")[0], output, "the part's own turbo profile reaches the sampler")
+        self.assertEqual(source(sampler, "sigmas")[0], output, "the Director's own sigmas reach the sampler")
 
     @unittest.skipUnless(comfy_available(), "ComfyUI is not importable")
     def test_native_validation_keeps_the_sampler_inside_the_loop(self):

@@ -108,10 +108,6 @@ class ExternalSampling(unittest.TestCase):
         spectrum_id, _ = nodes_["SpectrumApplyMiniMaxH3"]
         self.assertEqual(nodes_["BasicScheduler"][1]["model"], [spectrum_id, 0], "sigmas on the forecasted model")
         self.assertEqual(out.args[0], [spectrum_id, 0], "the Output model carries the forecast")
-        turbo = replace(result, settings=replace(result.settings, spectrum=True, turbo=True))
-        out = self.nodes["NGDirectorOutput"].execute(turbo)
-        self.assertNotIn("SpectrumApplyMiniMaxH3", {n["class_type"] for n in out.expand.values()},
-                         "no forecast with Turbo: a few-step LoRA leaves no steps to forecast")
 
     def test_spectrum_without_its_pack_names_the_pack(self):
         import nodes

@@ -40,5 +40,5 @@ The pictures land in `output/H3/` and are also copied to `input/h3-director-stil
 
 ## Tips
 
-- With Turbo on a picture takes about 30–45 seconds (measured: 33 s at 3 megapixels, 42 s with four reference pictures).
+- With a turbo LoRA a picture takes about 30–45 seconds (measured: 33 s at 3 megapixels, 42 s with four reference pictures).
 - A picture you like can open a shot of a video: choose it in an Image card with *Use as: First frame* (Workflow 4).

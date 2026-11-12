@@ -287,18 +287,7 @@
     "Node name for S&R": "NGH3Director",
     "cnr_id": "minimaxh3-director",
     "ver": "90325669a6f447855b75a4da2a6b01e127b62e31",
-    "models": [
-     {
-      "name": "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
-      "directory": "loras"
-     },
-     {
-      "name": "minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
-      "directory": "loras"
-     }
-    ]
+    "models": []
    },
    "widgets_values": [
     "@Luna and @Inferna meet in a candle-lit gothic hall, show each other their magic and seal a pact.",
@@ -315,14 +304,11 @@
     "None",
     2026,
     "fixed",
-    6,
+    20,
     "res_multistep",
     "simple",
     12,
     3,
-    true,
-    "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
-    "minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
     "crop",
     "match",
     "",
@@ -351,14 +337,11 @@
     "style": "None",
     "seed": 2026,
     "control_after_generate": "fixed",
-    "steps": 6,
+    "steps": 20,
     "sampler_name": "res_multistep",
     "scheduler": "simple",
     "shift_video": 12,
     "shift_audio": 3,
-    "turbo": true,
-    "turbo_lora_fl2va": "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
-    "turbo_lora_ref2va": "minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
     "resize_method": "crop",
     "ref_image_size": "match",
     "prompt_override": "",

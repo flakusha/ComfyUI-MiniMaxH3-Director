@@ -17,7 +17,20 @@ const nodes = new Map(); // follow renames -> full refresh, per Director node
 const MIN_WIDTH = 900, WIDTH = 1400, HEIGHT = 1150;
 // Widgets added after the first NG workflows were saved. Those workflows carry one empty trailing value from the former
 // in-node editor, which lands on the first new widget; anything that is not a valid value falls back to the default.
-const LATER = { turbo: false, turbo_lora_fl2va: "none", turbo_lora_ref2va: "none", resize_method: "crop", ref_image_size: "match" };
+const LATER = { resize_method: "crop", ref_image_size: "match" };
+
+// Workflows saved while the node still carried the turbo widgets (turbo and the two LoRAs, between shift_audio and
+// resize_method) are three values longer: on load, every value after shift_audio landed three slots early.
+export function repairShiftedWidgets(node, saved) {
+  const widgets = node.widgets || [];
+  if (!Array.isArray(saved) || saved.length !== widgets.length + 3) return;
+  if (typeof widgets.find((widget) => widget.name === "resize_method")?.value !== "boolean") return;
+  let next = 0;
+  for (const widget of widgets) {
+    if (widget.name === "resize_method") next += 3;   // the saved turbo slots, gone from the widget list
+    widget.value = saved[next++];
+  }
+}
 
 // Widgets inserted among the saved ones, oldest first. ComfyUI restores widget values by position, so a workflow saved before
 // "resume" gave it the value of the widget after it (prompt_override's text while resume was required, now the Studio's own
@@ -53,10 +66,7 @@ export function repairLaterWidgets(node) {
   }
   for (const widget of node.widgets || []) {
     if (!(widget.name in LATER)) continue;
-    // A LoRA file that is not installed (yet) keeps its name: ComfyUI's missing-model check offers its download, and the
-    // Studio says it is missing. Only a value that is no file name at all was shifted into this widget.
-    const missingFile = widget.name.startsWith("turbo_lora") && /\.safetensors$/i.test(String(widget.value));
-    const valid = widget.name === "turbo" ? typeof widget.value === "boolean" : missingFile || (widget.options?.values || []).includes(widget.value);
+    const valid = (widget.options?.values || []).includes(widget.value);
     if (!valid) widget.value = LATER[widget.name];
   }
 }
@@ -116,6 +126,7 @@ function attach(node) {
   node.onConfigure = function (...args) {
     const result = configured?.apply(this, args);
     for (const key of ["ng_view_mode", "ng_selected_shot_id"]) delete node.properties[key];
+    repairShiftedWidgets(node, args[0]?.widgets_values);
     repairInsertedWidgets(node, args[0]?.widgets_values, args[0]?.widgets_values_named);
     repairLaterWidgets(node);
     // Saved by the former compact node: the Studio needs the room once, and the nodes around it move along.

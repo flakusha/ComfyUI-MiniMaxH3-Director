@@ -68,11 +68,11 @@ class RenderGraph(unittest.TestCase):
             self.assertEqual("NGResumeChunk" in types_, kept, extra)
             self.assertEqual("resume_settings" in collect["inputs"], deleted, extra)
 
-    def test_spectrum_wraps_the_sampled_model_with_turbo_off_only(self):
+    def test_spectrum_wraps_the_sampled_model(self):
         render_sequence = module("ng.adapters.render_graph").render_sequence
         inputs = dict(chunks=["plan", 0], clip=["clip", 0], vae=["v", 0], audio_vae=["a", 0], model_fl2va=["fl2va", 0])
         settings = dict(seed=1, steps=20, sampler_name="res_multistep", scheduler="simple", shift_video=12.0, shift_audio=3.0)
-        for extra, used in (({}, False), ({"spectrum": True}, True), ({"spectrum": True, "turbo": True}, False)):
+        for extra, used in (({}, False), ({"spectrum": True}, True)):
             graph = render_sequence(inputs, {**settings, **extra})[0]
             spectrum = [key for key, node in graph.items() if node["class_type"] == "SpectrumApplyMiniMaxH3"]
             self.assertEqual(bool(spectrum), used, extra)

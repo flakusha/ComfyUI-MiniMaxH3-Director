@@ -6,9 +6,8 @@ from comfy_execution.graph_utils import GraphBuilder
 from ..core.analysis import ProviderConfig
 from .ai_provider import NativeAIProvider
 from ..core.project import ChunkJob, jobs
-from ..core.turbo_profiles import part_settings
 from ..core import control_timing
-from .render_graph import SPECTRUM, render_sequence, still_sequence, turbo_models
+from .render_graph import SPECTRUM, render_sequence, still_sequence
 
 
 @dataclass(frozen=True)
@@ -35,9 +34,6 @@ class RenderSettings:
     scheduler: str = "simple"
     shift_video: float = 12.0
     shift_audio: float = 3.0
-    turbo: bool = False
-    turbo_lora_fl2va: str = "none"
-    turbo_lora_ref2va: str = "none"
     resize_method: str = "crop"
     ref_image_size: str = "match"
     resume: bool = True
@@ -47,7 +43,7 @@ class RenderSettings:
     control_end: float = 1.0
     models: str = ""            # {purpose: file} from the Studio's Models menu (adapters/model_files.py)
     output: str = "video"       # video | images: one picture per shot (core/stills.py)
-    spectrum: bool = False      # Spectrum's step forecast on the sampled model, Turbo off only (adapters/render_graph.py)
+    spectrum: bool = False      # Spectrum's step forecast on the sampled model (adapters/render_graph.py)
 
     def values(self):
         return {name: getattr(self, name) for name in self.__dataclass_fields__}
@@ -62,7 +58,7 @@ class DirectorResult:
 
 def require_spectrum_pack(settings):
     """Spectrum forecasting needs the user's own Spectrum pack; without it the run would fail at the unknown node."""
-    if settings.get("spectrum") and not settings.get("turbo"):
+    if settings.get("spectrum"):
         try:
             from nodes import NODE_CLASS_MAPPINGS
         except ImportError:
@@ -90,22 +86,20 @@ def prepare_output(result, chunk_index, previous=None, loop_chunk=None, apply_si
     job = chunk_job(result, chunk_index, loop_chunk)
     require_spectrum_pack(result.settings.values())
     graph = GraphBuilder()
-    inputs = result.inputs.links()
-    inputs = turbo_models(graph, {name: value for name, value in inputs.items() if value is not None}, result.settings.values())
+    inputs = {name: value for name, value in result.inputs.links().items() if value is not None}
     conditioning = graph.node("NGChunkConditioning", "conditioning", chunk=job, previous=previous,
                               **inputs, shift_video=result.settings.shift_video, shift_audio=result.settings.shift_audio,
                               apply_sigma_shift=apply_sigma_shift, ref_image_size=result.settings.ref_image_size,
                               resize_method=result.settings.resize_method)
     negative = graph.node("ConditioningZeroOut", "negative", conditioning=conditioning.out(1))
     model = conditioning.out(0)
-    if result.settings.spectrum and not result.settings.turbo:
+    if result.settings.spectrum:
         # the same forecast wrap H3 Render Sequence applies inside its loop (adapters/render_graph.py): a custom-loop
         # user enabling Spectrum gets it on the Output model too, not a silent no-op
         model = graph.node("SpectrumApplyMiniMaxH3", "spectrum", model=model, **SPECTRUM).out(0)
     context = result.project.context
     chunk_seed = (int(result.settings.seed if seed is None else seed) + job.index) % (2**64)
-    # a known turbo LoRA on this part's model brings its own steps, sampler and scheduler (core/turbo_profiles.py)
-    settings = part_settings(job.compiled.mode, result.settings.values())
+    settings = result.settings.values()
     sampler = graph.node("KSamplerSelect", "sampler", sampler_name=settings["sampler_name"])
     sigmas = graph.node("BasicScheduler", "sigmas", model=model, scheduler=settings["scheduler"], steps=settings["steps"], denoise=1.0)
     outputs = (model, conditioning.out(1), negative.out(0), conditioning.out(2),

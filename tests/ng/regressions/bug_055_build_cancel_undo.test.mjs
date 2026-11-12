@@ -28,7 +28,7 @@ function studio() {
     { ...newShot(5, 10), id: "shot_b", text: "My own second shot." }], audio: [], lanes: [] };
   const settings = { idea: "A young woman plays outside with a red ball.", project_seconds: 10, chunk_seconds: 0,
     shots: writeProject(initial), mode: "ref2va", width: 1344, height: 768, steps: 20, cfg: 1, seed: 1,
-    sampler_name: "euler", scheduler: "simple", turbo: false, turbo_lora_fl2va: "none", turbo_lora_ref2va: "none",
+    sampler_name: "euler", scheduler: "simple",
     resize_method: "crop", ref_image_size: "match", soundscape: "my ambience", music: "my music" };
   const widgets = (data) => Object.entries(data).map(([name, value]) => ({ name, value, options: { values: [value] } }));
   const node = { id, comfyClass: "NGH3Director", properties: {}, widgets: widgets(settings),

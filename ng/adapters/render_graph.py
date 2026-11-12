@@ -5,32 +5,17 @@ from comfy_execution.graph_utils import GraphBuilder
 from comfy_execution.validation import validate_loops
 
 
-def turbo_models(graph, inputs, settings):
-    """Turbo puts the chosen few-step LoRA on each connected H3 model, as the official MiniMax H3 templates do."""
-    if not settings.get("turbo"):
-        return inputs
-    out = dict(inputs)
-    for name in ("model_fl2va", "model_ref2va"):
-        lora = settings.get("turbo_lora_" + name[len("model_"):], "none")
-        if out.get(name) is not None and lora != "none":
-            # NGTurboLora leaves out pieces that do not fit (a full-model LoRA on a pruned H3 model logged 51 errors per step)
-            out[name] = graph.node("NGTurboLora", "turbo_" + name, model=out[name], lora_name=lora, strength=1.0).out(0)
-    return out
-
-
 # Everything in the render settings that changes the sampled latent.
-RESUME_SETTINGS = ("output", "seed", "steps", "sampler_name", "scheduler", "shift_video", "shift_audio", "turbo", "turbo_lora_fl2va",
-                   "turbo_lora_ref2va", "ref_image_size", "resize_method", "control_strength", "control_start", "control_end", "spectrum",
-                   "models")
+RESUME_SETTINGS = ("output", "seed", "steps", "sampler_name", "scheduler", "shift_video", "shift_audio", "ref_image_size",
+                   "resize_method", "control_strength", "control_start", "control_end", "spectrum", "models")
 # Spectrum (xmarre/ComfyUI-Spectrum-MiniMax-H3, installed by the user) with the values of our A/B: 20 steps took 353 s instead
-# of 526 s at equal quality (comparison 2026-10-20, M11). Not with Turbo: a few-step LoRA leaves no steps to forecast.
+# of 526 s at equal quality (comparison 2026-10-20, M11).
 SPECTRUM = dict(enabled=True, blend_weight=0.5, degree=1, ridge_lambda=0.1, window_size=2.0, flex_window=0.75, warmup_steps=1,
                 tail_actual_steps=1, max_history=64, debug=False)
 
 
 def render_sequence(inputs, settings):
     graph = GraphBuilder()
-    inputs = turbo_models(graph, inputs, settings)
     start = graph.node("StartLoop", "start", mode="List", **{"mode.list": inputs["chunks"]}, cache_iterations=False)
     conditioning = graph.node("NGChunkConditioning", "conditioning", chunk=start.out(3), previous=start.out(4),
                               clip=inputs["clip"], vae=inputs["vae"], audio_vae=inputs["audio_vae"],
@@ -44,7 +29,7 @@ def render_sequence(inputs, settings):
         model = graph.node("NGControlChunk", "control", model=model, chunk=start.out(3), vae=inputs["vae"],
                            model_patch=inputs["model_patch"], strength=settings.get("control_strength", 1.0),
                            start_percent=settings.get("control_start", 0.0), end_percent=settings.get("control_end", 1.0)).out(0)
-    if settings.get("spectrum") and not settings.get("turbo"):
+    if settings.get("spectrum"):
         model = graph.node("SpectrumApplyMiniMaxH3", "spectrum", model=model, **SPECTRUM).out(0)    # inside the loop: fresh per part
     if inputs.get("preview_vae") is not None or inputs.get("preview"):
         # H3 Render Sequence previews each part with the Context Connector's preview VAE or the installed taeh3 decoder
@@ -55,7 +40,6 @@ def render_sequence(inputs, settings):
         model = preview.out(0)
     noise = graph.node("NGChunkNoise", "noise", chunk=start.out(3), seed=settings["seed"])
     sampled_with = json.dumps({key: settings.get(key) for key in RESUME_SETTINGS}, sort_keys=True)
-    # per part: a known turbo LoRA on the part's model brings its own steps, sampler and scheduler (core/turbo_profiles.py)
     sampling = graph.node("NGChunkSampling", "sampling", chunk=start.out(3), model=model, settings=sampled_with)
     guider = graph.node("BasicGuider", "guider", model=model, conditioning=conditioning.out(1))
     sample = graph.node("SamplerCustomAdvanced", "sample", noise=noise.out(0), guider=guider.out(0),
@@ -90,10 +74,9 @@ def render_sequence(inputs, settings):
 
 
 def still_sequence(inputs, settings):
-    """The Director's Pictures output: the same loop, conditioning, turbo LoRA, sampling and resume as a video, but one
+    """The Director's Pictures output: the same loop, conditioning, sampling and resume as a video, but one
     latent frame per shot (NG Still Latent) and the pictures decoded and saved after it (NG Still Collect)."""
     graph = GraphBuilder()
-    inputs = turbo_models(graph, inputs, settings)
     start = graph.node("StartLoop", "start", mode="List", **{"mode.list": inputs["chunks"]}, cache_iterations=False)
     conditioning = graph.node("NGChunkConditioning", "conditioning", chunk=start.out(3), clip=inputs["clip"], vae=inputs["vae"],
                               shift_video=settings["shift_video"], shift_audio=settings["shift_audio"],

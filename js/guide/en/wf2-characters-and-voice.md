@@ -106,7 +106,6 @@ The Director is where you plan the video. Everything happens inside the node.
 - **Output**: *Video*, or *Pictures* (one picture per shot, Workflow 5).
 - **Mode**: *References* (Ref2VA) uses your character pictures and voices. *First / last frame* (FL2VA) starts shots on
   pictures. With the Image card set to *Reference* the Director chooses References by itself.
-- **Turbo on**: renders with a few-step turbo LoRA: about three times faster. The LoRA is set in Settings.
 - **Content**: the cards from the Connector. Drag a card onto a shot to use it there.
 - **Timeline**: the shots, audio lanes and control clips over time. **Render parts** below shows how the Director cuts the
   video into parts of up to about 10 s that continue into each other.
@@ -129,9 +128,9 @@ Click a shot to edit it on the right:
 
 ![Settings](../images/wf2-studio-settings.jpg)
 
-**Settings** holds everything a first video does not need: render part length, size, seed, steps, sampler, the turbo LoRA,
-resume after a crash, sound and transitions, and the extra models. A known turbo LoRA brings its own steps and sampler
-(here 6 steps for the References LoRA).
+**Settings** holds everything a first video does not need: render part length, size, seed, steps, sampler, scheduler,
+resume after a crash, sound and transitions, and the extra models. An optional turbo LoRA (chapter 2) is added with
+ComfyUI's own LoraLoaderModelOnly and brings its own steps and sampler.
 
 ### Prompts per render part
 

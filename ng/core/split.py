@@ -17,7 +17,7 @@ FORMAT = "h3-director-shots"
 DELIMITERS = re.compile(r"[\r\n\[\]():]")
 
 # MiniMax's H3 prompt guide (base-en 4.3): motion type + amplitude + speed, "holds a static shot" for a still camera. Said
-# explicitly, it also keeps 4-step turbo from drifting into a close-up (measured 2026-10-13: a shot that only said "stable
+# explicitly, it also keeps few-step sampling from drifting into a close-up (measured 2026-10-13: a shot that only said "stable
 # framing" pushed in and brightened).
 CAMERA_RULE = ("camera: one English sentence of how the camera moves inside the shot: the motion (push in, pull out, pan, truck, "
                "tilt, pedestal up or down, arc, tracking, zoom, shake), with small or large amplitude and slow or fast speed when "

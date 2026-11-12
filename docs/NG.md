@@ -147,11 +147,11 @@ Older workflows saved with `auto` keep it and show it as automatic; it is also s
 **AI shots** begin with the framing and say how the camera moves (amplitude and speed) or that it holds a static shot. A shot
 longer than 5 s is written in time beats from its own start ("0–5s: ... 5–10s: ..."); the AI never changes shot times.
 
-**Turbo** renders with a few-step H3 turbo LoRA. Each mode has its own LoRA selection; nothing is preselected, the user chooses.
-A known LoRA (`js/ng/turbo_profiles.json`: the official ComfyUI LoRAs, Taomate, the ckpt500 turbo) brings its measured steps,
-sampler and scheduler: the Studio's settings jump to them, and each render part samples with the values of its own model's LoRA,
-so a video mixing First / last frame and References parts renders each part right. An unknown LoRA renders with the Director's
-Steps, Sampler and Scheduler; without a LoRA the Studio warns. CFG stays 1: every official H3 template uses BasicGuider.
+Optional **turbo LoRAs** (4–8 steps instead of 20, about three times faster) are the user's own choice: insert ComfyUI's
+own **LoraLoaderModelOnly** between the model loader and the Director and set **Steps, Sampler and Scheduler** in
+Settings to the LoRA's measured values (guide chapter 2: v1.0 FL2VA 8, v1.2 FL2VA 4, References 6 — its nominal 4 leave
+a white veil, Taomate 3, ckpt500 8 with Euler + Beta, only its `pruned` build fits the pruned models). The Director adds
+no LoRA by itself. CFG stays 1: every official H3 template uses BasicGuider.
 
 Below it is the panel of the selected item:
 
@@ -304,8 +304,9 @@ NG Collect, NG Collect Video for long projects, NG Project Chunks, NG Studio Lab
 
 Shots and audio clips are stored in the Director's `shots` widget as one JSON document (`format: "h3-director-shots"`).
 Old timed text such as `0-4: @Mage looks up.` still loads. See [the shot contract](NG-shots.md).
-New Director widgets (`turbo`, the two turbo LoRAs, `resize_method`, `ref_image_size`) are appended at the end, so older
-workflows keep their values; an older NG workflow's trailing empty value is repaired on load.
+New Director widgets (`resize_method`, `ref_image_size`) are appended at the end, so older workflows keep their values;
+an older NG workflow's trailing empty value is repaired on load. Workflows saved while the node carried the turbo
+widgets (`turbo`, the two turbo LoRAs) are repaired too: the three saved slots are skipped on load.
 
 H3 renders at **24 fps** on its `17k + 5` frame grid. The plan reports the real finished length and warns about rounding.
 One resolution applies to the whole project. `chunk_seconds = 0` selects the planner's 10-second target; H3's trained chunk range is 4–15 seconds.

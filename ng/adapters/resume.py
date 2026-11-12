@@ -19,7 +19,6 @@ import folder_paths
 from comfy.nested_tensor import NestedTensor
 
 from ..core.project import jobs
-from ..core.turbo_profiles import part_settings
 from ..core import control_timing
 from ..core.places import is_place
 from .continuation_latent import uses_sound_prefix
@@ -112,7 +111,7 @@ def save(key, latent):
 def forget(chunks, settings):
     """The whole video is put together: its parts are no longer needed for a resume."""
     for job in chunks:
-        key = part_key(job, part_settings(job.compiled.mode, settings))
+        key = part_key(job, settings)
         if has(key):
             os.remove(_path(key))
 

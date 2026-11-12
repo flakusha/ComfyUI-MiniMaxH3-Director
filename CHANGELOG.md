@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **Turbo switch removed; faster LoRAs are native now** (2026-11-12). The Director's `turbo` widget, the two turbo LoRA
+  combos, the `NGTurboLora` node and its shape-filtering loader (`ng/adapters/lora_fit.py`), the measured-profile table
+  (`ng/core/turbo_profiles.py`, `js/ng/turbo_profiles.json`) and the Studio's Turbo toggle are gone. Step count was never
+  locked behind the switch - the Steps/Sampler/Scheduler widgets always drove the parts - and the LoRA itself works with
+  ComfyUI's own **LoraLoaderModelOnly** after the model load (the character-sheet job already did exactly that). The
+  optional LoRAs keep their measured values in guide chapter 2: v1.0 FL2VA 8 steps, v1.2 FL2VA 4, References 6 (nominal
+  4 leave a white veil), Taomate 3, ckpt500 8 Euler + Beta, only its `pruned` build fits the pruned models. Spectrum no
+  longer switches itself off when Turbo was on. The two turbo LoRA entries left the Models list (`models.json`), so the
+  Settings -> Models menu and ComfyUI's Missing Models banner no longer ask for 2 x 1.8 GB nobody asked for; the example
+  workflows dropped the declarations with the widgets and render at 20 steps. Workflows saved with the turbo widgets
+  load repaired: the three saved slots are skipped, every later widget gets its own value. Resume parts keyed with the
+  old settings are rendered again once (the key's field list lost the turbo entries).
+
 - **"Qwen3-ASR (local)" shows as unavailable with the models in place** (user report, 2026-11-11).
   The Audio card's engine dropdown asks `GET /ng/lyrics`, and that route probed each backend with a
   bare `available()` - but the Qwen3 probe reads its two HF folders through the model-dir lister the

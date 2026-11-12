@@ -81,7 +81,7 @@ Then change the shots, or go on with Workflow 2 for your own character.
 - **Card**: a Context node with one picture, video, sound or text. Its name is used as `@Name` in shots.
 - **Mode**: *References* (Ref2VA, your pictures and voices as references) or *First / last frame* (FL2VA, shots start or
   end on your pictures). See chapter *References or first frames*.
-- **Turbo**: renders with a turbo LoRA in 6–8 steps instead of 20, about three times faster.
+- **Faster LoRAs**: optional turbo LoRAs render in 4–8 steps instead of 20, about three times faster (chapter 2).
 
 ---
 
@@ -107,15 +107,21 @@ Models**. Your files may have other names or lie in a subfolder; then choose the
 Only the model a render part needs is loaded. A text-only project never loads the References model; a project with
 character pictures never loads the First / last frame model.
 
-### Turbo
+### Optional faster LoRAs (turbo)
 
 | What | File (click to download) | Folder | Size |
 |---|---|---|---|
-| Turbo LoRA: First / last frame | [minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors) | `models/loras` | 1.8 GB |
-| Turbo LoRA: References | [minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors) | `models/loras` | 1.8 GB |
+| Turbo LoRA: First / last frame v1.0 | [minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors) | `models/loras` | 1.8 GB |
+| Turbo LoRA: References v0.1 | [minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors) | `models/loras` | 1.8 GB |
+| Turbo LoRA: First / last frame v1.2 | [minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors) | `models/loras` | 1.8 GB |
 
-They are chosen in **Settings → Turbo**. A known LoRA brings its own steps, sampler and scheduler (with 4 steps the
-References LoRA leaves a white veil; 6 are clean). Other LoRAs work too; then the Director's own steps are used.
+The Director has no turbo switch: if you want one of these, insert ComfyUI's own **LoraLoaderModelOnly** between the
+model loader and the Director, and set **Steps**, **Sampler** and **Scheduler** in Settings to what the LoRA wants.
+Measured values (res_multistep + simple unless noted): v1.0 FL2VA **8 steps** — 4 paint brush-stroke artefacts and the
+second part's sound falls silent; v1.2 FL2VA **4 steps** (6 look the same at 1.4× the time); References v0.1 **6 steps** —
+nominal 4 leave a white veil (black level 0.024, 6 are clean at 0.002); Taomate **3 steps**. The `ckpt500` turbo wants
+**8 steps, Euler + Beta** — and only the `pruned` build fits the pruned H3 models: the non-pruned one carries full-model
+AdaLN pieces that mismatch and log load errors. CFG stays 1.
 
 ### Control videos and masks (Workflows 7 and 8)
 
@@ -193,7 +199,7 @@ pictures or sound files are needed.
 3. Press **Generate** in the Director (or ComfyUI's Run).
 4. The video is saved by **Save Video** in `output/H3/`.
 
-On a 16 GB card the 15 seconds take about 15–20 minutes with Turbo on.
+On a 16 GB card the 15 seconds take about 15–20 minutes with a turbo LoRA (chapter 2) at 8 steps.
 
 ### 1 · Models
 
@@ -229,7 +235,7 @@ prompt (**AI: split into shots**) or improve a shot's text (**AI: improve text**
 
 - **Prompt**: what the video is about. **Look**: the style every part shares.
 - **Mode**: *Automatic → First / last frame* — with text only the Director picks FL2VA by itself.
-- **Turbo on**: renders with the official turbo LoRA in 8 steps instead of 20.
+- **Steps** (Settings): 20 by default; an optional turbo LoRA renders in 4–8 steps (chapter 2).
 - **Timeline**: three shots of five seconds. **Render parts** below shows that the Director renders the 15 seconds in two
   parts that continue into each other; you see only one video.
 
@@ -371,7 +377,6 @@ The Director is where you plan the video. Everything happens inside the node.
 - **Output**: *Video*, or *Pictures* (one picture per shot, Workflow 5).
 - **Mode**: *References* (Ref2VA) uses your character pictures and voices. *First / last frame* (FL2VA) starts shots on
   pictures. With the Image card set to *Reference* the Director chooses References by itself.
-- **Turbo on**: renders with a few-step turbo LoRA: about three times faster. The LoRA is set in Settings.
 - **Content**: the cards from the Connector. Drag a card onto a shot to use it there.
 - **Timeline**: the shots, audio lanes and control clips over time. **Render parts** below shows how the Director cuts the
   video into parts of up to about 10 s that continue into each other.
@@ -394,9 +399,9 @@ Click a shot to edit it on the right:
 
 ![Settings](js/guide/images/wf2-studio-settings.jpg)
 
-**Settings** holds everything a first video does not need: render part length, size, seed, steps, sampler, the turbo LoRA,
-resume after a crash, sound and transitions, and the extra models. A known turbo LoRA brings its own steps and sampler
-(here 6 steps for the References LoRA).
+**Settings** holds everything a first video does not need: render part length, size, seed, steps, sampler, scheduler,
+resume after a crash, sound and transitions, and the extra models. An optional turbo LoRA (chapter 2) is added with
+ComfyUI's own LoraLoaderModelOnly and brings its own steps and sampler.
 
 #### Prompts per render part
 
@@ -615,7 +620,7 @@ The pictures land in `output/H3/` and are also copied to `input/h3-director-stil
 
 ### Tips
 
-- With Turbo on a picture takes about 30–45 seconds (measured: 33 s at 3 megapixels, 42 s with four reference pictures).
+- With a turbo LoRA a picture takes about 30–45 seconds (measured: 33 s at 3 megapixels, 42 s with four reference pictures).
 - A picture you like can open a shot of a video: choose it in an Image card with *Use as: First frame* (Workflow 4).
 
 ---
@@ -888,7 +893,7 @@ The six loaders, the Connector and the Director are the same as in Workflow 1. T
 | Node | What it does |
 |---|---|
 | **Start Loop** (List) | takes the Director's **chunks** and runs the body once per render part; *list_item* is the current part, *current_iteration_value* the latent of the part before |
-| **H3 Director Output** | prepares the current part: MODEL (with the turbo LoRA when Turbo is on), positive and negative conditioning, the empty AV latent, the **seed**, and the Director's **cfg**, **sampler** and **sigmas** |
+| **H3 Director Output** | prepares the current part: MODEL, positive and negative conditioning, the empty AV latent, the **seed**, and the Director's **cfg**, **sampler** and **sigmas** |
 | **H3 Live Preview** | puts the live preview (taeh3) on the model, so you see each part while it is sampled |
 | **RandomNoise** | noise from Output's seed (the Director's seed plus the part's number) |
 | **CFGGuider** | the guider; cfg comes from Output and is always 1 for H3 |
@@ -917,7 +922,7 @@ needs far less memory.
 
 ### Tips
 
-- The Director's Steps, Sampler and Scheduler (or the turbo LoRA's) arrive through Output; change them in the Studio,
+- The Director's Steps, Sampler and Scheduler arrive through Output; change them in the Studio,
   not in the sampler nodes.
 - Resume after a crash is a feature of the Render Sequence; this loop renders every part again.
 
@@ -966,7 +971,7 @@ and Redo.
 
 ### The right side
 
-**Output** (*Video* or *Pictures*), **Mode** (chapter *References or first frames*) and **Turbo**. Below it the selected
+**Output** (*Video* or *Pictures*) and **Mode** (chapter *References or first frames*). Below it the selected
 item:
 
 ![A selected shot](js/guide/images/wf2-studio-shot.jpg)
@@ -1248,7 +1253,6 @@ Every field of the H3 Director in one place, from top to bottom. How to work wit
 |---|---|
 | **Output: Video / Pictures** | a video, or one picture per shot (Workflow 5) |
 | **Mode: First / last frame / References** | which H3 model renders (chapter *References or first frames*) |
-| **Turbo on** | renders with the turbo LoRA of the mode (Settings → Turbo) |
 
 ### Content and timeline
 
@@ -1322,20 +1326,11 @@ Every field of the H3 Director in one place, from top to bottom. How to work wit
 | Field | What it does |
 |---|---|
 | **Seed** and the dice | another seed gives another take of the same shots |
-| **Steps / Sampler / Scheduler** | used without Turbo or with an unknown LoRA; a warning names pairs that spoil H3 pictures |
-| **Spectrum** | only when the Spectrum nodes are installed: about a third faster at 20 steps (Turbo off) |
+| **Steps / Sampler / Scheduler** | how every render part samples; a warning names pairs that spoil H3 pictures |
+| **Spectrum** | only when the Spectrum nodes are installed: about a third faster at 20 steps |
 | **Shift video / Shift audio** | H3's sigma shifts, 12 and 3 |
 
 CFG is always 1, as in every official H3 template.
-
-#### Turbo
-
-| Field | What it does |
-|---|---|
-| **Turbo LoRA first / last frame** | the LoRA for FL2VA parts |
-| **Turbo LoRA references** | the LoRA for Ref2VA parts |
-
-A known LoRA shows its measured values (*Known LoRA: 6 steps · res_multistep · simple*); *none* warns.
 
 #### ControlNet
 
@@ -1367,7 +1362,7 @@ Shown when a Video card is a control video.
 
 ![Every model file with its download](js/guide/images/wf2-studio-models.jpg)
 
-Every file H3 Director uses, grouped (H3, Turbo, Control, Pictures, Sound): found with its file name, or missing, and
+Every file H3 Director uses, grouped (H3, Control, Pictures, Sound): found with its file name, or missing, and
 always with its download link and size. Below it the files for place pictures (SAM3, Qwen Image 2.1) can be chosen when
 yours are renamed. All links are also in chapter 2.
 
@@ -1666,9 +1661,8 @@ parts, or choose shorter render parts. A part without any clip renders without C
 | You see | What helps |
 |---|---|
 | A model loader is red, *file not found* | download the file (chapter 2) or choose your own file in the loader |
-| *Turbo needs a turbo LoRA* | choose the LoRA in **Settings → Turbo**, or switch Turbo off |
 | Out of memory | **Render part: 5 s**, the int8 video VAE, or **Resolution: Fast** |
-| A white veil over the video (References turbo) | 6 steps instead of 4 — the known LoRA sets it by itself |
+| A white veil over the video (References turbo LoRA) | set 6 steps instead of 4 in Settings |
 | The same figure appears twice | a second picture of a figure needs **Belongs to** that figure |
 | A figure looks different later in a long video | use **References** mode; give the figure a character sheet (picture editor) |
 | A spoken line is missing or cut off | give the shot more time, or split the line |
@@ -1682,7 +1676,7 @@ parts, or choose shorter render parts. A part without any clip renders without C
 | The AI buttons are grey | connect an **H3 AI Loader** (chapter *Writing with the AI*) |
 | The AI describes things that are not in the picture | the model cannot really see pictures; try `qwen3.5:9b` |
 
-### Times (16 GB card, 1280×704, Turbo on)
+### Times (16 GB card, 1280×704, turbo LoRA at 8 steps)
 
 | Job | About |
 |---|---|

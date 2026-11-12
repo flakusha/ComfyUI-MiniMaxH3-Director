@@ -2,7 +2,7 @@
 // node's own widgets, so saving, loading and queueing stay ComfyUI's; the shot document keeps shots, clips and lanes.
 import { h, icon, keepKeys } from "./h3s_dom.js";
 import { ensureStudioStyle } from "./h3s_style.js";
-import { readProject, writeProject, newShot, newClip, newLane, placeAt, addShotAt, snapWithin, trimToDuration, growToDuration, editSpoken, addSpoken, removeSpoken, sorted, MIN_LENGTH, r1, turboProfile, fmt, setPartPrompt, clipToFit, isKeyframe, middleOf, removeLane } from "./h3s_model.js";
+import { readProject, writeProject, newShot, newClip, newLane, placeAt, addShotAt, snapWithin, trimToDuration, growToDuration, editSpoken, addSpoken, removeSpoken, sorted, MIN_LENGTH, r1, fmt, setPartPrompt, clipToFit, isKeyframe, middleOf, removeLane } from "./h3s_model.js";
 import { promptActions, cutActions } from "./h3s_cuts.js";
 import { fitAspect, snap32, ASPECTS, isAuto, NATIVE_MP, pictureSize } from "./h3s_canvas.js";
 import { contentEntries, promptView, contentView, contextId } from "./h3s_content.js";
@@ -26,12 +26,8 @@ import { hasRenderPath, projectRenderIds } from "./ng_graph.js";
 import { attachProgress } from "./ng_studio_progress.js";
 
 const STALE = { text: "The project changed after the AI answered, so its suggestion no longer fits and was discarded. Ask again.", error: false };
-const COMBOS = ["sampler_name", "scheduler", "turbo_lora_fl2va", "turbo_lora_ref2va"];
+const COMBOS = ["sampler_name", "scheduler"];
 const open = new Map(); // node -> Studio; a node's id is not final while it is being created
-// Measured settings of known turbo LoRAs, the same table the Python side samples with.
-let turboProfiles = {};
-const profilesLoaded = fetch(new URL("./turbo_profiles.json", import.meta.url)).then((r) => r.json())
-  .then((table) => { turboProfiles = table; }).catch(() => {});
 
 function load(S) {
   S.values = values(S.node);
@@ -41,7 +37,6 @@ function load(S) {
   S.byId = new Map(S.contexts.map((entry) => [entry.id, entry]));
   S.ai = Boolean(connectedProvider(S.node));
   S.controlConnected = controlPatchConnected(S.node);
-  S.turboProfiles = turboProfiles;
   const project = readProject(S.values.shots || "");
   S.docError = project.error;
   if (project.skipped?.length) S.notice = { error: true, text: `The saved data has ${project.skipped.length} invalid audio clip(s) (${project.skipped.join(", ")}). `
@@ -65,14 +60,10 @@ export function openStudio(node, app, api, host = null) {
   const status = h("span", { class: "h3s-lbl" });
   const progress = attachProgress(node, api, status, () => projectRenderIds(node));
   const ai = studioAI(S, app, api, () => render());
-  profilesLoaded.then(() => { if (!closed) { S.turboProfiles = turboProfiles; render(); } }); loadModels(api).then((state) => { if (!closed) { S.models = state; render(); } }); loadEffects(api).then((names) => { if (!closed) { S.effects = names; render(); } });
+  loadModels(api).then((state) => { if (!closed) { S.models = state; render(); } }); loadEffects(api).then((names) => { if (!closed) { S.effects = names; render(); } });
 
   let echo = false;
   function write(changes) { echo = true; try { applyValues(node, changes); } finally { echo = false; } }
-  function profileFields(lora) {
-    const profile = turboProfile(S.turboProfiles, lora), known = (values(node).output === "images" && profile?.still) || (profile?.steps ? profile : null);
-    return known ? { steps: known.steps, sampler_name: known.sampler_name, scheduler: known.scheduler } : {};
-  }
   const labels = () => new Map(sorted(S.shots).map((shot, index) => [shot.id, `Shot ${index + 1}`]));
   // A lazy prune: shares of shots that no longer exist drop on save; stale-basis entries stay so their badge
   // shows outdated with Rewrite/Edit. Once a part's shares cover its shots, the legacy entry of that index goes.
@@ -273,18 +264,6 @@ export function openStudio(node, app, api, host = null) {
     },
     deleteControl(id) { S.control = S.control.filter((clip) => clip.id !== id); S.selected = null; save(); render(); },
     setWidget,
-    // Turbo on: 4 steps, or the measured settings of the chosen LoRA. Off brings back the settings used before.
-    setTurbo(on) {
-      const kept = ["steps", "sampler_name", "scheduler"];
-      if (on && !S.values.turbo) node.properties.ng_before_turbo = Object.fromEntries(kept.map((name) => [name, S.values[name]]));
-      // ng_steps_before_turbo: what workflows saved before the profiles kept
-      const before = node.properties.ng_before_turbo || { steps: Number(node.properties.ng_steps_before_turbo) || 20 };
-      if (!on) { delete node.properties.ng_before_turbo; delete node.properties.ng_steps_before_turbo; }
-      const lora = S.values[(S.values.mode === "auto" ? S.plan?.mode : S.values.mode) === "ref2va" ? "turbo_lora_ref2va" : "turbo_lora_fl2va"];
-      write(on ? { turbo: true, steps: 4, ...profileFields(lora) } : { turbo: false, ...before }); setWidget("turbo", on);
-    },
-    // A known LoRA brings its measured steps, sampler and scheduler; the parts of its model render with them.
-    setTurboLora(name, value) { write(profileFields(value)); setWidget(name, value); },
     setDuration(seconds) {
       const before = { shots: S.shots, audio: S.audio, control: S.control, seconds: S.values.project_seconds, names: labels() };
       const shots = trimToDuration(S.shots, seconds), audio = trimToDuration(S.audio, seconds);

@@ -22,7 +22,7 @@ The six loaders, the Connector and the Director are the same as in Workflow 1. T
 | Node | What it does |
 |---|---|
 | **Start Loop** (List) | takes the Director's **chunks** and runs the body once per render part; *list_item* is the current part, *current_iteration_value* the latent of the part before |
-| **H3 Director Output** | prepares the current part: MODEL (with the turbo LoRA when Turbo is on), positive and negative conditioning, the empty AV latent, the **seed**, and the Director's **cfg**, **sampler** and **sigmas** |
+| **H3 Director Output** | prepares the current part: MODEL, positive and negative conditioning, the empty AV latent, the **seed**, and the Director's **cfg**, **sampler** and **sigmas** |
 | **H3 Live Preview** | puts the live preview (taeh3) on the model, so you see each part while it is sampled |
 | **RandomNoise** | noise from Output's seed (the Director's seed plus the part's number) |
 | **CFGGuider** | the guider; cfg comes from Output and is always 1 for H3 |
@@ -51,6 +51,6 @@ needs far less memory.
 
 ## Tips
 
-- The Director's Steps, Sampler and Scheduler (or the turbo LoRA's) arrive through Output; change them in the Studio,
+- The Director's Steps, Sampler and Scheduler arrive through Output; change them in the Studio,
   not in the sampler nodes.
 - Resume after a crash is a feature of the Render Sequence; this loop renders every part again.

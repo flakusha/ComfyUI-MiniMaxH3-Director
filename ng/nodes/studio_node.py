@@ -5,7 +5,6 @@ from ..adapters.render_graph import director_sequence
 from ..core.limits import RESIZE_METHODS
 from .context_nodes import CATEGORY, NGContext
 from .director_node import NGDirector
-from .product_director_node import turbo_inputs
 from .provider_node import NGAI
 from .render_node import model_inputs, sampling_inputs, render_outputs, split_render_inputs
 
@@ -34,7 +33,6 @@ class NGDirectorStudio(io.ComfyNode):
                                                         "second — the exact value is on the length_seconds output."),
                                  io.Combo.Input("style", options=["None", "Cinematic", "Anime", "Documentary", "Photorealistic"], default="None"),
                                  io.String.Input("prompt_override", multiline=True, default="", optional=True, advanced=True),
-                                 *turbo_inputs(),
                                  io.Combo.Input("resize_method", options=list(RESIZE_METHODS), default="crop", advanced=True,
                                                 tooltip="How a first or last frame picture is fitted to the video size."),
                                  io.Combo.Input("ref_image_size", options=["match", "max"], default="match", advanced=True,
@@ -55,7 +53,7 @@ class NGDirectorStudio(io.ComfyNode):
                                  io.Combo.Input("output", options=["video", "images"], default="video", optional=True,
                                                 tooltip="Video, or one picture per shot (text to image, or a First frame picture changed as the shot says)."),
                                  io.Boolean.Input("spectrum", default=False, optional=True, advanced=True,
-                                                  tooltip="With Turbo off: the Spectrum pack forecasts some sampling steps (about a third "
+                                                  tooltip="The Spectrum pack forecasts some sampling steps (about a third "
                                                           "faster at 20 steps). Needs ComfyUI-Spectrum-MiniMax-H3 installed."),
                                  # The Connector's optional extras as the Studio's own sockets: no Connector here.
                                  NGAI.Input("ai_provider", display_name="AI provider", optional=True),
@@ -65,11 +63,6 @@ class NGDirectorStudio(io.ComfyNode):
                                                      tooltip="ModelPatchLoader with minimax_h3_fun_controlnet_union_2.0_pruned_int8_convrot. Used by control clips on the Studio timeline.")],
                          outputs=[*render_outputs(), io.String.Output(display_name="plan"), io.String.Output(display_name="plan_warnings")],
                          enable_expand=True)
-
-    @classmethod
-    def validate_inputs(cls, turbo_lora_fl2va="none", turbo_lora_ref2va="none"):
-        # As on NGH3Director: ComfyUI does not check these two against the loras folder; the render checks the loaded one.
-        return True
 
     @classmethod
     def execute(cls, **values):

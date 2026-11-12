@@ -55,7 +55,7 @@ export function missingText(entry) {
 }
 
 // The Director's list of every file: grouped, each found (with its file) or missing, always with its download.
-export const MODEL_GROUPS = [["h3", "H3, every workflow"], ["turbo", "Turbo"], ["control", "Control videos and masks"],
+export const MODEL_GROUPS = [["h3", "H3, every workflow"], ["control", "Control videos and masks"],
   ["pictures", "Pictures, storyboard and places"], ["sound", "Sound"]];
 
 export function modelsList(state, css = "h3s") {

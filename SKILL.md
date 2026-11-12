@@ -33,19 +33,19 @@ Rules for you:
 `js/ng/models.json` lists every file with its folder, size and download URL; [GUIDE.md](GUIDE.md) chapter 2 has the same
 table with links. Minimum for any workflow: the two H3 models (`models/diffusion_models`), the text encoder
 (`models/text_encoders`, type `minimax`), video and audio VAE (`models/vae`) and `taeh3.safetensors`
-(`models/vae_approx`). Turbo LoRAs go to `models/loras`.
+(`models/vae_approx`). Optional turbo LoRAs go to `models/loras` (guide chapter 2).
 
 To see what a running ComfyUI has: `GET /ng/models?purposes=all` — per file `auto` is the file found (null = missing).
 In the UI: H3 Director → gear → **Models**, or ComfyUI's **Missing Models** panel when a workflow opens.
-Files may sit in subfolders or have other names; then the user picks them in the loader node (or in Settings → Turbo
-for the LoRAs).
+Files may sit in subfolders or have other names; then the user picks them in the loader node.
 
 ## 3 · Run an example
 
 1. ComfyUI → **Templates** → search "H3 Director" → open e.g. *H3 Director - 1 Text to video*.
 2. Resolve the missing models (download, or choose the local file in each red loader).
 3. Press **Generate** in the Director or ComfyUI's **Run**.
-4. The video is saved in `output/H3/`. 15 s at 1280×704 with Turbo take about 15–20 minutes on a 16 GB card.
+4. The video is saved in `output/H3/`. 15 s at 1280×704 take about 35–50 minutes at 20 steps on a 16 GB card (a turbo
+   LoRA at 8 steps: 15–20 minutes).
 
 | Workflow | Use it for |
 |---|---|
@@ -61,14 +61,13 @@ for the LoRAs).
 
 ## 4 · Helping a user who is stuck
 
-Ask for: the ComfyUI console output (the whole traceback), what the Director shows (warnings under Turbo, the notes
+Ask for: the ComfyUI console output (the whole traceback), what the Director shows (the warnings in the Studio, the notes
 in **Prompts per render part**) and which workflow they started from. Then:
 
 | Symptom | Cause and fix |
 |---|---|
 | Nodes missing or look broken | Pack not loaded or old browser cache: check the start log, restart ComfyUI, Ctrl+F5 |
 | Red loader, "Missing Models" | File not found under that name: download it or choose the local file in the loader |
-| "Turbo LoRA not installed: …" | Download the LoRA or choose another in Director → Settings → Turbo; or switch Turbo off |
 | Prompt refused, `value_not_in_list` | A file name in a node is not in ComfyUI's list: pick an existing file in that node |
 | Out of memory | Settings → Render part 5 s; the int8 video VAE; Resolution *Fast*; close other GPU programs |
 | Figure looks different in later parts | Use References mode; add a character sheet (picture editor → Sheet); set *Belongs to* for extra views |

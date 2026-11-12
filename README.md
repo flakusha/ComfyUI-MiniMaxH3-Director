@@ -91,11 +91,8 @@ Director lists every file it uses, found or missing, with its download under **S
 | Video VAE | [minimax_h3_video_vae_fp16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors) | `models/vae` |
 | Audio VAE | [minimax_h3_audio_vae_fp32.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors) | `models/vae` |
 | Preview VAE | [taeh3.safetensors](https://huggingface.co/Kijai/MiniMax-H3-TAE/resolve/main/vae_approx/taeh3.safetensors) | `models/vae_approx` |
-| Turbo LoRA (First / last frame) | [minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors) | `models/loras` |
-| Turbo LoRA (References) | [minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors) | `models/loras` |
-
-Extra models for control videos, masks, storyboard drawing and lyrics timing are listed with their links in the guide,
-[chapter 2](js/guide/en/02-models.md).
+Optional turbo LoRAs (faster rendering in 4–8 steps) are listed in the guide,
+[chapter 2](js/guide/en/02-models.md) — added with ComfyUI's own LoraLoaderModelOnly.
 
 ## Example workflows
 

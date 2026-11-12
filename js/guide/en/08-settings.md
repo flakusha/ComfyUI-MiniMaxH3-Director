@@ -33,7 +33,6 @@ Every field of the H3 Director in one place, from top to bottom. How to work wit
 |---|---|
 | **Output: Video / Pictures** | a video, or one picture per shot (Workflow 5) |
 | **Mode: First / last frame / References** | which H3 model renders (chapter *References or first frames*) |
-| **Turbo on** | renders with the turbo LoRA of the mode (Settings → Turbo) |
 
 ## Content and timeline
 
@@ -107,20 +106,11 @@ Every field of the H3 Director in one place, from top to bottom. How to work wit
 | Field | What it does |
 |---|---|
 | **Seed** and the dice | another seed gives another take of the same shots |
-| **Steps / Sampler / Scheduler** | used without Turbo or with an unknown LoRA; a warning names pairs that spoil H3 pictures |
-| **Spectrum** | only when the Spectrum nodes are installed: about a third faster at 20 steps (Turbo off) |
+| **Steps / Sampler / Scheduler** | how every render part samples; a warning names pairs that spoil H3 pictures |
+| **Spectrum** | only when the Spectrum nodes are installed: about a third faster at 20 steps |
 | **Shift video / Shift audio** | H3's sigma shifts, 12 and 3 |
 
 CFG is always 1, as in every official H3 template.
-
-### Turbo
-
-| Field | What it does |
-|---|---|
-| **Turbo LoRA first / last frame** | the LoRA for FL2VA parts |
-| **Turbo LoRA references** | the LoRA for Ref2VA parts |
-
-A known LoRA shows its measured values (*Known LoRA: 6 steps · res_multistep · simple*); *none* warns.
 
 ### ControlNet
 
@@ -152,7 +142,7 @@ Shown when a Video card is a control video.
 
 ![Every model file with its download](../images/wf2-studio-models.jpg)
 
-Every file H3 Director uses, grouped (H3, Turbo, Control, Pictures, Sound): found with its file name, or missing, and
+Every file H3 Director uses, grouped (H3, Control, Pictures, Sound): found with its file name, or missing, and
 always with its download link and size. Below it the files for place pictures (SAM3, Qwen Image 2.1) can be chosen when
 yours are renamed. All links are also in chapter 2.
 

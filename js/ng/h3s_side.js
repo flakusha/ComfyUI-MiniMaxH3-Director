@@ -25,14 +25,6 @@ function modeCard(S, actions) {
   const hint = mode === "fl2va" ? "One picture becomes the first, one the last frame of a render part; sound comes from the audio lanes. Reference pictures keep figures recognizable; video and sound references are not used."
     : mode === "ref2va" ? "H3 takes up to 9 images, 3 videos and 3 audio sources as references, e.g. for a character, place, camera and voice."
       : `Automatic: ${decided === "ref2va" ? "References" : "First/last frame"}, depending on the Content. Click one side to fix it.`;
-  const turbo = Boolean(S.values.turbo);
-  const lora = mode === "ref2va" ? "turbo_lora_ref2va" : mode === "fl2va" ? "turbo_lora_fl2va" : null;
-  const missing = turbo && (lora ? S.values[lora] === "none" : S.values.turbo_lora_fl2va === "none" && S.values.turbo_lora_ref2va === "none");
-  // a LoRA the workflow names but this machine lacks: its name and, for the official ones, the download (js/ng/models.json)
-  const used = lora || (decided === "ref2va" ? "turbo_lora_ref2va" : decided ? "turbo_lora_fl2va" : null);
-  const absent = (turbo ? (used ? [used] : ["turbo_lora_fl2va", "turbo_lora_ref2va"]) : [])
-    .filter((name) => S.values[name] && S.values[name] !== "none" && !(S.options[name] || []).includes(S.values[name])).map((name) => S.values[name]);
-  const download = (file) => Object.values(S.models || {}).find((entry) => entry.file === file)?.url;
   const noPatch = !S.controlConnected && S.contexts.some((entry) => entry.media === "video" && entry.usage.includes("control"));
   // Output stands above the mode: a video, or one picture per shot (core/stills.py)
   const output = S.values.output === "images" ? "images" : "video";
@@ -46,17 +38,9 @@ function modeCard(S, actions) {
     h("div", { style: { display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "8px" } },
       seg("fl2va", "First / last frame", "FL2VA · pictures + sound"), seg("ref2va", "References", "Ref2VA · character, place, video, voice")),
     mode === "auto" ? h("span", { class: "h3s-lbl" }, `Automatic → ${decided === "ref2va" ? "References" : "First / last frame"}`) : null,
+    h("span", { class: "h3s-lbl" }, `${S.values.steps} steps`),
     ...(S.plan?.issues || []).filter((issue) => issue.code === "reference_disabled").map((issue) => h("span", { class: "h3s-warn", style: { fontSize: "13px" } },
       `${issue.ref} is a video or sound reference, which First / last frame mode does not use. Switch to References to use it.`)),
-    h("button", { class: "h3s-toggle", "aria-pressed": String(turbo), onclick: () => actions.setTurbo(!turbo) },
-      h("span", { class: turbo ? "h3s-switch on" : "h3s-switch" }), h("span", { class: "h3s-strong" }, `Turbo ${turbo ? "on" : "off"}`),
-      turbo ? null : h("span", { class: "h3s-lbl" }, `${S.values.steps} steps`),
-      tip(turbo ? "Turbo LoRA, few steps, CFG 1: fast for trying things out. The LoRA is chosen in Settings." : `${S.values.steps} steps, CFG 1, without LoRA.`)),
-    missing ? h("div", { class: "h3s-row h3s-warn", style: { fontSize: "13px" } }, "Turbo needs a turbo LoRA.",
-      h("button", { class: "h3s-btn small", onclick: () => actions.toggle("settingsOpen") }, icon("gear", 14), "Choose")) : null,
-    ...absent.map((file) => h("div", { class: "h3s-row h3s-warn", style: { fontSize: "13px" } }, `Turbo LoRA not installed: ${file}`,
-      download(file) ? h("a", { href: download(file), target: "_blank", rel: "noopener", style: { color: "#8CC8FF" } }, "Download") : null,
-      h("button", { class: "h3s-btn small", onclick: () => actions.toggle("settingsOpen") }, icon("gear", 14), "Choose"))),
     noPatch ? h("div", { class: "h3s-row h3s-warn", style: { fontSize: "13px" } }, "Control videos need ModelPatchLoader (ControlNet-Union) on the Context Connector's model_patch.") : null);
 }
 

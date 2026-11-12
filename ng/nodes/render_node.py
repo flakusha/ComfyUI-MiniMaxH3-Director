@@ -6,8 +6,7 @@ from comfy_extras.nodes_custom_sampler import BasicScheduler, KSamplerSelect, Ra
 import json
 import logging
 
-from ..adapters import lora_fit, model_files, places, resume
-from ..core.turbo_profiles import part_settings
+from ..adapters import model_files, places, resume
 from ..adapters.render_graph import render_sequence
 from .chunk_node import _decode_video
 from .context_nodes import CATEGORY
@@ -43,7 +42,7 @@ def split_render_inputs(values):
     # The Studio lab node carries the product Director's extras; Render Sequence has no such widgets, so its
     # values simply lack these keys and the graph keeps its defaults (review F3).
     settings = {name: values[name] for name in ("seed", "steps", "sampler_name", "scheduler", "shift_video", "shift_audio",
-                                                "turbo", "turbo_lora_fl2va", "turbo_lora_ref2va", "resize_method", "ref_image_size",
+                                                "resize_method", "ref_image_size",
                                                 "resume", "resume_delete_done", "control_strength", "control_start", "control_end",
                                                 "models", "output", "spectrum") if name in values}
     return inputs, settings
@@ -78,8 +77,7 @@ class NGChunkNoise(io.ComfyNode):
 
 
 class NGChunkSampling(io.ComfyNode):
-    """Sampler and sigmas of one render part: a known turbo LoRA on the part's model brings its own steps, sampler and
-    scheduler (core/turbo_profiles.py), so a video mixing FL2VA and Ref2VA parts samples each with the values of its LoRA."""
+    """Sampler and sigmas of one render part, from the Director's Steps, Sampler and Scheduler."""
     @classmethod
     def define_schema(cls):
         return io.Schema(node_id="NGChunkSampling", display_name="NG Chunk Sampling", category=CATEGORY + "/Technical", is_dev_only=True,
@@ -88,8 +86,7 @@ class NGChunkSampling(io.ComfyNode):
 
     @classmethod
     def execute(cls, chunk, model, settings):
-        job = chunk[0] if isinstance(chunk, list) else chunk
-        values = part_settings(job.compiled.mode, json.loads(settings))
+        values = json.loads(settings)
         sampler = KSamplerSelect.execute(sampler_name=values["sampler_name"]).args[0]
         sigmas = BasicScheduler.execute(model=model, scheduler=values["scheduler"], steps=values["steps"], denoise=1.0).args[0]
         return io.NodeOutput(sampler, sigmas)
@@ -108,12 +105,12 @@ class NGResumeChunk(io.ComfyNode):
     @classmethod
     def check_lazy_status(cls, chunk, settings, sampled=None):
         job = chunk[0] if isinstance(chunk, list) else chunk
-        return [] if resume.has(resume.part_key(job, part_settings(job.compiled.mode, json.loads(settings)))) else ["sampled"]
+        return [] if resume.has(resume.part_key(job, json.loads(settings))) else ["sampled"]
 
     @classmethod
     def execute(cls, chunk, settings, sampled=None):
         job = chunk[0] if isinstance(chunk, list) else chunk
-        key = resume.part_key(job, part_settings(job.compiled.mode, json.loads(settings)))
+        key = resume.part_key(job, json.loads(settings))
         if resume.has(key):
             logging.info("[H3 Director] render part %d comes from %s (resume)", job.index + 1, resume.folder())
             return io.NodeOutput(resume.load(key))
@@ -138,29 +135,5 @@ class NGPlaceStill(io.ComfyNode):
         return io.NodeOutput(sampled)
 
 
-class NGTurboLora(io.ComfyNode):
-    """The Director's turbo LoRA, without the pieces that do not fit the model (see adapters/lora_fit.py)."""
-    @classmethod
-    def define_schema(cls):
-        return io.Schema(node_id="NGTurboLora", display_name="NG Turbo LoRA", category=CATEGORY + "/Technical", is_dev_only=True,
-                         inputs=[io.Model.Input("model"), io.String.Input("lora_name"),
-                                 io.Float.Input("strength", default=1.0, min=-10.0, max=10.0)],
-                         outputs=[io.Model.Output()])
+NODES = [NGRenderSequence, NGChunkNoise, NGChunkSampling, NGResumeChunk, NGPlaceStill]
 
-    @classmethod
-    def execute(cls, model, lora_name, strength):
-        import comfy.utils
-        import folder_paths
-        path = folder_paths.get_full_path("loras", lora_name)
-        if path is None:
-            raise FileNotFoundError("Turbo LoRA not installed: %s. Download it (Director → Settings → Models) or choose another one "
-                                    "in Settings → Turbo." % lora_name)
-        lora = comfy.utils.load_torch_file(path, safe_load=True)
-        patched, left_out = lora_fit.apply(model, lora, strength)
-        if left_out:
-            logging.warning("[H3 Director] turbo LoRA '%s': %d piece(s) do not fit this model and were left out (%s, ...). "
-                            "A pruned H3 model takes the LoRA made for it (name with 'pruned').", lora_name, len(left_out), left_out[0])
-        return io.NodeOutput(patched)
-
-
-NODES = [NGRenderSequence, NGChunkNoise, NGChunkSampling, NGResumeChunk, NGPlaceStill, NGTurboLora]

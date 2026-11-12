@@ -26,8 +26,8 @@ assert.ok(extension);
 
 function fixture(t, project, idea = "A story", prior = { figure: "Alice" }) {
   const settings = { idea, project_seconds: 15, chunk_seconds: 5, mode: "ref2va", shots: model.writeProject(project),
-    width: 1344, height: 768, steps: 20, cfg: 1, seed: 1, sampler_name: "euler", scheduler: "simple", turbo: false,
-    turbo_lora_fl2va: "none", turbo_lora_ref2va: "none", resize_method: "crop", ref_image_size: "match", soundscape: "", music: "" };
+    width: 1344, height: 768, steps: 20, cfg: 1, seed: 1, sampler_name: "euler", scheduler: "simple",
+    resize_method: "crop", ref_image_size: "match", soundscape: "", music: "" };
   const widgets = (data) => Object.entries(data).map(([name, value]) => ({ name, value, options: { values: [value] } }));
   const figure = { id: 3, comfyClass: "NGContextImage", widgets: widgets({ context_id: "figure", name: "Alice", image: "figure.png", usage: "reference" }) };
   const connector = { id: 2, comfyClass: "NGContextConnector", widgets: [], inputs: [{ name: "context_image.0", link: 2 }] };

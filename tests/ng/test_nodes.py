@@ -38,7 +38,7 @@ class Registration(unittest.TestCase):
         # User 2026-10-18: too many test nodes, the list did not fit. Internal nodes stay registered (Render Sequence expands
         # into them, saved workflows load them) but ComfyUI does not list them; the blocks of an own loop have their group.
         internal = ("NGChunkConditioning", "NGChunkNoise", "NGChunkSampling", "NGResumeChunk", "NGControlChunk", "NGProjectChunks",
-                    "NGTurboLora", "NGAIRequest", "NGAICheckEncoder", "NGAIReadMedia", "NGAIResult")
+                    "NGAIRequest", "NGAICheckEncoder", "NGAIReadMedia", "NGAIResult")
         loop = ("NGCollect", "NGCollectVideo", "NGSaveCaptions", "NGControlVideo", "NGDirector", "NGDirectorStudio", "NGRenderSequence", "MiniMaxH3PreviewOverrideCS")
         for node_id in internal:
             schema = self.pack.NODE_CLASS_MAPPINGS[node_id].GET_SCHEMA()

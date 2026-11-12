@@ -41,7 +41,7 @@ and Redo.
 
 ## The right side
 
-**Output** (*Video* or *Pictures*), **Mode** (chapter *References or first frames*) and **Turbo**. Below it the selected
+**Output** (*Video* or *Pictures*) and **Mode** (chapter *References or first frames*). Below it the selected
 item:
 
 ![A selected shot](../images/wf2-studio-shot.jpg)

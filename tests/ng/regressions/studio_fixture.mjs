@@ -7,8 +7,8 @@ export function fixture({ mode = "ref2va", locks = [], audio = false, project: i
   const shot = { ...newShot(0, 10), id: "shot_a", text: "Original shot.", locked_fields: locks };
   const initialProject = initial || { shots: [shot], audio: [], lanes: [] };
   const settings = { idea: "Original idea.", project_seconds: 10, chunk_seconds: 10, shots: writeProject(initialProject),
-    mode, width: 1344, height: 768, steps: 20, cfg: 1, seed: 1, sampler_name: "euler", scheduler: "simple", turbo: false,
-    turbo_lora_fl2va: "none", turbo_lora_ref2va: "none", resize_method: "crop", ref_image_size: "match", soundscape: "", music: "", output: "video" };
+    mode, width: 1344, height: 768, steps: 20, cfg: 1, seed: 1, sampler_name: "euler", scheduler: "simple",
+    resize_method: "crop", ref_image_size: "match", soundscape: "", music: "", output: "video" };
   const widgets = (data) => Object.entries(data).map(([name, value]) => ({ name, value, options: { values: [value] } }));
   const node = { id: 1, comfyClass: "NGH3Director", properties: {}, widgets: widgets(settings), inputs: [{ name: "context", link: 1 }], outputs: [] };
   const connector = { id: 2, comfyClass: "NGContextConnector", widgets: [], inputs: [{ name: "ai_provider", link: 2 }], outputs: [] };

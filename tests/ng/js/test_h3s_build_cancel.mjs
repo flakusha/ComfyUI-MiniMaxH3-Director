@@ -13,7 +13,7 @@ function fixture({ cardDescriptions = ["", ""], deferPlan = false } = {}) {
     shots: writeProject({ shots: [{ ...newShot(0, 10), id: "s1", text: "My original shot." }], audio: [], lanes: [], look: "my original look",
       partPrompts: [{ index: 0, key: "oldkey", text: "my original part prompt", by: "user" }] }),
     mode: "ref2va", width: 1344, height: 768, steps: 20, cfg: 1, seed: 1,
-    sampler_name: "euler", scheduler: "simple", turbo: false, turbo_lora_fl2va: "none", turbo_lora_ref2va: "none",
+    sampler_name: "euler", scheduler: "simple",
     resize_method: "crop", ref_image_size: "match", soundscape: "old ambience", music: "old music" };
   const node = { id, comfyClass: "NGH3Director", properties: {}, widgets: widgets(settings), inputs: [{ name: "context", link: 1 }], outputs: [] };
   const connector = { id: id + 1000, comfyClass: "NGContextConnector", widgets: [],

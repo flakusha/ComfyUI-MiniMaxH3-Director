@@ -4,7 +4,7 @@ import unittest
 
 from _pack import comfy_available, load_full_pack, module
 
-ctx, stills, turbo = module("ng.core.context"), module("ng.core.stills"), module("ng.core.turbo_profiles")
+ctx, stills = module("ng.core.context"), module("ng.core.stills")
 options = module("ng.core.context_options")
 
 
@@ -89,16 +89,6 @@ class Options(unittest.TestCase):
         data = options.ContextOptions(edit_mask="m.png").to_dict()
         self.assertEqual(options.ContextOptions.from_dict(data).edit_mask, "m.png")
         self.assertNotIn("edit_mask", options.ContextOptions().to_dict())
-
-
-class Turbo(unittest.TestCase):
-    def test_pictures_take_a_loras_still_values_and_videos_keep_theirs(self):
-        base = {"turbo": True, "turbo_lora_ref2va": "minimax-h3/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
-                "turbo_lora_fl2va": "minimax_h3_turbo_v4_step600_ema.safetensors", "steps": 20, "sampler_name": "euler", "scheduler": "beta"}
-        self.assertEqual(turbo.part_settings("fl2va", {**base, "output": "images"})["steps"], 8)
-        self.assertEqual(turbo.part_settings("fl2va", {**base, "output": "video"})["steps"], 20, "no measured video values: the Director's")
-        self.assertEqual(turbo.part_settings("ref2va", {**base, "output": "images"})["steps"], 6)
-        self.assertEqual(turbo.part_settings("ref2va", base)["steps"], 6)
 
 
 @unittest.skipUnless(comfy_available(), "ComfyUI is not importable")

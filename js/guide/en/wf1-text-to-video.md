@@ -12,7 +12,7 @@ pictures or sound files are needed.
 3. Press **Generate** in the Director (or ComfyUI's Run).
 4. The video is saved by **Save Video** in `output/H3/`.
 
-On a 16 GB card the 15 seconds take about 15–20 minutes with Turbo on.
+On a 16 GB card the 15 seconds take about 15–20 minutes with a turbo LoRA (chapter 2) at 8 steps.
 
 ## 1 · Models
 
@@ -48,7 +48,7 @@ prompt (**AI: split into shots**) or improve a shot's text (**AI: improve text**
 
 - **Prompt**: what the video is about. **Look**: the style every part shares.
 - **Mode**: *Automatic → First / last frame* — with text only the Director picks FL2VA by itself.
-- **Turbo on**: renders with the official turbo LoRA in 8 steps instead of 20.
+- **Steps** (Settings): 20 by default; an optional turbo LoRA renders in 4–8 steps (chapter 2).
 - **Timeline**: three shots of five seconds. **Render parts** below shows that the Director renders the 15 seconds in two
   parts that continue into each other; you see only one video.
 

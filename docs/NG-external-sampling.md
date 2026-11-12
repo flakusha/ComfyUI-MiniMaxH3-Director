@@ -6,7 +6,8 @@ The same body runs for every planned chunk. H3 Render Sequence remains the packa
 
 Select your installed H3 model, minimax CLIP and both VAEs. The examples use a native Sigma Shift before the
 Connector; **Apply Director sigma shifts** is therefore off on Output. Its default remains on for existing workflows.
-The optional native LoRA loader is bypassed. Enable it and choose the LoRA's matching steps, sampler and shifts when needed.
+A speedup LoRA goes into the loop with ComfyUI's own **LoraLoaderModelOnly**; choose the LoRA's matching steps,
+sampler and shifts when needed.
 CFGGuider explicitly uses CFG 1. The base examples use 20 steps; the recorded pipeline checks use 4 steps.
 
 ## Connections
@@ -23,7 +24,8 @@ CFGGuider explicitly uses CFG 1. The base examples use 20 steps; the recorded pi
    **The Director's sampling settings** come out of Output too (slots 10–15), so the Studio's Steps, Sampler and Scheduler
    drive your own sampler: **steps**, **cfg** (always 1.0, H3 runs without classifier-free guidance), **sampler_name** and
    **scheduler** connect to KSampler, KSamplerSelect or BasicScheduler; **sampler** and **sigmas** are ready-made for
-   SamplerCustomAdvanced (sigmas use this chunk's model, so the Director's shift is included). With Turbo on they carry 4 steps.
+   SamplerCustomAdvanced (sigmas use this chunk's model, so the Director's shift is included). They carry the Director's
+   steps as set; a turbo LoRA in the loop gives them its few steps.
    Measured on the user's workflow: Director steps 4 reached BasicScheduler over the link, 243 frames rendered in 318 s.
 4. Wire the sampling stages. Return the final, complete **AV LATENT** to both End Loop's `output_value` and
    `next_iteration_value`, with **accumulate on**. Include both video and audio, the whole sampled time axis and the pinned head.

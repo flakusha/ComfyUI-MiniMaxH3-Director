@@ -1,5 +1,4 @@
 """The product Director owns creative planning, with render execution downstream."""
-import folder_paths
 from comfy_api.latest import io
 
 from ..adapters.director_packets import DirectorResult, RenderSettings
@@ -17,18 +16,6 @@ from .director_node import NGChunk, NGDirector
 from .render_node import sampling_inputs
 
 NGResult = io.Custom("NG_DIRECTOR_RESULT")
-
-
-def turbo_inputs():
-    """Turbo: a few-step LoRA per H3 model plus fewer steps. The user chooses the LoRA; a known one brings its measured steps,
-    sampler and scheduler (core/turbo_profiles.py)."""
-    loras = folder_paths.get_filename_list("loras")
-    return [io.Boolean.Input("turbo", default=False, advanced=True,
-                             tooltip="Apply the turbo LoRA below to the H3 model. The official templates use 4 steps and CFG 1."),
-            io.Combo.Input("turbo_lora_fl2va", options=["none", *loras], default="none", advanced=True,
-                           tooltip="Turbo LoRA for the FL2VA model (start/end frame and text)."),
-            io.Combo.Input("turbo_lora_ref2va", options=["none", *loras], default="none", advanced=True,
-                           tooltip="Turbo LoRA for the Ref2VA model (references).")]
 
 
 class NGH3Director(io.ComfyNode):
@@ -49,7 +36,6 @@ class NGH3Director(io.ComfyNode):
                                                         "second — the exact value is on the length_seconds output."),
                                  io.Combo.Input("style", options=["None", "Cinematic", "Anime", "Documentary", "Photorealistic"], default="None"),
                                  io.String.Input("prompt_override", multiline=True, default="", optional=True, advanced=True), *sampling_inputs(),
-                                 *turbo_inputs(),
                                  io.Combo.Input("resize_method", options=list(RESIZE_METHODS), default="crop", advanced=True,
                                                 tooltip="How a first or last frame picture is fitted to the video size."),
                                  io.Combo.Input("ref_image_size", options=["match", "max"], default="match", advanced=True,
@@ -80,13 +66,6 @@ class NGH3Director(io.ComfyNode):
                                                   tooltip="The video's real length in seconds after the plan snapped it to H3's "
                                                           "17k+5 frame grid (24 fps). Wire it where the downstream timing has to "
                                                           "match what is actually rendered.")])
-
-    @classmethod
-    def validate_inputs(cls, turbo_lora_fl2va="none", turbo_lora_ref2va="none"):
-        # A project uses one H3 model, so one turbo LoRA. Listed here, ComfyUI does not check these two against the loras
-        # folder: a References project was refused because the First / last frame LoRA was not installed (GUI test
-        # 2026-10-25). The LoRA a render part loads is checked when it loads it (render_node.NGTurboLora).
-        return True
 
     @classmethod
     def execute(cls, context, **values):

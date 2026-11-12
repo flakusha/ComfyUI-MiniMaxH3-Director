@@ -16,9 +16,8 @@
 | You see | What helps |
 |---|---|
 | A model loader is red, *file not found* | download the file (chapter 2) or choose your own file in the loader |
-| *Turbo needs a turbo LoRA* | choose the LoRA in **Settings → Turbo**, or switch Turbo off |
 | Out of memory | **Render part: 5 s**, the int8 video VAE, or **Resolution: Fast** |
-| A white veil over the video (References turbo) | 6 steps instead of 4 — the known LoRA sets it by itself |
+| A white veil over the video (References turbo LoRA) | set 6 steps instead of 4 in Settings |
 | The same figure appears twice | a second picture of a figure needs **Belongs to** that figure |
 | A figure looks different later in a long video | use **References** mode; give the figure a character sheet (picture editor) |
 | A spoken line is missing or cut off | give the shot more time, or split the line |
@@ -32,7 +31,7 @@
 | The AI buttons are grey | connect an **H3 AI Loader** (chapter *Writing with the AI*) |
 | The AI describes things that are not in the picture | the model cannot really see pictures; try `qwen3.5:9b` |
 
-## Times (16 GB card, 1280×704, Turbo on)
+## Times (16 GB card, 1280×704, turbo LoRA at 8 steps)
 
 | Job | About |
 |---|---|

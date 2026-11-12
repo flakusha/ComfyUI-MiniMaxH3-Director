@@ -22,11 +22,10 @@ const plan = { width: 1344, height: 768, total_s: 20, total_frames: 480, mode: "
     { index: 1, story_start_f: 240, story_end_f: 480, start_s: 10, end_s: 20, delivered_frames: 240, head_frames: 22, mode: "ref2va", prompt: "second prompt", refs: [], shots: [{ shot_id: "a" }, { shot_id: "b" }] }] };
 
 function state(extra = {}) {
-  const values = { idea: "A walk.", project_seconds: 20, chunk_seconds: 0, width: 1344, height: 768, mode: "ref2va", turbo: false, steps: 20, seed: 1,
-    sampler_name: "res_multistep", scheduler: "simple", turbo_lora_fl2va: "fl.safetensors", turbo_lora_ref2va: "none", resize_method: "crop",
+  const values = { idea: "A walk.", project_seconds: 20, chunk_seconds: 0, width: 1344, height: 768, mode: "ref2va", steps: 20, seed: 1,
+    sampler_name: "res_multistep", scheduler: "simple", resize_method: "crop",
     ref_image_size: "match", continuity: "video_audio", pin_frames: "22", style: "None", shift_video: 12, shift_audio: 3, ...extra.values };
-  return { values, duration: values.project_seconds, options: { sampler_name: ["euler", "res_multistep"], scheduler: ["simple"],
-    turbo_lora_fl2va: ["none", "fl.safetensors"], turbo_lora_ref2va: ["none", "ref.safetensors"] },
+  return { values, duration: values.project_seconds, options: { sampler_name: ["euler", "res_multistep"], scheduler: ["simple"] },
     contexts, byId: new Map(contexts.map((entry) => [entry.id, entry])), shots: [shot("a", 0, 8, "Walks in.", [{ schema_version: 1, context_id: "mage", role: "context" }]), shot("b", 8, 20)],
     audio: [{ schema_version: 1, id: "c1", context_id: "song", start: 4, end: 18, offset: 10, mode: "lock", lane: "l1" }], lanes: ["l1", "l2"],
     selected: null, ghosts: [], suggestions: {}, plan, ai: false, busy: "", promptOpen: false, sizeOpen: false, furtherOpen: false, selectedRange: null,
@@ -86,21 +85,14 @@ function recorder() {
   assert.ok(view.byClass("h3s-track")[0].classList.contains("ghosting"));
 }
 
-// Side: mode, turbo LoRA per mode, shot panel, clip panel restricted in FL2VA.
+// Side: mode, shot panel, clip panel restricted in FL2VA.
 {
   const { actions, calls } = recorder();
-  let [mode, panel] = sideView(state({ values: { turbo: true, mode: "fl2va" } }), actions);
-  assert.equal(mode.byTag("select").length, 0, "the page keeps only Mode and Turbo on/off; the LoRA is in Settings");
-  assert.ok(mode.innerText.includes("Turbo on"));
-  const gear = settingsView(state({ settingsOpen: true, values: { turbo: true, mode: "fl2va" } }), actions);
-  assert.ok(gear.innerText.includes("Turbo LoRA first / last frame") && !gear.innerText.includes("Turbo LoRA references"),
-    "First/last frame shows only its own turbo LoRA");
+  let [mode, panel] = sideView(state({ values: { mode: "fl2va" } }), actions);
+  assert.equal(mode.byTag("select").length, 0, "the page keeps only the Mode sides; the rest is in Settings");
+  const gear = settingsView(state({ settingsOpen: true, values: { mode: "fl2va" } }), actions);
+  assert.ok(!gear.innerText.includes("Turbo"), "the turbo LoRA section is gone");
   assert.equal(settingsView(state({ settingsOpen: false }), actions), null);
-  // Turbo without a LoRA says so on the page and opens Settings.
-  const [noLora] = sideView(state({ values: { turbo: true, mode: "ref2va", turbo_lora_ref2va: "none" } }), actions);
-  assert.ok(noLora.innerText.includes("Turbo needs a turbo LoRA."), noLora.innerText);
-  noLora.button("Choose").onclick();
-  assert.deepEqual(calls.at(-1), ["toggle", "settingsOpen"]);
   // A manual prompt is shown on the page and can be cleared there.
   assert.equal(manualPromptAlert(state(), actions), null);
   const alert = manualPromptAlert(state({ values: { prompt_override: "my own prompt" } }), actions);
@@ -186,9 +178,9 @@ function recorder() {
 
 // The summary follows custom sampling settings and does not guess the upstream model graph.
 {
-  const [mode] = sideView(state({ values: { turbo: false, steps: 7 } }), recorder().actions);
+  const [mode] = sideView(state({ values: { steps: 7 } }), recorder().actions);
   assert.ok(mode.innerText.includes("7 steps"), "the mode summary must show the actual sampler settings");
-  assert.ok(!mode.innerText.includes("full model"), "an upstream LoRA may be connected even with the internal Turbo switch off");
+  assert.ok(!mode.innerText.includes("full model"), "an upstream LoRA may be connected even without an internal switch");
 }
 
 // Every spoken line of a shot has its own editor and remove button.
@@ -234,11 +226,7 @@ function recorder() {
   spec.button("Spectrum off").onclick();
   assert.deepEqual(gearCalls.at(-1), ["setWidget", "spectrum", true]);
   delete globalThis.LiteGraph;
-  // Turbo: the steps of the parts' own LoRA profile, not the widget's 4 (Ref2VA parts here: ref.safetensors -> 6)
   assert.ok(footerView(base, actions).innerText.includes("Ref2VA · 20 steps"));
-  const turbo = footerView({ ...base, values: { ...base.values, turbo: true, steps: 4, turbo_lora_ref2va: "ref.safetensors" },
-    turboProfiles: { ref: { steps: 6, sampler_name: "res_multistep", scheduler: "simple" } } }, actions);
-  assert.ok(turbo.innerText.includes("Turbo · 6 steps"), turbo.innerText);
   const drawer = drawerView(state({ promptOpen: true }), actions);
   assert.ok(drawer.innerText.includes("first prompt") && drawer.innerText.includes("second prompt"));
   assert.ok(drawer.innerText.includes("Images 1/9 · Video 0/3 · Audio 0/3"));
@@ -368,13 +356,24 @@ function recorder() {
 // Older NG workflows put an empty trailing value on the first widget added later; it falls back to its default.
 {
   globalThis.window = { comfyAPI: { app: { app: { registerExtension() {} } }, api: { api: {} } } };
-  const { repairLaterWidgets } = await import("../../../js/ng/h3s_node.js");
+  const { repairLaterWidgets, repairShiftedWidgets } = await import("../../../js/ng/h3s_node.js");
   const widget = (name, value, values) => ({ name, value, options: values ? { values } : {} });
-  const node = { widgets: [widget("turbo", ""), widget("turbo_lora_fl2va", "gone.safetensors", ["none", "fl.safetensors"]),
-    widget("turbo_lora_ref2va", 1.5, ["none"]), widget("resize_method", "pad", ["crop", "pad"]), widget("seed", "")] };
+  const node = { widgets: [widget("resize_method", 17, ["crop", "pad"]), widget("ref_image_size", "fl.safetensors", ["match", "max"]), widget("seed", "")] };
   repairLaterWidgets(node);
-  assert.deepEqual(node.widgets.map((w) => w.value), [false, "gone.safetensors", "none", "pad", ""],
-    "only the later widgets are repaired; a LoRA that is not installed keeps its name for the download offer");
+  assert.deepEqual(node.widgets.map((w) => w.value), ["crop", "match", ""],
+    "only the later widgets are repaired; anything that is not a valid value falls back to its default");
+  // A workflow saved while the node carried the turbo widgets is three values longer: the later values landed three slots early.
+  const shifted = { widgets: [widget("seed", 0), widget("steps", 0), widget("sampler_name", "x"), widget("scheduler", "y"),
+    widget("shift_audio", 0), widget("resize_method", true, ["crop", "pad"]), widget("ref_image_size", "gone.safetensors", ["match", "max"]),
+    widget("resume", "ref.safetensors"), widget("resume_delete_done", "crop"), widget("control_strength", "max"), widget("control_start", true),
+    widget("control_end", true), widget("models", 1), widget("output", 0), widget("spectrum", "")] };
+  const saved = [0, 0, "x", "y", 0, true, "fl.safetensors", "ref.safetensors", "pad", "max", true, true, 1, 0, 1, "", "video", false];
+  repairShiftedWidgets(shifted, saved);
+  assert.deepEqual(shifted.widgets.map((w) => w.value), [0, 0, "x", "y", 0, "pad", "max", true, true, 1, 0, 1, "", "video", false],
+    "the three saved turbo slots are skipped, the later values land on their own widgets");
+  const intact = { widgets: [widget("resize_method", "crop", ["crop"])] };
+  repairShiftedWidgets(intact, [1, 2, 3, 4]);
+  assert.equal(intact.widgets[0].value, "crop", "a current save is exact length and is left alone");
   // A workflow saved before "resume": its prompt_override text stays with prompt_override, resume is on.
   const { repairInsertedWidgets } = await import("../../../js/ng/h3s_node.js");
   const fresh = () => ({ widgets: [widget("ref_image_size", "?"), widget("resume", "?"), widget("resume_delete_done", "?"),

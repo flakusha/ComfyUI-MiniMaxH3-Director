@@ -261,6 +261,19 @@ function recorder() {
   assert.deepEqual(calls.at(-1), ["setDuration", 27]);
   assert.ok(withSong.button("= ").title.includes("(27.0 s)") || withSong.button("= ").title.includes("27"), withSong.button("= ").title);
   assert.equal(footerView(state({ values: { project_seconds: 27 }, lengths: new Map([["song", 27.0106]]) }), act).button("= "), undefined, "no button when it already fits");
+  // A connected duration_seconds shows its own length, locked, in the widget's place; the widget's own value is
+  // untouched underneath and comes back when the socket goes (product_director_node.py lets the socket win).
+  const linked = footerView(state({ socketSeconds: 30.1 }), act);
+  const locked = linked.byTag("input").find((node) => node.attributes["aria-label"] === "Duration in seconds (connected)");
+  assert.ok(locked, "the connected length replaces the editable field");
+  assert.ok(locked.disabled, "the connected length is not editable");
+  assert.equal(Number(locked.value), 30.1, "the field shows the connected length, not the widget's number");
+  assert.ok(linked.innerText.includes("connected"), "the lock is labelled");
+  assert.ok(linked.innerText.includes("30"), "the summary shows the effective length");
+  assert.equal(linked.button("= "), undefined, "no song button while the socket owns the length");
+  const unlinked = footerView(state(), act), unlinkedField = unlinked.byTag("input").find((node) => node.attributes["aria-label"] === "Duration in seconds");
+  assert.ok(unlinkedField && !unlinkedField.disabled && Number(unlinkedField.value) === 20, "disconnected: the widget's own value is back and editable");
+  assert.equal(unlinked.byClass("h3s-lbl").some((node) => node.innerText === "connected"), false, "no lock label when the socket is gone");
 }
 
 // Content cards and prompt.

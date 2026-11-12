@@ -14,11 +14,19 @@ function durationField(S, actions) {
   const song = S.contexts.filter((entry) => entry.media === "audio" && S.lengths.get(entry.id) > 0)
     .sort((a, b) => S.lengths.get(b.id) - S.lengths.get(a.id))[0];
   const length = song && Math.round(S.lengths.get(song.id) * 10) / 10;
+  // A connected duration_seconds owns the length (product_director_node.py): shown locked instead of the widget's
+  // own number, like a linked card's file; the widget's value stays underneath for the day the socket goes.
+  const linked = S.socketSeconds ?? null;
+  const seconds = linked === null
+    ? number(v.project_seconds, set, { min: "0.5", max: "3600", step: "0.1", list: "h3s-durations", "aria-label": "Duration in seconds", style: { width: "84px" } })
+    : number(linked, () => {}, { disabled: true, "aria-label": "Duration in seconds (connected)", style: { width: "84px" },
+      title: "A connected duration_seconds wins: the video takes this length. Disconnect it to edit." });
   return field("Duration", h("span", { class: "h3s-row", style: { gap: "6px", flexWrap: "nowrap" } },
-    number(v.project_seconds, set, { min: "0.5", max: "3600", step: "0.1", list: "h3s-durations", "aria-label": "Duration in seconds", style: { width: "84px" } }),
-    h("datalist", { id: "h3s-durations" }, DURATIONS.map((d) => h("option", { value: String(d) }))),
-    song && length !== Number(v.project_seconds) ? h("button", { class: "h3s-btn small", title: `Set the duration to the length of ${song.name} (${fmt(length)})`,
-      onclick: () => set(length) }, `= ${song.name}`) : null));
+    seconds,
+    linked === null ? h("datalist", { id: "h3s-durations" }, DURATIONS.map((d) => h("option", { value: String(d) }))) : null,
+    linked === null && song && length !== Number(v.project_seconds) ? h("button", { class: "h3s-btn small", title: `Set the duration to the length of ${song.name} (${fmt(length)})`,
+      onclick: () => set(length) }, `= ${song.name}`) : null,
+    linked !== null ? h("span", { class: "h3s-lbl", title: "A connected duration_seconds wins over the length; disconnect it to edit." }, "connected") : null));
 }
 
 // The page keeps only what a first video needs; everything else is behind the gear (h3s_settings.js).
@@ -40,6 +48,6 @@ export function footerView(S, actions) {
     h("button", { class: "h3s-btn", onclick: () => actions.toggle("settingsOpen"), title: "Render part, size, seed, steps, sampler, resume, ControlNet, sound and style" },
       icon("gear"), "Settings"),
     h("span", { class: "h3s-grow" }),
-    h("span", { class: "h3s-strong" }, `${fmt(v.project_seconds)} · ${S.shots.length} shot${S.shots.length === 1 ? "" : "s"} · ${parts} render part${parts === 1 ? "" : "s"} · ${size}`),
+    h("span", { class: "h3s-strong" }, `${fmt(S.socketSeconds ?? v.project_seconds)} · ${S.shots.length} shot${S.shots.length === 1 ? "" : "s"} · ${parts} render part${parts === 1 ? "" : "s"} · ${size}`),
     h("span", { class: "h3s-lbl" }, `${v.mode === "fl2va" ? "FL2VA" : v.mode === "ref2va" ? "Ref2VA" : "Auto"} · ${v.steps} steps`)));
 }

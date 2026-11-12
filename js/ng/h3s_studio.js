@@ -20,7 +20,7 @@ import { studioAI, basis as aiBasis } from "./h3s_ai.js";
 import { readQuick, changeQuick } from "./h3s_quick.js";
 import { offerFor } from "./h3c_model.js";
 import { values, applyValues, request } from "./ng_widgets.js";
-import { readPayload, readContexts, connectedProvider, controlPatchConnected, contextNodes } from "./ng_read.js";
+import { readPayload, readContexts, connectedProvider, controlPatchConnected, contextNodes, linkedDuration } from "./ng_read.js";
 import { contextColor } from "./ng_identity.js";
 import { hasRenderPath, projectRenderIds } from "./ng_graph.js";
 import { attachProgress } from "./ng_studio_progress.js";
@@ -37,6 +37,9 @@ function load(S) {
   S.byId = new Map(S.contexts.map((entry) => [entry.id, entry]));
   S.ai = Boolean(connectedProvider(S.node));
   S.controlConnected = controlPatchConnected(S.node);
+  // A connected duration_seconds owns the length: the footer shows and locks it, the timeline spans it, and the
+  // widget's own value stays underneath for the day the socket is disconnected.
+  S.socketSeconds = linkedDuration(S.node);
   const project = readProject(S.values.shots || "");
   S.docError = project.error;
   if (project.skipped?.length) S.notice = { error: true, text: `The saved data has ${project.skipped.length} invalid audio clip(s) (${project.skipped.join(", ")}). `
@@ -420,7 +423,7 @@ export function openStudio(node, app, api, host = null) {
   function render() {
     if (closed) return;
     if (S.dragging) { S.pending = true; return; }
-    S.pending = false; S.selectedRange = selectedRange(); S.duration = Number(S.values.project_seconds) || 1; S.picture = firstPicture();
+    S.pending = false; S.selectedRange = selectedRange(); S.duration = Number(S.socketSeconds ?? S.values.project_seconds) || 1; S.picture = firstPicture();
     const top = root.scrollTop;
     updateStudioPage(page, [header(),
       S.docError ? h("div", { class: "h3s-toast h3s-warn" }, `The saved shot data is invalid and is left unchanged: ${S.docError}`) : null,

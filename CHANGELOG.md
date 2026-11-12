@@ -7,6 +7,8 @@
   parts left without any shot text — while the Studio preview still showed 10.1 s. The node and the preview now add a
   `length_override` note ("Rendering 30.0s: the connected duration_seconds overrides the Length widget (10.1s)."), and
   the Studio preview reads the connected socket's value (`ng_read.readPayload`), so it plans the length that will render.
+  The Studio shows it on the node too: with a connected socket the Duration field is locked and shows the connected
+  length (the timeline spans it), and disconnecting brings the widget's own length back.
 
 - **Turbo switch removed; faster LoRAs are native now** (2026-11-12). The Director's `turbo` widget, the two turbo LoRA
   combos, the `NGTurboLora` node and its shape-filtering loader (`ng/adapters/lora_fit.py`), the measured-profile table

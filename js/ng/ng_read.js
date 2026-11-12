@@ -129,12 +129,18 @@ export function relatedContexts(node) {
   return [...found.values()];
 }
 
-export function readPayload(director) {
-  const values = widgetValues(director);
-  // The plan preview cannot see sockets: a connected duration_seconds (a PrimitiveFloat, say) overrides the Length
-  // widget exactly as the nodes do (product_director_node.py), so the preview plans the length that will render.
+// A connected duration_seconds' value (a PrimitiveFloat, say), or null: what the video will run at, whatever the
+// Length widget says (product_director_node.py lets the socket win).
+export function linkedDuration(director) {
   const socket = upstreamNode(director.graph, director.inputs?.find((input) => input.name === "duration_seconds"));
   const seconds = socket ? (widgetValues(socket).value ?? socket.widgets_values?.[0]) : undefined;
-  if (typeof seconds === "number" && seconds > 0) values.duration_seconds = seconds;
+  return typeof seconds === "number" && seconds > 0 ? seconds : null;
+}
+
+export function readPayload(director) {
+  const values = widgetValues(director);
+  // The plan preview cannot see sockets, so it plans the connected length itself, exactly as the nodes do.
+  const seconds = linkedDuration(director);
+  if (seconds !== null) values.duration_seconds = seconds;
   return { director: values, contexts: readContexts(director) };
 }

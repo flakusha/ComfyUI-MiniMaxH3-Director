@@ -3,8 +3,8 @@ from . import fields, frames
 from .chunks import ContinuityPlan
 from .context import DirectorContext
 from .context_build import distinct, item_from_widgets
-from .issues import SchemaError
-from .limits import DEFAULT_SOUNDSCAPE, PIN_AUDIO_DEFAULT, FPS
+from .issues import Issue, SchemaError
+from .limits import DEFAULT_SOUNDSCAPE, LENGTH_OVERRIDE_EPSILON, PIN_AUDIO_DEFAULT, FPS
 from .legacy_bridge import decide_mode
 from .shot_bindings import scoped_context
 from .shot_document import read_shot_prompts
@@ -67,6 +67,15 @@ def plan_preview(payload, probe=None, image_size=None):
         fields.need_dict(payload, "request")
         director = fields.need_dict(payload.get("director", {}), "director")
         values = {**DIRECTOR_DEFAULTS, **director}
+        # ng_read.readPayload sends a connected duration_seconds' value along: plan the length that will render,
+        # with the same note the nodes give (product_director_node.py).
+        widget_seconds = float(values["project_seconds"])
+        override_issue = None
+        external = float(values.get("duration_seconds") or 0.0)
+        if external > 0 and abs(external - widget_seconds) > LENGTH_OVERRIDE_EPSILON:
+            values["project_seconds"] = external
+            override_issue = Issue("length_override", "Rendering %.1fs: the connected duration_seconds overrides the "
+                                   "Length widget (%.1fs)." % (external, widget_seconds))
         fields.read_list(payload, "contexts", "request")
         context = DirectorContext(idea=values["idea"], project_seconds=float(values["project_seconds"]), width=int(values["width"]),
                                   height=int(values["height"]), mode=values["mode"], shots_text=values["shots"], soundscape=values["soundscape"],
@@ -84,4 +93,4 @@ def plan_preview(payload, probe=None, image_size=None):
             "mode": project.compiled[0].mode if project.compiled else context.mode, "output": project.output, "chunks": [_chunk_view(c, k, project.context, project.output == "images")
                                                                        for c, k in zip(project.plan.chunks, project.compiled)],
             "director_context": project.context.to_dict(),
-            "issues": [i.to_dict() for i in project.issues]}
+            "issues": [i.to_dict() for i in project.issues] + ([override_issue.to_dict()] if override_issue else [])}

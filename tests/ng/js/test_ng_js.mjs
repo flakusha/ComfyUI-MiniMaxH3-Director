@@ -148,6 +148,16 @@ function node(comfyClass, widgets = {}, inputs = [], graph = null) {
   assert.deepEqual(contexts.map((c) => c.media), ["image", "audio"], "only NG context nodes count, in socket order");
   assert.equal(contexts[0].widgets.name, "Alice");
   assert.deepEqual(readPayload(director).director, { idea: "x", project_seconds: 30 });
+
+  // A connected duration_seconds rides along, so the preview plans the length that will render (product_director_node.py).
+  const override = node("NGH3Director", { idea: "x", project_seconds: 10.1 },
+    [{ name: "context", link: null }, { name: "duration_seconds", link: 20 }],
+    { links: { 20: { origin_id: 1 } }, getNodeById: (id) => ({ 1: node("PrimitiveFloat", { value: 30 }) }[id]) });
+  assert.deepEqual(readPayload(override).director, { idea: "x", project_seconds: 10.1, duration_seconds: 30 });
+  const belowEpsilon = node("NGH3Director", { idea: "x", project_seconds: 10.1 },
+    [{ name: "context", link: null }, { name: "duration_seconds", link: 20 }],
+    { links: { 20: { origin_id: 1 } }, getNodeById: (id) => ({ 1: node("PrimitiveFloat", { value: 10.05 }) }[id]) });
+  assert.deepEqual(readPayload(belowEpsilon).director, { idea: "x", project_seconds: 10.1, duration_seconds: 10.05 });
 }
 
 // --- rendering ---------------------------------------------------------------

@@ -1,11 +1,13 @@
 """The product Director owns creative planning, with render execution downstream."""
 from comfy_api.latest import io
+from dataclasses import replace
 
 from ..adapters.director_packets import DirectorResult, RenderSettings
 from ..core import frames
 from ..core.chunks import ContinuityPlan
 from ..core.context import DirectorContext
-from ..core.limits import PIN_AUDIO_DEFAULT
+from ..core.issues import Issue
+from ..core.limits import LENGTH_OVERRIDE_EPSILON, PIN_AUDIO_DEFAULT
 from ..adapters.probe import image_size
 from ..core.limits import RESIZE_METHODS
 from ..core.project import jobs, plan_project
@@ -75,7 +77,8 @@ class NGH3Director(io.ComfyNode):
         # its own value was never set; a negative length is refused by name, 0 falls back to
         # the Length widget. Same hazard and same handling as the legacy Director's
         # start/end/duration sockets.
-        project_seconds = float(values["project_seconds"])
+        widget_seconds = float(values["project_seconds"])
+        project_seconds = widget_seconds
         if values.get("duration_seconds") is not None:
             try:
                 external_seconds = float(values["duration_seconds"])
@@ -91,6 +94,11 @@ class NGH3Director(io.ComfyNode):
                                  % external_seconds)
             if external_seconds > 0:
                 project_seconds = external_seconds
+        # the socket wins silently otherwise; say so where the plan's other length notes live
+        override_issue = None
+        if abs(project_seconds - widget_seconds) > LENGTH_OVERRIDE_EPSILON:
+            override_issue = Issue("length_override", "Rendering %.1fs: the connected duration_seconds overrides the "
+                                   "Length widget (%.1fs)." % (project_seconds, widget_seconds))
         director = DirectorContext(idea=values["idea"], project_seconds=project_seconds,
                                    width=values["width"], height=values["height"], mode=values["mode"],
                                    shots_text=values["shots"], soundscape=values["soundscape"], music=values["music"],
@@ -102,6 +110,8 @@ class NGH3Director(io.ComfyNode):
                 raise ValueError("Pictures: write an idea or a shot; each shot becomes one picture.")
         else:
             project = plan_project(director, values["chunk_seconds"], continuity, image_size)
+        if override_issue is not None:
+            project = replace(project, issues=project.issues + (override_issue,))
         settings = RenderSettings(**{name: values[name] for name in RenderSettings.__dataclass_fields__ if name in values})
         # the video's real length: the grid the chunks landed on, not the widget's request
         length_seconds = frames.frames_to_seconds(project.plan.total_frames)

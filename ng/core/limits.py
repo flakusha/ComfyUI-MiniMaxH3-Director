@@ -26,6 +26,8 @@ MAX_REF_AUDIOS = _plan.MAX_REF_AUDIOS
 MAX_REF_FILES = _plan.MAX_REF_FILES
 
 DEFAULT_CHUNK_SECONDS = 10.0
+# A connected duration_seconds within this of the Length widget is no override worth reporting.
+LENGTH_OVERRIDE_EPSILON = 0.05
 # A part's length is bounded by frames x picture area, not by frames alone: one clip of 30 s at 640x352 held without drift,
 # with motion and with references (comparison 2026-10-20/21, M13 and M19); from 45 s on H3 repeated lines and actions.
 # So a part may have as many frames as fit the area of the trained maximum at 1280x704, and 30 s at most.

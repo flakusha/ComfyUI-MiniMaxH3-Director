@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **The plan warns when a connected length overrides the Length widget** (2026-11-12). A `duration_seconds` socket (a
+  PrimitiveFloat trimming the song, say) silently overrode the widget: a 10.1 s project planned 30 s — its later render
+  parts left without any shot text — while the Studio preview still showed 10.1 s. The node and the preview now add a
+  `length_override` note ("Rendering 30.0s: the connected duration_seconds overrides the Length widget (10.1s)."), and
+  the Studio preview reads the connected socket's value (`ng_read.readPayload`), so it plans the length that will render.
+
 - **Turbo switch removed; faster LoRAs are native now** (2026-11-12). The Director's `turbo` widget, the two turbo LoRA
   combos, the `NGTurboLora` node and its shape-filtering loader (`ng/adapters/lora_fit.py`), the measured-profile table
   (`ng/core/turbo_profiles.py`, `js/ng/turbo_profiles.json`) and the Studio's Turbo toggle are gone. Step count was never

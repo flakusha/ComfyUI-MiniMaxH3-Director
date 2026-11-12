@@ -130,5 +130,11 @@ export function relatedContexts(node) {
 }
 
 export function readPayload(director) {
-  return { director: widgetValues(director), contexts: readContexts(director) };
+  const values = widgetValues(director);
+  // The plan preview cannot see sockets: a connected duration_seconds (a PrimitiveFloat, say) overrides the Length
+  // widget exactly as the nodes do (product_director_node.py), so the preview plans the length that will render.
+  const socket = upstreamNode(director.graph, director.inputs?.find((input) => input.name === "duration_seconds"));
+  const seconds = socket ? (widgetValues(socket).value ?? socket.widgets_values?.[0]) : undefined;
+  if (typeof seconds === "number" && seconds > 0) values.duration_seconds = seconds;
+  return { director: values, contexts: readContexts(director) };
 }

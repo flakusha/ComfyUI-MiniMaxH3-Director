@@ -69,7 +69,7 @@ class NGProjectRender(io.ComfyNode):
         return io.Schema(node_id="NGProjectRender", display_name="H3 Render Sequence", category=CATEGORY,
                          description="Render the complete planned project through ComfyUI's native loop and sampler, with progress and interrupt.",
                          inputs=[NGResult.Input("sequence"),
-                                 io.LatentUpscaleModel.Input("upscale_model", optional=True,
+                                 io.LatentUpscaleModel.Input("upscale_model", optional=True, raw_link=True,
                                                              tooltip="2K finish: a MiniMax H3 latent upscaler (models/latent_upscale_models) loaded with LatentUpscaleModelLoader. Used only when upscale_2k is on."),
                                  io.Boolean.Input("upscale_2k", default=False, optional=True, advanced=True,
                                                   tooltip="Opt-in 2K finish: upscale each part's latent with upscale_model before decode (2x, decode only: audio passes through and the next part still pins the base-resolution latent). Large canvases decode at 2x (1280x704 finishes at 2560x1408); leave off if VRAM is tight.")],
